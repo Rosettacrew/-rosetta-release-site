@@ -101,6 +101,98 @@
         gap: 28px;
         align-items: center;
       }
+      .carousel-shell {
+        position: relative;
+      }
+      .carousel-viewport {
+        display: flex;
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-behavior: smooth;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        touch-action: pan-x pan-y;
+      }
+      .carousel-viewport::-webkit-scrollbar {
+        display: none;
+      }
+      .release-slide {
+        flex: 0 0 100%;
+        min-width: 0;
+        padding: 2px 2px 8px;
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+      }
+      .carousel-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        margin-top: 24px;
+      }
+      .carousel-button {
+        width: 48px;
+        height: 48px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        background: #11100d;
+        color: var(--g2);
+        font-size: 24px;
+        cursor: pointer;
+        transition:
+          transform 180ms ease,
+          background 180ms ease,
+          border-color 180ms ease;
+      }
+      .carousel-button:hover,
+      .carousel-button:focus-visible {
+        transform: scale(1.06);
+        border-color: var(--g);
+        background: #1b1710;
+        outline: none;
+      }
+      .carousel-button:disabled {
+        cursor: default;
+        opacity: 0.35;
+        transform: none;
+      }
+      .carousel-dots {
+        min-width: 70px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+      .carousel-dot {
+        width: 10px;
+        height: 10px;
+        padding: 0;
+        border: 1px solid #796443;
+        border-radius: 50%;
+        background: transparent;
+        cursor: pointer;
+        transition:
+          width 180ms ease,
+          border-radius 180ms ease,
+          background 180ms ease;
+      }
+      .carousel-dot.active {
+        width: 28px;
+        border-radius: 999px;
+        border-color: var(--g2);
+        background: var(--g2);
+      }
+      .swipe-hint {
+        margin: 12px 0 0;
+        text-align: center;
+        color: #8f887e;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+      }
       .cover {
         width: min(82vw, 430px);
         aspect-ratio: 1/1;
@@ -168,48 +260,6 @@
         color: #9f978c;
         font-size: 12px;
       }
-      .more {
-        margin-top: 56px;
-      }
-      .more h2 {
-        font:
-          700 34px Georgia,
-          serif;
-      }
-      .cards {
-        display: grid;
-        gap: 14px;
-      }
-      .card {
-        display: grid;
-        grid-template-columns: 86px 1fr auto;
-        gap: 14px;
-        align-items: center;
-        border: 1px solid var(--line);
-        background: #11100d;
-        border-radius: 16px;
-        padding: 10px;
-      }
-      .card img {
-        width: 86px;
-        height: 86px;
-        object-fit: contain;
-        background: #0b0b0b;
-        border-radius: 12px;
-      }
-      .card strong {
-        display: block;
-      }
-      .card span {
-        color: #9e978c;
-        font-size: 12px;
-      }
-      .card a {
-        color: var(--g2);
-        text-decoration: none;
-        font-weight: 800;
-        font-size: 12px;
-      }
       .empty,
       .error {
         border: 1px solid var(--line);
@@ -227,18 +277,14 @@
           grid-template-columns: 0.9fr 1.1fr;
           gap: 64px;
         }
-        .cards {
-          grid-template-columns: 1fr 1fr;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .carousel-viewport {
+          scroll-behavior: auto;
         }
-        .card {
-          grid-template-columns: 76px 1fr;
-        }
-        .card img {
-          width: 76px;
-          height: 76px;
-        }
-        .card a {
-          grid-column: 2;
+        .carousel-button,
+        .carousel-dot {
+          transition: none;
         }
       }
     </style>
@@ -254,25 +300,41 @@
       <section id="error" class="error hidden">
         Storefront is temporarily unavailable. Please try again shortly.
       </section>
-      <section id="featured" class="grid hidden">
-        <img id="cover" class="cover" alt="Release cover" />
-        <div class="meta">
-          <small>ROSETTA CREW MUSIC GROUP PRESENTS</small>
-          <div id="title" class="title"></div>
-          <div id="artist" class="artist"></div>
-          <div id="status" class="status"></div>
-          <div id="price" class="price"></div>
-          <div id="desc" class="desc"></div>
-          <a id="buy" class="buy" rel="noopener">BUY NOW</a>
-          <div id="trust" class="trust">
-            <span>✓ Secure Stripe checkout</span><span>✓ Direct-to-fan</span
-            ><span>✓ Digital delivery</span>
-          </div>
+      <section
+        id="release-showcase"
+        class="carousel-shell hidden"
+        aria-label="Featured releases"
+      >
+        <div
+          id="release-carousel"
+          class="carousel-viewport"
+          tabindex="0"
+          role="region"
+          aria-roledescription="carousel"
+          aria-label="Rosetta Crew releases"
+        ></div>
+        <div id="carousel-controls" class="carousel-controls">
+          <button
+            id="carousel-prev"
+            class="carousel-button"
+            type="button"
+            aria-label="Previous release"
+          >
+            ‹
+          </button>
+          <div id="carousel-dots" class="carousel-dots"></div>
+          <button
+            id="carousel-next"
+            class="carousel-button"
+            type="button"
+            aria-label="Next release"
+          >
+            ›
+          </button>
         </div>
-      </section>
-      <section id="more" class="more hidden">
-        <h2>More Releases</h2>
-        <div id="cards" class="cards"></div>
+        <p id="swipe-hint" class="swipe-hint">
+          Swipe the cover or use the arrows to browse releases
+        </p>
       </section>
     </main>
     <script>
@@ -366,6 +428,29 @@
           keepalive: true,
         }).catch(() => {});
       }
+      function releaseStatus(release) {
+        if (release.status !== "presale") return "AVAILABLE NOW";
+        if (!release.release_at) return "PRE-ORDER";
+        const releaseDate = new Date(release.release_at);
+        return Number.isNaN(releaseDate.getTime())
+          ? "PRE-ORDER"
+          : `PRE-ORDER · RELEASES ${releaseDate.toLocaleDateString()}`;
+      }
+      function releaseSlide(release, index, total) {
+        const artist = String(release.artist_name || "").trim();
+        const title = String(release.title || "Release").trim();
+        const price = money(release.price_cents, release.currency);
+        const description =
+          release.description ||
+          "Own the official digital release and support the artist directly through Rosetta Crew Music Group.";
+        const action = previewOnly
+          ? `<span class="buy disabled" aria-disabled="true">PREVIEW ONLY — ${price}</span>`
+          : `<a class="buy" href="${esc(release.checkout_url)}" data-product="${esc(release.id)}" rel="noopener">${release.status === "presale" ? "PRE-ORDER" : "BUY NOW"} — ${price}</a>`;
+        const trust = previewOnly
+          ? "<span>✓ Private admin preview</span><span>✓ Checkout disabled</span>"
+          : "<span>✓ Secure Stripe checkout</span><span>✓ Direct-to-fan</span><span>✓ Digital delivery</span>";
+        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art"><div class="meta"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div><div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${action}<div class="trust">${trust}</div></div></div></article>`;
+      }
       async function load() {
         try {
           let j;
@@ -393,54 +478,99 @@
             document.getElementById("loading").classList.remove("hidden");
             return;
           }
-          const f = j.featured || list[0];
-          document.getElementById("cover").src = f.cover_url;
-          document.getElementById("title").textContent = f.title;
-          document.getElementById("artist").textContent = String(
-            f.artist_name || "",
-          ).toUpperCase();
-          document.getElementById("price").textContent = money(
-            f.price_cents,
-            f.currency,
-          );
-          document.getElementById("desc").textContent =
-            f.description ||
-            "Own the official digital release and support the artist directly through Rosetta Crew Music Group.";
-          document.getElementById("status").textContent =
-            f.status === "presale"
-              ? `PRE-ORDER · RELEASES ${new Date(f.release_at).toLocaleDateString()}`
-              : "AVAILABLE NOW";
-          const buy = document.getElementById("buy");
-          if (previewOnly) {
-            buy.removeAttribute("href");
-            buy.removeAttribute("data-product");
-            buy.classList.add("disabled");
-            buy.setAttribute("aria-disabled", "true");
-            buy.textContent =
-              "PREVIEW ONLY — " + money(f.price_cents, f.currency);
-            document.getElementById("trust").innerHTML =
-              "<span>✓ Private admin preview</span><span>✓ Checkout disabled</span>";
-          } else {
-            buy.href = f.checkout_url;
-            buy.dataset.product = f.id;
-            buy.textContent =
-              (f.status === "presale" ? "PRE-ORDER — " : "BUY NOW — ") +
-              money(f.price_cents, f.currency);
+          const featured = j.featured || list[0];
+          const releases = [
+            featured,
+            ...list.filter((release) => release.id !== featured.id),
+          ];
+          const carousel = document.getElementById("release-carousel");
+          const dots = document.getElementById("carousel-dots");
+          const prev = document.getElementById("carousel-prev");
+          const next = document.getElementById("carousel-next");
+          const controls = document.getElementById("carousel-controls");
+          const hint = document.getElementById("swipe-hint");
+          const viewed = new Set();
+          let activeIndex = 0;
+          let ticking = false;
+
+          carousel.innerHTML = releases
+            .map((release, index) =>
+              releaseSlide(release, index, releases.length),
+            )
+            .join("");
+          dots.innerHTML = releases
+            .map(
+              (release, index) =>
+                `<button class="carousel-dot${index === 0 ? " active" : ""}" type="button" data-slide="${index}" aria-label="Show ${esc(release.artist_name)} — ${esc(release.title)}" aria-current="${index === 0 ? "true" : "false"}"></button>`,
+            )
+            .join("");
+
+          function setActive(index) {
+            const nextIndex = Math.max(0, Math.min(index, releases.length - 1));
+            activeIndex = nextIndex;
+            dots.querySelectorAll(".carousel-dot").forEach((dot, dotIndex) => {
+              const selected = dotIndex === nextIndex;
+              dot.classList.toggle("active", selected);
+              dot.setAttribute("aria-current", String(selected));
+            });
+            prev.disabled = nextIndex === 0;
+            next.disabled = nextIndex === releases.length - 1;
+            applyShare(releases[nextIndex]);
+            if (!viewed.has(releases[nextIndex].id)) {
+              viewed.add(releases[nextIndex].id);
+              track(releases[nextIndex].id, "page_view", {
+                placement: "release_carousel",
+                slide: nextIndex + 1,
+              });
+            }
           }
-          document.getElementById("featured").classList.remove("hidden");
-          applyShare(f);
-          track(f.id, "page_view", { placement: "featured" });
-          /* TODO: optional featured audio preview — release-storefront currently has no preview_url/audio_url; skip player UI until the API exposes a real public preview URL (do not invent files that 404). */ const rest =
-            list.filter((x) => x.id !== f.id);
-          if (rest.length) {
-            document.getElementById("cards").innerHTML = rest
-              .map(
-                (x) =>
-                  `<article class="card"><img src="${esc(x.cover_url)}" alt="${esc(x.title)} cover"><div><strong>${esc(x.artist_name)} — ${esc(x.title)}</strong><span>${x.status === "presale" ? "Pre-order" : "Available now"} · ${money(x.price_cents, x.currency)}</span></div><a href="${esc(x.checkout_url)}" data-product="${esc(x.id)}" rel="noopener">${x.status === "presale" ? "PRE-ORDER" : "BUY"} →</a></article>`,
-              )
-              .join("");
-            document.getElementById("more").classList.remove("hidden");
+          function goTo(index) {
+            const nextIndex = Math.max(0, Math.min(index, releases.length - 1));
+            carousel.scrollTo({
+              left: nextIndex * carousel.clientWidth,
+              behavior: "smooth",
+            });
+            setActive(nextIndex);
           }
+
+          prev.addEventListener("click", () => goTo(activeIndex - 1));
+          next.addEventListener("click", () => goTo(activeIndex + 1));
+          dots.addEventListener("click", (event) => {
+            const dot = event.target.closest("button[data-slide]");
+            if (dot) goTo(Number(dot.dataset.slide));
+          });
+          carousel.addEventListener("keydown", (event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              goTo(activeIndex - 1);
+            }
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              goTo(activeIndex + 1);
+            }
+          });
+          carousel.addEventListener("scroll", () => {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => {
+              const width = carousel.clientWidth || 1;
+              setActive(Math.round(carousel.scrollLeft / width));
+              ticking = false;
+            });
+          });
+          window.addEventListener("resize", () => {
+            carousel.scrollTo({
+              left: activeIndex * carousel.clientWidth,
+              behavior: "auto",
+            });
+          });
+
+          if (releases.length < 2) {
+            controls.classList.add("hidden");
+            hint.classList.add("hidden");
+          }
+          document.getElementById("release-showcase").classList.remove("hidden");
+          setActive(0);
           if (!previewOnly)
             document.addEventListener(
               "click",
@@ -448,7 +578,7 @@
                 const a = e.target.closest("a[data-product]");
                 if (a)
                   track(a.dataset.product, "checkout_click", {
-                    placement: a.id === "buy" ? "featured" : "release_card",
+                    placement: "release_carousel",
                   });
               },
               { once: false },
