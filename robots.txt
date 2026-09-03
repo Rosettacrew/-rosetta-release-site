@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /admin-dashboard.html
+Disallow: /owner-login.html
+Disallow: /admin.html
+Disallow: /admin-v2.html
+Disallow: /manifest.webmanifest
+Disallow: /admin.webmanifest
+Disallow: /admin-sw.js
+Disallow: /assets/release-station-180.png
+Disallow: /assets/release-station-192.png
+Disallow: /assets/release-station-512.png
+Disallow: /apple-touch-icon.png
