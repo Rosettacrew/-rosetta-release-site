@@ -7,7 +7,17 @@
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
     <meta name="theme-color" content="#080808" />
-    <title>Rosetta Crew Release Station</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Release Station" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/release-station-180.png" />
+    <title>Release Station</title>
     <style>
       :root {
         --bg: #080808;
@@ -71,6 +81,19 @@
         position: sticky;
         top: 0;
         height: 100vh;
+      }
+      .sideHead {
+        display: block;
+      }
+      .menuBtn {
+        display: none;
+        background: #171717;
+        color: var(--gold2);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-weight: 800;
+        cursor: pointer;
       }
       .nav {
         display: grid;
@@ -420,13 +443,32 @@
         }
         .side {
           height: auto;
-          position: static;
+          position: sticky;
+          top: 0;
+          z-index: 40;
           border-right: 0;
           border-bottom: 1px solid var(--line);
+          padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+        }
+        .sideHead {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+        }
+        .menuBtn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 44px;
+          min-height: 44px;
         }
         .nav {
-          display: flex;
-          overflow: auto;
+          display: none;
+          margin-top: 12px;
+        }
+        .shell.navOpen .nav {
+          display: grid;
         }
         .nav button {
           white-space: nowrap;
@@ -465,6 +507,17 @@
         .previewSelect {
           max-width: 180px;
         }
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+        .login {
+          margin: max(8vh, calc(env(safe-area-inset-top, 0px) + 24px)) 16px
+            24px;
+        }
+        .main {
+          padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+        }
       }
     </style>
   </head>
@@ -484,8 +537,22 @@
     </div>
     <div id="app" class="shell hidden">
       <aside class="side">
-        <div class="brand">ROSETTA CREW</div>
-        <small class="muted">RELEASE STATION</small>
+        <div class="sideHead">
+          <div>
+            <div class="brand">ROSETTA CREW</div>
+            <small class="muted">RELEASE STATION</small>
+          </div>
+          <button
+            id="menuBtn"
+            class="menuBtn"
+            type="button"
+            aria-label="Open menu"
+            aria-controls="nav"
+            aria-expanded="false"
+          >
+            Menu
+          </button>
+        </div>
         <div class="nav" id="nav">
           <button class="on" data-tab="overview">Overview</button
           ><button data-tab="releases">Releases</button
@@ -1254,10 +1321,18 @@
           q("editMsg").textContent = error.message;
         }
       };
+      function setNavOpen(open) {
+        q("app").classList.toggle("navOpen", open);
+        q("menuBtn").setAttribute("aria-expanded", open ? "true" : "false");
+        q("menuBtn").textContent = open ? "Close" : "Menu";
+      }
+      q("menuBtn").onclick = () =>
+        setNavOpen(!q("app").classList.contains("navOpen"));
       q("nav").onclick = (e) => {
         const b = e.target.closest("button[data-tab]");
         if (!b) return;
         goto(b.dataset.tab);
+        setNavOpen(false);
         if (b.dataset.tab === "analytics") loadAnalytics();
         if (b.dataset.tab === "orders") orders();
         if (b.dataset.tab === "delivery") delivery();
