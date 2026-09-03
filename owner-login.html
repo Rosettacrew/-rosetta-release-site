@@ -1,1 +1,48 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rosetta Crew Owner Login</title><style>body{margin:0;background:#090909;color:#f4f0e7;font-family:Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:18px}.card{width:min(520px,100%);background:#121212;border:1px solid #2a2925;border-radius:16px;padding:22px}.brand{color:#d2ad56;font-weight:900;letter-spacing:.08em}.muted{color:#999;line-height:1.5}input{width:100%;box-sizing:border-box;background:#0a0a0a;color:#eee;border:1px solid #34322d;border-radius:9px;padding:12px;margin:8px 0;font-size:16px}button{width:100%;cursor:pointer;background:#d2ad56;color:#0b0a07;font-weight:800;border:0;border-radius:9px;padding:12px;margin:8px 0}.secondary{background:#222;color:#eee;border:1px solid #3a3935}.ok{color:#86d59e}.bad{color:#ff8d8d}.step{margin-top:18px;padding-top:18px;border-top:1px solid #2a2925}</style></head><body><div class="card"><div class="brand">ROSETTA CREW</div><h1>Owner Login</h1><p class="muted">Use your approved owner email. Supabase will send a secure one-time sign-in link. Tap the link in your email and you will be returned to the admin dashboard.</p><input id="email" type="email" placeholder="Owner email"><button id="send">Send secure sign-in link</button><div id="sendMsg" class="muted"></div><div class="step"><p class="muted"><b>After the email arrives:</b> open the newest Supabase Auth email and tap <b>Sign in</b>. The link can only be used once.</p><button id="existing" class="secondary">I’m already signed in — open dashboard</button><div id="sessionMsg" class="muted"></div></div></div><script type="module">import{createClient}from'https://esm.sh/@supabase/supabase-js@2';const BASE='https://sktgkrcahsxvidzjjxxt.supabase.co',KEY='sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju';const DASH=new URL('admin-dashboard.html',location.href).href;const sb=createClient(BASE,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const q=id=>document.getElementById(id);q('send').onclick=async()=>{q('sendMsg').textContent='Sending…';q('sendMsg').className='muted';const email=q('email').value.trim();const{error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:DASH}});q('sendMsg').textContent=error?error.message:'Sign-in link sent. Open the newest email and tap Sign in.';q('sendMsg').className=error?'bad':'ok'};q('existing').onclick=async()=>{const{data}=await sb.auth.getSession();if(data.session)location.href=DASH;else{q('sessionMsg').textContent='No active login session yet. Send a sign-in link above.';q('sessionMsg').className='bad'}};</script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#080808" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Release Station" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta http-equiv="refresh" content="0;url=admin-dashboard.html" />
+    <title>Release Station</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #080808;
+        color: #f5f0e7;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        padding: 24px;
+      }
+      a {
+        color: #d2ad56;
+      }
+      p {
+        color: #999;
+      }
+    </style>
+    <script>
+      location.replace("admin-dashboard.html");
+    </script>
+  </head>
+  <body>
+    <p>
+      Opening Release Station…
+      <a href="admin-dashboard.html">Continue</a>
+    </p>
+  </body>
+</html>
