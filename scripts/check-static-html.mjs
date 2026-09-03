@@ -106,12 +106,43 @@ assert.equal(manifest.theme_color, "#080808");
 assert.equal(manifest.background_color, "#080808");
 assert.equal(manifest.display, "standalone");
 assert.equal(manifest.start_url, "/admin-dashboard.html");
+assert.match(admin, /rel="apple-touch-icon" href="apple-touch-icon\.png"/);
+assert.ok(
+  existsSync("apple-touch-icon.png"),
+  "apple-touch-icon.png 180x180 is required",
+);
 assert.ok(
   existsSync("assets/release-station-180.png"),
-  "apple-touch-icon 180x180 is required",
+  "assets/release-station-180.png is required",
 );
 assert.ok(existsSync("assets/release-station-192.png"));
 assert.ok(existsSync("assets/release-station-512.png"));
+
+function pngSize(path) {
+  const buf = readFileSync(path);
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+assert.deepEqual(pngSize("apple-touch-icon.png"), { width: 180, height: 180 });
+assert.deepEqual(pngSize("assets/release-station-180.png"), {
+  width: 180,
+  height: 180,
+});
+assert.deepEqual(pngSize("assets/release-station-192.png"), {
+  width: 192,
+  height: 192,
+});
+assert.deepEqual(pngSize("assets/release-station-512.png"), {
+  width: 512,
+  height: 512,
+});
+assert.equal(
+  manifest.icons[0].src,
+  "/assets/release-station-192.png",
+);
+assert.equal(
+  manifest.icons[1].src,
+  "/assets/release-station-512.png",
+);
 
 const robots = readFileSync("robots.txt", "utf8");
 assert.match(robots, /Disallow: \/admin-dashboard\.html/);
