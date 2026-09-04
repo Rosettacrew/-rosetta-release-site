@@ -85,6 +85,27 @@
       .sideHead {
         display: block;
       }
+      .engineSwitch {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin: 18px 0 4px;
+      }
+      .engineSwitch a {
+        padding: 9px 6px;
+        border: 1px solid #3b372f;
+        border-radius: 9px;
+        color: #aaa;
+        text-align: center;
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 800;
+      }
+      .engineSwitch a.on {
+        border-color: var(--gold);
+        background: var(--gold);
+        color: #080705;
+      }
       .menuBtn {
         display: none;
         background: #171717;
@@ -552,6 +573,10 @@
           >
             Menu
           </button>
+        </div>
+        <div class="engineSwitch" aria-label="Admin area">
+          <a class="on" href="admin-dashboard.html">Release Station</a>
+          <a href="beatbay-admin.html">BeatBay</a>
         </div>
         <div class="nav" id="nav">
           <button class="on" data-tab="overview">Overview</button
