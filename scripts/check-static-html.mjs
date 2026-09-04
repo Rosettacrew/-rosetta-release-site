@@ -49,7 +49,10 @@ assert.match(
   /sessionStorage\.getItem\("rosetta_customer_preview"\)/,
 );
 assert.match(storefront, /preview\.id !== params\.get\("product_id"\)/);
-assert.match(storefront, /buy\.removeAttribute\("href"\)/);
+assert.match(
+  storefront,
+  /previewOnly\s*\?\s*`<span class="buy disabled" aria-disabled="true">PREVIEW ONLY/,
+);
 assert.match(storefront, /if \(previewOnly \|\| !product_id\) return/);
 assert.doesNotMatch(
   storefront,
