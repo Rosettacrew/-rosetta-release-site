@@ -39,6 +39,7 @@ assert.match(
 assert.match(admin, /"rosetta_customer_preview"/);
 assert.match(admin, /title: release\.title/);
 assert.match(admin, /checkout_url: null/);
+assert.match(admin, /preview_only: true/);
 assert.match(admin, /storefront_enabled: false/);
 assert.match(admin, /Release \/ EP title/);
 
@@ -49,8 +50,16 @@ assert.match(
   /sessionStorage\.getItem\("rosetta_customer_preview"\)/,
 );
 assert.match(storefront, /preview\.id !== params\.get\("product_id"\)/);
-assert.match(storefront, /class="buy disabled"[^>]*>PREVIEW ONLY/);
+assert.match(storefront, /preview\.preview_only !== true/);
+assert.match(
+  storefront,
+  /previewOnly\s*\?\s*`<span class="buy disabled" aria-disabled="true">PREVIEW ONLY/,
+);
 assert.match(storefront, /if \(previewOnly \|\| !product_id\) return/);
+assert.match(
+  storefront,
+  /if \(!previewOnly\)\s*document\.addEventListener\(/,
+);
 assert.doesNotMatch(
   storefront,
   /noindex/,
