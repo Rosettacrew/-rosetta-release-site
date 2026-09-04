@@ -56,6 +56,19 @@
       .secondary{border:1px solid #51442e;color:#dfd7cb;padding:0 14px}
       .primary:hover,.primary:focus-visible{filter:brightness(1.08)}
       .secondary:hover,.secondary:focus-visible{border-color:var(--gold)}
+      .preview{margin-top:17px;padding:12px;border:1px solid #3a3328;border-radius:13px;background:#080808}
+      .preview-top{display:flex;align-items:center;gap:10px}
+      .play{width:42px;height:42px;flex:0 0 42px;border:1px solid var(--gold);border-radius:50%;background:#17130d;color:var(--gold2);font-weight:900;cursor:pointer}
+      .play:disabled{border-color:#3c3933;color:#67625a;cursor:not-allowed}
+      .preview-info{min-width:0;flex:1}
+      .preview-label{font-size:.78rem;font-weight:800;color:#ddd5ca}
+      .preview-time{margin-top:4px;color:var(--muted);font-size:.7rem}
+      .segments{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:9px}
+      .segment{height:4px;overflow:hidden;border-radius:99px;background:#2e2b27}
+      .segment i{display:block;width:0;height:100%;background:linear-gradient(90deg,var(--gold),var(--blue))}
+      .auction{margin:13px 0 0;padding:12px;border:1px solid #a87b32;border-radius:13px;background:linear-gradient(135deg,#231a0d,#101010)}
+      .auction strong{color:var(--gold2);font-size:.76rem;letter-spacing:.1em;text-transform:uppercase}
+      .auction small{display:block;margin-top:6px;color:#d0c6b6;line-height:1.45}
       .empty{display:none;text-align:center;border:1px solid #ffffff18;border-radius:20px;padding:40px;color:var(--muted)}
       .license-note{margin:28px 0 0;padding:22px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,#17130d,#0b0b0b);display:flex;justify-content:space-between;gap:24px;align-items:center}
       .license-note strong{display:block;color:var(--gold2);margin-bottom:5px}
@@ -87,7 +100,7 @@
 
       <section aria-labelledby="catalog-title">
         <div class="catalog-head">
-          <div><h2 id="catalog-title">Available beats</h2><p id="result-count" aria-live="polite">5 beats in the exchange</p></div>
+          <div><h2 id="catalog-title">Available beats</h2><p id="result-count" aria-live="polite">Loading the exchange…</p></div>
           <label class="search"><span class="sr-only" hidden>Search beats</span><input id="search" type="search" placeholder="Search title, style, or beat number" autocomplete="off" /></label>
         </div>
         <div class="filters" aria-label="Filter beats">
@@ -108,26 +121,38 @@
       <footer><span>BUY. SELL. LICENSE. EXCHANGE.</span><span>© 2026 Rosetta Crew Music Group</span></footer>
     </main>
     <script>
-      const beats=[
-        {code:"BEAT 0001",title:"Electric Trap",style:"Trap Fi",meta:"140 BPM · F minor",tags:"trap dark",price:"$30"},
-        {code:"BEAT 0002",title:"Hustle 101",style:"Street Trap",meta:"98 BPM · C minor",tags:"trap street 808",price:"$30"},
-        {code:"BEAT 0003",title:"Delta Flight",style:"Future Fi",meta:"104 BPM · A minor",tags:"melodic future",price:"$30"},
-        {code:"BEAT 0005",title:"Dance With Me",style:"Melodic",meta:"Rosetta Crew original",tags:"melodic",price:"$30"},
-        {code:"BEAT 0006",title:"Let’s Go",style:"FI Trap Bounce",meta:"Rosetta Crew original",tags:"trap street bounce",price:"$30"}
+      const API="https://sktgkrcahsxvidzjjxxt.supabase.co/functions/v1/beatbay-storefront";
+      const fallback=[
+        {id:"beat-0000",beat_code:"BEAT 0000",title:"NY Drill",style:"NY Drill",bpm:null,musical_key:null,tags:["drill","street","dark"],nonexclusive_enabled:true,nonexclusive_price_cents:3000,exclusive_enabled:true,ownership_enabled:true,preview_url:"./beat-0000-ny-drill-preview.mp3",preview_duration_seconds:29.49,is_featured:true},
+        {id:"beat-0001",beat_code:"BEAT 0001",title:"Electric Trap",style:"Trap Fi",bpm:140,musical_key:"F minor",tags:["trap","dark"],nonexclusive_enabled:true,nonexclusive_price_cents:3000,exclusive_enabled:true,ownership_enabled:true},
+        {id:"beat-0002",beat_code:"BEAT 0002",title:"Hustle 101",style:"Street Trap",bpm:98,musical_key:"C minor",tags:["trap","street","808"],nonexclusive_enabled:true,nonexclusive_price_cents:3000,exclusive_enabled:true,ownership_enabled:true},
+        {id:"beat-0003",beat_code:"BEAT 0003",title:"Delta Flight",style:"Future Fi",bpm:104,musical_key:"A minor",tags:["melodic","future"],nonexclusive_enabled:true,nonexclusive_price_cents:3000,exclusive_enabled:true,ownership_enabled:true},
+        {id:"beat-0005",beat_code:"BEAT 0005",title:"Dance With Me",style:"Melodic",bpm:null,musical_key:null,tags:["melodic"],nonexclusive_enabled:true,nonexclusive_price_cents:3000,exclusive_enabled:true,ownership_enabled:true},
+        {id:"beat-0006",beat_code:"BEAT 0006",title:"Let’s Go",style:"FI Trap Bounce",bpm:null,musical_key:null,tags:["trap","street","bounce"],nonexclusive_enabled:true,nonexclusive_price_cents:3000,exclusive_enabled:true,ownership_enabled:true}
       ];
+      let beats=[],activeAudio=null,activeButton=null,raf=0;
       const grid=document.getElementById("beat-grid"),search=document.getElementById("search"),count=document.getElementById("result-count"),empty=document.getElementById("empty");
       let active="all";
       const safe=s=>String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[m]);
+      const cash=c=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format((Number(c)||0)/100);
+      const clock=n=>`0:${String(Math.max(0,Math.floor(n||0))).padStart(2,"0")}`;
+      function meta(b){return [b.style,b.bpm?`${b.bpm} BPM`:null,b.musical_key].filter(Boolean).join(" · ")||"Rosetta Crew original"}
+      function auctionMarkup(a){if(!a)return"";const live=a.status==="live";return `<div class="auction"><strong>${live?"Live exclusive auction":"Auction scheduled"}</strong><small>${cash(a.starting_bid_cents)} opening bid · ${cash(a.minimum_increment_cents)} minimum raise<br>${live?"Closes":"Starts"} ${new Date(live?a.ends_at:a.starts_at).toLocaleString()}</small></div>`}
+      function previewMarkup(b){const ready=!!b.preview_url;return `<div class="preview" data-player="${safe(b.id)}"><div class="preview-top"><button class="play" type="button" data-preview="${safe(b.preview_url||"")}" data-id="${safe(b.id)}" aria-label="${ready?`Play staggered preview of ${safe(b.title)}`:`Preview not yet available for ${safe(b.title)}`}" ${ready?"":"disabled"}>${ready?"▶":"—"}</button><div class="preview-info"><div class="preview-label">${ready?"Protected staggered preview":"Preview coming soon"}</div><div class="preview-time">${ready?`Beginning · Middle · Ending · ${Math.round(Number(b.preview_duration_seconds)||30)} sec`:"Full beat stays private"}</div></div></div><div class="segments" aria-hidden="true"><span class="segment"><i></i></span><span class="segment"><i></i></span><span class="segment"><i></i></span></div></div>`}
       function render(){
         const q=search.value.trim().toLowerCase();
-        const shown=beats.filter(b=>(active==="all"||b.tags.includes(active))&&(`${b.code} ${b.title} ${b.style} ${b.meta} ${b.tags}`).toLowerCase().includes(q));
-        grid.innerHTML=shown.map(b=>`<article class="beat"><div class="art"><span class="code">${safe(b.code)}</span></div><div class="beat-body"><h3>${safe(b.title)}</h3><div class="meta">${safe(b.style)} · ${safe(b.meta)}</div><div class="license-row"><div class="license"><span>Non-exclusive</span><strong>${safe(b.price)}</strong></div><div class="license"><span>Exclusive</span><strong>Open offer</strong></div></div><div class="actions"><a class="primary" href="tel:+16562424777" aria-label="License ${safe(b.title)}">License beat</a><a class="secondary" href="tel:+16562424777" aria-label="Ask about exclusive ownership of ${safe(b.title)}">Exclusive</a></div></div></article>`).join("");
+        const shown=beats.filter(b=>(active==="all"||(b.tags||[]).includes(active))&&(`${b.beat_code} ${b.title} ${b.style||""} ${b.bpm||""} ${(b.tags||[]).join(" ")}`).toLowerCase().includes(q));
+        grid.innerHTML=shown.map(b=>`<article class="beat"><div class="art"><span class="code">${safe(b.beat_code)}</span></div><div class="beat-body"><h3>${safe(b.title)}</h3><div class="meta">${safe(meta(b))}</div>${previewMarkup(b)}${auctionMarkup(b.auction)}<div class="license-row"><div class="license"><span>Non-exclusive</span><strong>${b.nonexclusive_enabled?cash(b.nonexclusive_price_cents):"Unavailable"}</strong></div><div class="license"><span>Exclusive</span><strong>${b.exclusive_enabled?b.exclusive_price_cents?cash(b.exclusive_price_cents):"Open offer":"Unavailable"}</strong></div></div><div class="actions"><a class="primary" href="tel:+16562424777" aria-label="License ${safe(b.title)}">${b.auction?.status==="live"?"Place bid":"License beat"}</a><a class="secondary" href="tel:+16562424777" aria-label="Ask about full ownership of ${safe(b.title)}">Ownership</a></div></div></article>`).join("");
         count.textContent=`${shown.length} ${shown.length===1?"beat":"beats"} in the exchange`;
         empty.style.display=shown.length?"none":"block";
       }
+      function stopAudio(){cancelAnimationFrame(raf);if(activeAudio){activeAudio.pause();activeAudio.src=""}if(activeButton){activeButton.textContent="▶";activeButton.setAttribute("aria-label",activeButton.getAttribute("aria-label").replace("Pause","Play"))}activeAudio=null;activeButton=null;document.querySelectorAll(".segment i").forEach(i=>i.style.width="0")}
+      function paint(){if(!activeAudio||!activeButton)return;const player=activeButton.closest("[data-player]"),fills=player.querySelectorAll(".segment i"),duration=activeAudio.duration||30,p=Math.min(1,activeAudio.currentTime/duration),scaled=p*3;fills.forEach((fill,i)=>fill.style.width=`${Math.max(0,Math.min(1,scaled-i))*100}%`);player.querySelector(".preview-time").textContent=`${p<1/3?"Beginning":p<2/3?"Middle":"Ending"} · ${clock(activeAudio.currentTime)} / ${clock(duration)}`;raf=requestAnimationFrame(paint)}
+      grid.addEventListener("click",e=>{const button=e.target.closest("[data-preview]");if(!button||button.disabled)return;if(activeButton===button&&!activeAudio.paused){activeAudio.pause();button.textContent="▶";return}if(activeButton===button&&activeAudio.paused){activeAudio.play();button.textContent="Ⅱ";paint();return}stopAudio();activeButton=button;activeAudio=new Audio(button.dataset.preview);activeAudio.preload="metadata";activeAudio.addEventListener("ended",stopAudio,{once:true});activeAudio.addEventListener("error",()=>{button.closest("[data-player]").querySelector(".preview-time").textContent="Preview temporarily unavailable";stopAudio()},{once:true});activeAudio.play().then(()=>{button.textContent="Ⅱ";button.setAttribute("aria-label",button.getAttribute("aria-label").replace("Play","Pause"));paint()}).catch(()=>stopAudio())});
       document.querySelectorAll(".filter").forEach(button=>button.addEventListener("click",()=>{active=button.dataset.filter;document.querySelectorAll(".filter").forEach(b=>b.setAttribute("aria-pressed",String(b===button)));render()}));
       search.addEventListener("input",render);
-      render();
+      async function load(){try{const response=await fetch(API,{headers:{accept:"application/json"}});if(!response.ok)throw Error();const data=await response.json();beats=data.beats||[]}catch{beats=fallback}render()}
+      load();
     </script>
   </body>
 </html>
