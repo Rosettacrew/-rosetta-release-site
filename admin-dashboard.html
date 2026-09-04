@@ -1214,8 +1214,10 @@
       }
       function rows() {
         const mk = (r) => {
-          const on = !!(r.published_at && r.storefront_enabled);
-          return `<div class="row"><div><b>${esc(r.artist_name)} — ${esc(r.title)}</b><div class="muted">${esc(r.product_type || "Type needed")} · ${money(r.status === "presale" ? r.presale_price_cents : (r.release_price_cents ?? r.presale_price_cents))} · ${dt(r.release_at)}</div></div><div class="rowActions"><span class="status ${esc(r.status)}">${esc(r.status)}</span><button class="secondary editBtn" data-id="${r.id}">Edit</button><button class="toggleBtn storefrontToggle ${on ? "on" : "off"}" data-id="${r.id}" data-on="${on ? "true" : "false"}" aria-pressed="${on ? "true" : "false"}">Storefront ${on ? "On" : "Off"}</button></div></div>`;
+          const on = !!(r.published_at && r.storefront_enabled),
+            eligible = on && ["live", "presale"].includes(r.status),
+            featured = !!r.is_featured;
+          return `<div class="row"><div><b>${esc(r.artist_name)} — ${esc(r.title)}</b><div class="muted">${esc(r.product_type || "Type needed")} · ${money(r.status === "presale" ? r.presale_price_cents : (r.release_price_cents ?? r.presale_price_cents))} · ${dt(r.release_at)}</div></div><div class="rowActions"><span class="status ${esc(r.status)}">${esc(r.status)}</span><button class="secondary editBtn" data-id="${r.id}">Edit</button><button class="toggleBtn featureToggle ${featured ? "on" : "off"}" data-id="${r.id}" data-on="${featured ? "true" : "false"}" aria-pressed="${featured ? "true" : "false"}" ${eligible ? "" : "disabled"}>Featured ${featured ? "On" : "Off"}</button><button class="toggleBtn storefrontToggle ${on ? "on" : "off"}" data-id="${r.id}" data-on="${on ? "true" : "false"}" aria-pressed="${on ? "true" : "false"}">Storefront ${on ? "On" : "Off"}</button></div></div>`;
         };
         const h =
           rels.map(mk).join("") || '<div class="muted">No releases yet.</div>';
@@ -1484,9 +1486,23 @@
       };
       document.addEventListener("click", async (e) => {
         const ed = e.target.closest(".editBtn"),
+          f = e.target.closest(".featureToggle"),
           t = e.target.closest(".storefrontToggle");
         if (ed) {
           fillEdit(ed.dataset.id);
+          return;
+        }
+        if (f) {
+          const featured = f.dataset.on !== "true";
+          try {
+            setBusy(f, true, "Updating…");
+            await af(M, { method: "POST", body: JSON.stringify({ action: "set_featured", id: f.dataset.id, featured }) });
+            await loadR();
+          } catch (err) {
+            alert(err.message);
+          } finally {
+            setBusy(f, false);
+          }
           return;
         }
         if (!t) return;
