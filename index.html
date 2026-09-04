@@ -96,6 +96,26 @@
         letter-spacing: 0.16em;
         font-size: 12px;
       }
+      .beatbay-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 14px;
+        padding: 11px 16px;
+        border: 1px solid var(--g);
+        border-radius: 999px;
+        color: var(--g2);
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        transition: background 0.2s ease, color 0.2s ease;
+      }
+      .beatbay-cta:hover,
+      .beatbay-cta:focus-visible {
+        background: var(--g);
+        color: #080705;
+      }
       .grid {
         display: grid;
         gap: 28px;
@@ -295,6 +315,7 @@
         <div class="brand">ROSETTA CREW MUSIC GROUP</div>
         <h1>Direct to the fans.</h1>
         <p>MUSIC · CULTURE · OWNERSHIP</p>
+        <a class="beatbay-cta" href="beatbay/">EXPLORE BEATBAY EXCHANGE →</a>
       </section>
       <section id="loading" class="empty">Loading published releases…</section>
       <section id="error" class="error hidden">
