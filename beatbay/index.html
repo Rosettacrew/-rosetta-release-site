@@ -13,9 +13,13 @@
     <meta property="og:url" content="https://rosettacrew.com/beatbay/" />
     <meta property="og:title" content="BeatBay Exchange | Rosetta Crew Music Group" />
     <meta property="og:description" content="Browse and license original beats from BeatBay Exchange, powered by Rosetta Crew Music Group." />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://rosettacrew.com/beatbay/assets/beatbay-logo.png" />
+    <meta property="og:image:alt" content="BeatBay Exchange" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="BeatBay Exchange | Rosetta Crew Music Group" />
     <meta name="twitter:description" content="Browse and license original beats from BeatBay Exchange, powered by Rosetta Crew Music Group." />
+    <meta name="twitter:image" content="https://rosettacrew.com/beatbay/assets/beatbay-logo.png" />
+    <meta name="twitter:image:alt" content="BeatBay Exchange" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -87,35 +91,17 @@
       .brand {
         display: flex;
         align-items: center;
-        gap: 12px;
-        text-decoration: none;
         min-width: 0;
+        text-decoration: none;
       }
-      .brand-mark { width: 46px; height: 46px; flex: 0 0 46px; filter: drop-shadow(0 0 10px #d4af5740) }
-      .wordmark { display: flex; flex-direction: column; line-height: 1.05; min-width: 0 }
-      .wordmark .name {
-        font-family: var(--serif);
-        font-weight: 800;
-        letter-spacing: .18em;
-        font-size: 1.05rem;
-      }
-      .wordmark .sub {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-top: 4px;
-        color: var(--blue);
-        font-size: .62rem;
-        font-weight: 700;
-        letter-spacing: .42em;
-      }
-      .wordmark .sub::before,
-      .wordmark .sub::after {
-        content: "";
-        width: 16px;
-        height: 1px;
-        background: var(--gold);
-        opacity: .85;
+      .brand-logo {
+        display: block;
+        height: 52px;
+        width: auto;
+        max-width: min(280px, 64vw);
+        object-fit: contain;
+        object-position: left center;
+        filter: drop-shadow(0 0 10px #d4af5740);
       }
       .home {
         color: var(--muted);
@@ -196,21 +182,11 @@
         position: relative;
         min-height: 280px;
       }
-      .hero-visual::before {
-        content: "";
-        position: absolute;
-        inset: 18% 12%;
-        background:
-          repeating-linear-gradient(90deg, transparent 0 14px, #d4af5744 14px 18px),
-          linear-gradient(#d4af5700, #d4af5700);
-        clip-path: polygon(8% 62%, 16% 30%, 24% 70%, 32% 18%, 40% 58%, 48% 8%, 56% 64%, 64% 22%, 72% 72%, 80% 28%, 88% 54%, 96% 16%, 96% 100%, 8% 100%);
-        opacity: .45;
-        filter: blur(.2px);
-      }
-      .hero-mark {
-        position: relative;
-        z-index: 1;
-        width: min(320px, 86%);
+      .hero-logo {
+        display: block;
+        width: min(420px, 92%);
+        height: auto;
+        object-fit: contain;
         filter: drop-shadow(0 18px 28px #000c) drop-shadow(0 0 24px #d4af5733);
       }
       .catalog-head {
@@ -575,8 +551,8 @@
       .foot-brand span { letter-spacing: .08em; text-transform: uppercase; font-size: .68rem }
       @media (max-width: 880px) {
         .hero { grid-template-columns: 1fr; padding-top: 32px }
-        .hero-visual { order: -1; min-height: 220px }
-        .hero-mark { width: min(240px, 70%) }
+        .hero-visual { order: -1; min-height: 200px }
+        .hero-logo { width: min(320px, 78%) }
         .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
         .hero-copy { max-width: 680px }
         .license-note { grid-template-columns: 1fr }
@@ -585,8 +561,7 @@
       @media (max-width: 620px) {
         .shell { padding-inline: 14px }
         .topbar { padding: 14px 0 }
-        .brand-mark { width: 40px; height: 40px; flex-basis: 40px }
-        .wordmark .name { font-size: .92rem; letter-spacing: .14em }
+        .brand-logo { height: 44px }
         .catalog-head { align-items: stretch; flex-direction: column }
         .search { width: 100% }
         .grid { grid-template-columns: 1fr }
@@ -604,54 +579,10 @@
     </style>
   </head>
   <body>
-    <svg width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
-      <defs>
-        <linearGradient id="goldMetal" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#fff5b7"/>
-          <stop offset=".35" stop-color="#ffdc86"/>
-          <stop offset=".7" stop-color="#d4af57"/>
-          <stop offset="1" stop-color="#8c6717"/>
-        </linearGradient>
-        <linearGradient id="waveBlue" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#1e6fa8"/>
-          <stop offset=".45" stop-color="#34aadc"/>
-          <stop offset="1" stop-color="#7ec8ea"/>
-        </linearGradient>
-        <linearGradient id="waveGold" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0" stop-color="#8c6717"/>
-          <stop offset="1" stop-color="#ffdc86"/>
-        </linearGradient>
-      </defs>
-      <symbol id="bb-vinyl" viewBox="0 0 200 200">
-        <circle cx="114" cy="100" r="78" fill="url(#goldMetal)"/>
-        <circle cx="114" cy="100" r="72" fill="#1a140c"/>
-        <circle cx="114" cy="100" r="68" fill="none" stroke="#d4af57" stroke-width="1.2" opacity=".55"/>
-        <circle cx="114" cy="100" r="58" fill="none" stroke="#ffdc86" stroke-width=".8" opacity=".4"/>
-        <circle cx="114" cy="100" r="48" fill="none" stroke="#d4af57" stroke-width=".7" opacity=".35"/>
-        <circle cx="114" cy="100" r="38" fill="none" stroke="#fff5b7" stroke-width=".6" opacity=".28"/>
-        <circle cx="114" cy="100" r="22" fill="url(#goldMetal)"/>
-        <circle cx="114" cy="100" r="16" fill="#0a0a0a"/>
-        <path d="M18 128c8-42 42-70 78-52 14 8 12 38 36 50 14 8 12 32-18 40-42 10-78-6-96-38z" fill="url(#waveBlue)"/>
-        <path d="M28 124c8-32 36-54 66-40 10 6 10 30 28 40 8 6 8 22-10 28-32 8-62-4-84-28z" fill="url(#waveGold)" opacity=".85"/>
-        <g fill="#fff5b7">
-          <rect x="96" y="92" width="3.2" height="16" rx="1"/>
-          <rect x="102" y="86" width="3.2" height="28" rx="1"/>
-          <rect x="108" y="82" width="3.2" height="36" rx="1"/>
-          <rect x="114" y="80" width="3.2" height="40" rx="1"/>
-          <rect x="120" y="86" width="3.2" height="28" rx="1"/>
-          <rect x="126" y="90" width="3.2" height="20" rx="1"/>
-        </g>
-      </symbol>
-    </svg>
-
     <main class="shell">
       <nav class="topbar" aria-label="Main navigation">
         <a class="brand" href="./">
-          <svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true" focusable="false"><use href="#bb-vinyl"/></svg>
-          <span class="wordmark">
-            <span class="name gold-text">BEATBAY</span>
-            <span class="sub">EXCHANGE</span>
-          </span>
+          <img class="brand-logo" src="./assets/beatbay-logo.png" alt="BeatBay Exchange" width="900" height="600" />
         </a>
         <a class="home" href="../">Rosetta Crew releases ↗</a>
       </nav>
@@ -673,8 +604,8 @@
             <li>Exclusive options</li>
           </ul>
         </div>
-        <div class="hero-visual" aria-hidden="true">
-          <svg class="hero-mark" viewBox="0 0 200 200"><use href="#bb-vinyl"/></svg>
+        <div class="hero-visual">
+          <img class="hero-logo" src="./assets/beatbay-logo.png" alt="" width="900" height="600" />
         </div>
       </header>
 
