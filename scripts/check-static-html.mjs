@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
-const files = ["admin-dashboard.html", "index.html"];
+const files = [
+  "admin-dashboard.html",
+  "index.html",
+  "beatbay-admin.html",
+  "beatbay/index.html",
+];
 
 for (const file of files) {
   const html = readFileSync(file, "utf8");
@@ -42,6 +47,13 @@ assert.match(admin, /checkout_url: null/);
 assert.match(admin, /preview_only: true/);
 assert.match(admin, /storefront_enabled: false/);
 assert.match(admin, /Release \/ EP title/);
+assert.match(admin, /name="psArtistType" value="actual"/);
+assert.match(admin, /name="psArtistType" value="ai"/);
+assert.match(admin, /name="eArtistType" value="actual"/);
+assert.match(admin, /name="eArtistType" value="ai"/);
+assert.match(admin, /artist_contact: artistContact\("ps"\)/);
+assert.match(admin, /artist_contact: artistContact\("e"\)/);
+assert.match(admin, /artist_type: release\.artist_type \|\| null/);
 
 const storefront = readFileSync("index.html", "utf8");
 assert.match(storefront, /params\.get\("admin_preview"\) === "1"/);
@@ -65,6 +77,44 @@ assert.doesNotMatch(
   /noindex/,
   "Fan storefront must remain indexable",
 );
+assert.match(storefront, /release\.artist_type === "actual"/);
+assert.match(storefront, /Contact Rosetta Crew for booking inquiries/);
+assert.match(storefront, /preview link disabled/);
+assert.doesNotMatch(
+  storefront,
+  /Contact (name|email|phone)/i,
+  "Private artist contact fields must not appear on the storefront",
+);
+
+const beatbayAdmin = readFileSync("beatbay-admin.html", "utf8");
+assert.match(beatbayAdmin, /id="coverCanvas"/);
+assert.match(beatbayAdmin, /Download branded PNG/);
+assert.match(beatbayAdmin, /www\.RosettaCrew\.com\/BeatBay/);
+assert.match(beatbayAdmin, /drawBeatBayCover\(\)/);
+
+const beatbay = readFileSync("beatbay/index.html", "utf8");
+assert.match(beatbay, /function beatArt\(b\)/);
+assert.match(beatbay, /www\.RosettaCrew\.com\/BeatBay/);
+assert.match(beatbay, /BEATBAY  ·  BEATBAY  ·  BEATBAY/);
+assert.match(beatbay, /classList\.add\("is-playing"\)/);
+assert.doesNotMatch(
+  storefront,
+  /www\.RosettaCrew\.com\/BeatBay/,
+  "BeatBay watermarking must remain isolated from music releases",
+);
+
+const releaseManager = readFileSync(
+  "supabase/functions/release-manager/index.ts",
+  "utf8",
+);
+const releaseStorefront = readFileSync(
+  "supabase/functions/release-storefront/index.ts",
+  "utf8",
+);
+assert.match(releaseManager, /release_artist_contacts/);
+assert.match(releaseManager, /normalizeArtistType/);
+assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
+assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 
 const publicFiles = [
   "admin-dashboard.html",
@@ -77,6 +127,8 @@ const publicFiles = [
   "admin-sw.js",
   "manifest.webmanifest",
   "admin.webmanifest",
+  "beatbay-admin.html",
+  "beatbay/index.html",
 ];
 const publicBundle = publicFiles
   .filter((file) => existsSync(file))

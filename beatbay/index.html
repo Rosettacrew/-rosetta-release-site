@@ -271,27 +271,87 @@
         box-shadow: 0 22px 48px #000a, 0 0 0 1px #d4af5730;
       }
       .art {
-        height: 168px;
+        min-height: 230px;
         padding: 16px;
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
+        display: grid;
+        align-content: space-between;
         position: relative;
         overflow: hidden;
         background:
-          radial-gradient(circle at 78% 42%, #1a140ccc 0 22%, transparent 23%),
-          repeating-radial-gradient(circle at 78% 42%, #d4af5730 0 2px, transparent 3px 8px),
-          linear-gradient(140deg, #d4af5728, #0a0a0a 48%, #327edc26);
+          linear-gradient(115deg, transparent 38%, #d4af5710 38% 42%, transparent 42% 58%, #d4af5710 58% 62%, transparent 62%),
+          radial-gradient(circle at 80% 18%, #d4af5733, transparent 32%),
+          linear-gradient(145deg, #17120a, #030303 62%, #21180a);
       }
       .art.tone-1 { background:
-        radial-gradient(circle at 78% 42%, #1a140ccc 0 22%, transparent 23%),
-        repeating-radial-gradient(circle at 78% 42%, #34aadc33 0 2px, transparent 3px 8px),
-        linear-gradient(140deg, #34aadc22, #0a0a0a 50%, #d4af5722);
+        linear-gradient(115deg, transparent 38%, #f5d97a12 38% 42%, transparent 42% 58%, #f5d97a12 58% 62%, transparent 62%),
+        radial-gradient(circle at 18% 82%, #d4af572e, transparent 34%),
+        linear-gradient(145deg, #080808, #17120a 60%, #030303);
       }
       .art.tone-2 { background:
-        radial-gradient(circle at 78% 42%, #1a140ccc 0 22%, transparent 23%),
-        repeating-radial-gradient(circle at 78% 42%, #ffdc8630 0 2px, transparent 3px 8px),
-        linear-gradient(155deg, #8c671744, #0a0a0a 46%, #1e6fa833);
+        linear-gradient(115deg, transparent 38%, #8c67172b 38% 42%, transparent 42% 58%, #8c67172b 58% 62%, transparent 62%),
+        radial-gradient(circle at 82% 78%, #f5d97a24, transparent 35%),
+        linear-gradient(155deg, #21180a, #050505 58%, #120e08);
+      }
+      .art::before {
+        content: "BEATBAY  ·  BEATBAY  ·  BEATBAY";
+        position: absolute;
+        left: -32px;
+        right: -32px;
+        top: 46%;
+        transform: rotate(-9deg);
+        color: #d4af571c;
+        font-family: var(--serif);
+        font-size: 1.15rem;
+        font-weight: 900;
+        letter-spacing: .15em;
+        white-space: nowrap;
+      }
+      .art-top, .art-main, .art-url { position: relative; z-index: 1 }
+      .art-top { display: flex; justify-content: space-between; align-items: center; gap: 10px }
+      .art-brand {
+        color: var(--gold-light);
+        font-family: var(--serif);
+        font-size: 1rem;
+        font-weight: 900;
+        letter-spacing: .16em;
+      }
+      .art-main { align-self: center }
+      .art-title {
+        display: block;
+        max-width: 90%;
+        color: #fff8e8;
+        font-family: var(--serif);
+        font-size: clamp(1.55rem, 3vw, 2.15rem);
+        line-height: .98;
+        text-transform: uppercase;
+        text-shadow: 0 3px 24px #000;
+      }
+      .art-bpm {
+        display: block;
+        margin-top: 10px;
+        color: var(--gold-light);
+        font-size: .8rem;
+        font-weight: 900;
+        letter-spacing: .18em;
+      }
+      .art-url {
+        padding-top: 9px;
+        border-top: 1px solid #d4af5766;
+        color: var(--gold-light);
+        font-size: .67rem;
+        font-weight: 900;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+      .beat.is-playing .art {
+        border-bottom-color: var(--gold);
+        box-shadow: inset 0 0 42px #d4af572e;
+      }
+      .beat.is-playing .art-brand::after {
+        content: "  ·  NOW PLAYING";
+        color: #fff;
+        font-family: var(--sans);
+        font-size: .58rem;
       }
       .vinyl-disc {
         position: absolute;
@@ -608,7 +668,7 @@
       .foot-brand span { letter-spacing: .08em; text-transform: uppercase; font-size: .68rem }
       @media (max-width: 980px) {
         .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
-        .art { height: 148px }
+        .art { min-height: 210px }
         .beat-body { padding: 14px }
       }
       @media (max-width: 880px) {
@@ -753,6 +813,7 @@
       const producer=b=>b.producer||"Rosetta Crew Music Group";
       const tone=b=>[...String(b.beat_code||b.id||"")].reduce((a,c)=>a+c.charCodeAt(0),0)%3;
       const catalogId=b=>{const n=String(b.beat_code||"").replace(/^BEAT\s+/i,"").trim();return n||"—"}
+      function beatArt(b){const bpm=b.bpm!=null&&b.bpm!==""?`${safe(b.bpm)} BPM`:"BPM PENDING";return `<div class="art tone-${tone(b)}" aria-label="BeatBay cover art for ${safe(b.title)}, ${bpm}"><div class="art-top"><span class="art-brand">BEATBAY</span><span class="code">No. ${safe(catalogId(b))}</span></div><div class="art-main"><strong class="art-title">${safe(b.title)}</strong><span class="art-bpm">${bpm}</span></div><div class="art-url">www.RosettaCrew.com/BeatBay</div></div>`}
       function stats(b){return `<div class="stats"><span><i>Style</i><b>${safe(b.style||"—")}</b></span><span><i>BPM</i><b>${b.bpm!=null&&b.bpm!==""?safe(b.bpm):"—"}</b></span><span><i>Key</i><b>${safe(b.musical_key||"—")}</b></span></div>`}
       function badges(b){return b.signature_sound?`<div class="badges"><span class="badge signature">◆ Signature Sound</span></div>`:""}
       function auctionMarkup(a,b){if(!a)return"";const preview=a.status==="preview",live=a.status==="live",label=preview?"Auction preview · Not live":live?"Live exclusive auction":"Auction scheduled",price=a.current_bid_cents||a.starting_bid_cents;return `<div class="auction"><div class="lot"><div><span class="lot-id">LOT ${safe((b.beat_code||"").replace("BEAT ",""))}</span><br><strong>${label}</strong></div><div class="auction-price"><span>${a.current_bid_cents?"Current bid":"Opening bid"}</span><b>${cash(price)}</b></div></div><div class="countdown" data-auction-clock="${safe(a.ends_at||a.starts_at||"")}"><div class="timebox"><b data-t="d">00</b><span>Days</span></div><div class="timebox"><b data-t="h">00</b><span>Hours</span></div><div class="timebox"><b data-t="m">00</b><span>Minutes</span></div><div class="timebox"><b data-t="s">00</b><span>Seconds</span></div></div><small>${cash(a.minimum_increment_cents)} minimum raise · ${preview?"Demonstration timer only":"highest qualified bid wins"}<br>Winner has ${a.payment_window_hours||24} hours to pay · real auctions close Friday 8 PM ET</small></div>`}
@@ -761,16 +822,16 @@
       function render(){
         const q=search.value.trim().toLowerCase();
         const shown=beats.filter(b=>(active==="all"||(b.tags||[]).includes(active))&&(`${b.beat_code} ${b.title} ${b.style||""} ${b.bpm||""} ${producer(b)} ${(b.tags||[]).join(" ")}`).toLowerCase().includes(q));
-        grid.innerHTML=shown.map(b=>`<article class="beat"><div class="art tone-${tone(b)}"><span class="vinyl-disc" aria-hidden="true"></span><span class="code">No. ${safe(catalogId(b))}</span></div><div class="beat-body"><h3>${safe(b.title)}</h3><p class="producer">${safe(producer(b))}</p>${stats(b)}${badges(b)}${previewMarkup(b)}${auctionMarkup(b.auction,b)}<div class="license-row"><div class="license"><span>Non-exclusive</span><strong>${b.nonexclusive_enabled?cash(b.nonexclusive_price_cents):"Unavailable"}</strong></div><div class="license"><span>Exclusive</span><strong>${b.exclusive_enabled?b.exclusive_price_cents?cash(b.exclusive_price_cents):"Open offer":"Unavailable"}</strong></div></div><div class="actions">${b.auction?.status==="preview"?`<button class="primary" type="button" disabled>Place bid</button>`:`<a class="primary" href="tel:+16562424777" aria-label="License ${safe(b.title)}">${b.auction?.status==="live"?"Place bid":"License beat"}</a>`}<a class="secondary" href="tel:+16562424777" aria-label="Ask about full ownership of ${safe(b.title)}">Ownership</a></div></div></article>`).join("");
+        grid.innerHTML=shown.map(b=>`<article class="beat" data-beat="${safe(b.id)}">${beatArt(b)}<div class="beat-body"><h3>${safe(b.title)}</h3><p class="producer">${safe(producer(b))}</p>${stats(b)}${badges(b)}${previewMarkup(b)}${auctionMarkup(b.auction,b)}<div class="license-row"><div class="license"><span>Non-exclusive</span><strong>${b.nonexclusive_enabled?cash(b.nonexclusive_price_cents):"Unavailable"}</strong></div><div class="license"><span>Exclusive</span><strong>${b.exclusive_enabled?b.exclusive_price_cents?cash(b.exclusive_price_cents):"Open offer":"Unavailable"}</strong></div></div><div class="actions">${b.auction?.status==="preview"?`<button class="primary" type="button" disabled>Place bid</button>`:`<a class="primary" href="tel:+16562424777" aria-label="License ${safe(b.title)}">${b.auction?.status==="live"?"Place bid":"License beat"}</a>`}<a class="secondary" href="tel:+16562424777" aria-label="Ask about full ownership of ${safe(b.title)}">Ownership</a></div></div></article>`).join("");
         grid.hidden=!shown.length;
         grid.setAttribute("aria-busy","false");
         count.textContent=`${shown.length} ${shown.length===1?"beat":"beats"} in the exchange`;
         empty.style.display=shown.length?"none":"block";
         startCountdowns();
       }
-      function stopAudio(){cancelAnimationFrame(raf);if(activeAudio){activeAudio.pause();activeAudio.src=""}if(activeButton){activeButton.textContent="▶";activeButton.setAttribute("aria-label",activeButton.getAttribute("aria-label").replace("Pause","Play"))}activeAudio=null;activeButton=null;document.querySelectorAll(".segment i").forEach(i=>i.style.width="0")}
+      function stopAudio(){cancelAnimationFrame(raf);if(activeAudio){activeAudio.pause();activeAudio.src=""}if(activeButton){activeButton.textContent="▶";activeButton.setAttribute("aria-label",activeButton.getAttribute("aria-label").replace("Pause","Play"))}activeAudio=null;activeButton=null;document.querySelectorAll(".beat.is-playing").forEach(card=>card.classList.remove("is-playing"));document.querySelectorAll(".segment i").forEach(i=>i.style.width="0")}
       function paint(){if(!activeAudio||!activeButton)return;const player=activeButton.closest("[data-player]"),fills=player.querySelectorAll(".segment i"),duration=activeAudio.duration||30,p=Math.min(1,activeAudio.currentTime/duration),scaled=p*3;fills.forEach((fill,i)=>fill.style.width=`${Math.max(0,Math.min(1,scaled-i))*100}%`);player.querySelector(".preview-time").textContent=`${p<1/3?"Beginning":p<2/3?"Middle":"Ending"} · ${clock(activeAudio.currentTime)} / ${clock(duration)}`;raf=requestAnimationFrame(paint)}
-      grid.addEventListener("click",e=>{const button=e.target.closest("[data-preview]");if(!button||button.disabled)return;if(activeButton===button&&!activeAudio.paused){activeAudio.pause();button.textContent="▶";return}if(activeButton===button&&activeAudio.paused){activeAudio.play();button.textContent="Ⅱ";paint();return}stopAudio();activeButton=button;activeAudio=new Audio(button.dataset.preview);activeAudio.preload="metadata";activeAudio.addEventListener("ended",stopAudio,{once:true});activeAudio.addEventListener("error",()=>{button.closest("[data-player]").querySelector(".preview-time").textContent="Preview temporarily unavailable";stopAudio()},{once:true});activeAudio.play().then(()=>{button.textContent="Ⅱ";button.setAttribute("aria-label",button.getAttribute("aria-label").replace("Play","Pause"));paint()}).catch(()=>stopAudio())});
+      grid.addEventListener("click",e=>{const button=e.target.closest("[data-preview]");if(!button||button.disabled)return;const card=button.closest(".beat");if(activeButton===button&&!activeAudio.paused){activeAudio.pause();button.textContent="▶";card?.classList.remove("is-playing");return}if(activeButton===button&&activeAudio.paused){activeAudio.play();button.textContent="Ⅱ";card?.classList.add("is-playing");paint();return}stopAudio();activeButton=button;activeAudio=new Audio(button.dataset.preview);activeAudio.preload="metadata";activeAudio.addEventListener("ended",stopAudio,{once:true});activeAudio.addEventListener("error",()=>{button.closest("[data-player]").querySelector(".preview-time").textContent="Preview temporarily unavailable";stopAudio()},{once:true});activeAudio.play().then(()=>{button.textContent="Ⅱ";card?.classList.add("is-playing");button.setAttribute("aria-label",button.getAttribute("aria-label").replace("Play","Pause"));paint()}).catch(()=>stopAudio())});
       document.querySelectorAll(".filter").forEach(button=>button.addEventListener("click",()=>{active=button.dataset.filter;document.querySelectorAll(".filter").forEach(b=>b.setAttribute("aria-pressed",String(b===button)));render()}));
       search.addEventListener("input",render);
       async function load(){try{const response=await fetch(API,{headers:{accept:"application/json"}});if(!response.ok)throw Error();const data=await response.json();beats=data.beats||[]}catch{beats=fallback}if(new URLSearchParams(location.search).get("auction_preview")==="1"){const target=beats.find(b=>b.beat_code==="BEAT 0000")||beats[0];if(target)target.auction={status:"preview",starting_bid_cents:2500,minimum_increment_cents:1000,payment_window_hours:24,ends_at:new Date(Date.now()+52*60*60*1000+27*60*1000).toISOString()};document.getElementById("auction-preview-banner").classList.add("on")}render()}

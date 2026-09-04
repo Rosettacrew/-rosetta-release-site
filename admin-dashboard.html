@@ -260,6 +260,47 @@
         color: #80796e;
         margin-top: 7px;
       }
+      .artistKind {
+        grid-column: 1/-1;
+        margin: 0;
+        padding: 13px;
+        border: 1px solid #353129;
+        border-radius: 11px;
+      }
+      .artistKind legend {
+        padding: 0 6px;
+        color: #c6ab70;
+        font-size: 11px;
+      }
+      .artistKindOptions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .artistKind label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        padding: 10px 13px;
+        border: 1px solid #4a4234;
+        border-radius: 999px;
+        color: #eee;
+        cursor: pointer;
+      }
+      .artistKind input {
+        width: auto;
+        accent-color: #d7ab52;
+      }
+      .bookingFields {
+        padding: 13px;
+        border-left: 3px solid #d7ab52;
+        background: #120f09;
+        border-radius: 9px;
+      }
+      .bookingFields .form {
+        margin-top: 10px;
+      }
       .analyticsGrid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -650,6 +691,22 @@
             <div class="form">
               <div><label>Artist</label><input id="psArtist" /></div>
               <div><label>Release / EP title</label><input id="psTitle" /></div>
+              <fieldset class="artistKind">
+                <legend>Artist identity</legend>
+                <div class="artistKindOptions">
+                  <label><input id="psActual" type="radio" name="psArtistType" value="actual" checked /> Actual Artist</label>
+                  <label><input id="psAi" type="radio" name="psArtistType" value="ai" /> AI Artist</label>
+                </div>
+              </fieldset>
+              <div id="psArtistContact" class="wide bookingFields">
+                <b>Private artist contact</b>
+                <div class="hint">Admin-only. Fans see Rosetta Crew’s booking banner, never these private details.</div>
+                <div class="form">
+                  <div><label>Contact name</label><input id="psContactName" autocomplete="off" /></div>
+                  <div><label>Contact phone</label><input id="psContactPhone" type="tel" autocomplete="off" /></div>
+                  <div class="wide"><label>Contact email</label><input id="psContactEmail" type="email" autocomplete="off" /></div>
+                </div>
+              </div>
               <div>
                 <label>Type</label
                 ><select id="psType">
@@ -700,6 +757,22 @@
                 <div class="hint">
                   This is the title fans see. Add individual song names under
                   Uploads.
+                </div>
+              </div>
+              <fieldset class="artistKind">
+                <legend>Artist identity</legend>
+                <div class="artistKindOptions">
+                  <label><input id="eActual" type="radio" name="eArtistType" value="actual" /> Actual Artist</label>
+                  <label><input id="eAi" type="radio" name="eArtistType" value="ai" /> AI Artist</label>
+                </div>
+              </fieldset>
+              <div id="eArtistContact" class="wide bookingFields">
+                <b>Private artist contact</b>
+                <div class="hint">Admin-only. The public listing routes booking inquiries through Rosetta Crew.</div>
+                <div class="form">
+                  <div><label>Contact name</label><input id="eContactName" autocomplete="off" /></div>
+                  <div><label>Contact phone</label><input id="eContactPhone" type="tel" autocomplete="off" /></div>
+                  <div class="wide"><label>Contact email</label><input id="eContactEmail" type="email" autocomplete="off" /></div>
                 </div>
               </div>
               <div>
@@ -1098,6 +1171,28 @@
           });
         return signed;
       }
+      function artistType(prefix) {
+        return q(prefix + "Ai").checked ? "ai" : "actual";
+      }
+      function artistContact(prefix) {
+        return {
+          contact_name: q(prefix + "ContactName").value.trim(),
+          contact_phone: q(prefix + "ContactPhone").value.trim(),
+          contact_email: q(prefix + "ContactEmail").value.trim(),
+        };
+      }
+      function syncArtistContact(prefix) {
+        const actual = artistType(prefix) === "actual";
+        q(prefix + "ArtistContact").classList.toggle("hidden", !actual);
+        q(prefix + "ArtistContact").querySelectorAll("input").forEach((input) => {
+          input.disabled = !actual;
+        });
+      }
+      function setArtistType(prefix, value) {
+        q(prefix + "Ai").checked = value === "ai";
+        q(prefix + "Actual").checked = value !== "ai";
+        syncArtistContact(prefix);
+      }
       function setPreview(on) {
         q("previewToggle").checked = on;
         q("previewToggleInside").checked = on;
@@ -1122,6 +1217,7 @@
             id: release.id,
             slug: release.slug,
             artist_name: release.artist_name,
+            artist_type: release.artist_type || null,
             title: release.title,
             product_type: release.product_type,
             description: release.description,
@@ -1155,6 +1251,10 @@
         if (!r) return;
         q("eRelease").value = r.id;
         q("eArtist").value = r.artist_name || "";
+        setArtistType("e", r.artist_type);
+        q("eContactName").value = r.artist_contact?.contact_name || "";
+        q("eContactPhone").value = r.artist_contact?.contact_phone || "";
+        q("eContactEmail").value = r.artist_contact?.contact_email || "";
         q("eTitle").value = r.title || "";
         q("eType").value = r.product_type || "";
         q("eStatus").value = r.status || "draft";
@@ -1366,6 +1466,13 @@
         if (b.dataset.tab === "promote") social();
       };
       q("eRelease").onchange = () => fillEdit(q("eRelease").value);
+      ["psActual", "psAi"].forEach((id) => {
+        q(id).onchange = () => syncArtistContact("ps");
+      });
+      ["eActual", "eAi"].forEach((id) => {
+        q(id).onchange = () => syncArtistContact("e");
+      });
+      syncArtistContact("ps");
       q("createPresale").onclick = async () => {
         const b = q("createPresale");
         try {
@@ -1395,6 +1502,8 @@
             body: JSON.stringify({
               action: "create_release",
               artist_name: artist,
+              artist_type: artistType("ps"),
+              artist_contact: artistContact("ps"),
               title,
               product_type: q("psType").value,
               description: q("psDesc").value,
@@ -1460,6 +1569,8 @@
               action: "update_release",
               id,
               artist_name: q("eArtist").value.trim(),
+              artist_type: artistType("e"),
+              artist_contact: artistContact("e"),
               title: q("eTitle").value.trim(),
               product_type: q("eType").value,
               status: q("eStatus").value,
