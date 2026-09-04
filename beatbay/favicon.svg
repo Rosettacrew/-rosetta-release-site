@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BeatBay Exchange">
+  <rect width="64" height="64" rx="12" fill="#0a0a0a"/>
+  <circle cx="34" cy="32" r="22" fill="#8c6717"/>
+  <circle cx="34" cy="32" r="20" fill="none" stroke="#ffdc86" stroke-width="1.2"/>
+  <circle cx="34" cy="32" r="16" fill="none" stroke="#d4af57" stroke-width=".7" opacity=".7"/>
+  <circle cx="34" cy="32" r="12" fill="none" stroke="#fff5b7" stroke-width=".5" opacity=".45"/>
+  <circle cx="34" cy="32" r="5.5" fill="#1a140c" stroke="#ffdc86" stroke-width="1"/>
+  <path d="M12 40c2-14 14-22 24-16 4 3 3 12 10 16 4 2 3 10-6 12-12 2-22-2-28-12z" fill="#1e6fa8"/>
+  <path d="M14 39c2-11 12-18 21-13 3 2 3 10 9 13 2 1 2 7-4 9-10 2-19-2-26-9z" fill="#34aadc"/>
+  <path d="M26 32h1.4v4H26zm3-5h1.4v10H29zm3-3h1.4v14H32zm3-1h1.4v16H35zm3 4h1.4v9H38z" fill="#fff5b7"/>
+</svg>
