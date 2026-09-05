@@ -132,6 +132,15 @@ const studioManager = readFileSync(
 );
 assert.match(releaseManager, /release_artist_contacts/);
 assert.match(releaseManager, /normalizeArtistType/);
+assert.match(releaseManager, /function activeCheckoutPrice/);
+assert.match(releaseManager, /function nextStorefrontStatus/);
+assert.match(releaseManager, /digital_product/);
+assert.match(releaseManager, /description\.slice\(0, 400\)/);
+assert.match(
+  releaseManager,
+  /Set a regular or pre-sale price greater than \$0\.00/,
+);
+assert.match(releaseManager, /if \(ue\) throw ue;/);
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 assert.match(
@@ -247,6 +256,15 @@ assert.match(admin, /apple-mobile-web-app-capable/);
 assert.match(admin, /apple-mobile-web-app-title" content="Release Station"/);
 assert.match(admin, /id="menuBtn"/);
 assert.match(admin, /\.shell\.navOpen \.nav/);
+assert.match(admin, /id="toast"/);
+assert.match(admin, /function toast\(/);
+assert.match(admin, /toast\(err\.message \|\| "Storefront update failed\."/);
+assert.match(admin, /Turning On…/);
+assert.doesNotMatch(
+  admin,
+  /storefrontToggle[\s\S]*alert\(err\.message\)/,
+  "Storefront toggle must surface publish errors with a toast, not alert()",
+);
 
 const ownerLogin = readFileSync("owner-login.html", "utf8");
 assert.match(
@@ -324,5 +342,14 @@ assert.match(robots, /Disallow: \/music-studio\.html/);
 assert.match(robots, /Disallow: \/password-login\.html/);
 assert.match(robots, /Disallow: \/owner-recovery\.html/);
 assert.match(robots, /Allow: \//);
+
+const helpers = spawnSync(process.execPath, ["scripts/check-publish-helpers.mjs"], {
+  encoding: "utf8",
+});
+assert.equal(
+  helpers.status,
+  0,
+  `Publish helper checks failed:\n${helpers.stderr || helpers.stdout}`,
+);
 
 console.log("Static HTML and private-preview checks passed.");

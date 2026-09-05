@@ -535,6 +535,36 @@
         border-color: #3b3935;
         color: #aaa;
       }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        background: #17140f;
+        border: 1px solid var(--line);
+        color: var(--text);
+        padding: 12px 16px;
+        border-radius: 12px;
+        display: none;
+        z-index: 120;
+        max-width: min(92vw, 520px);
+        font-size: 13px;
+        line-height: 1.45;
+        box-shadow: 0 12px 40px #000a;
+      }
+      .toast.on {
+        display: block;
+      }
+      .toast.bad {
+        border-color: #5d3030;
+        background: #1a1010;
+        color: #ffb3b3;
+      }
+      .toast.ok {
+        border-color: #3f7250;
+        background: #101810;
+        color: #b8e6c7;
+      }
       .previewSelect {
         width: auto;
         max-width: 260px;
@@ -1234,6 +1264,7 @@
       </div>
       <iframe id="previewFrame" class="previewFrame"></iframe>
     </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script type="module">
       import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
       const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co",
@@ -1284,10 +1315,27 @@
           apikey: KEY,
           "content-type": "application/json",
         });
-        const r = await fetch(url, Object.assign({}, opt, { headers: h })),
-          j = await r.json().catch(() => ({}));
+        const r = await fetch(url, Object.assign({}, opt, { headers: h }));
+        const text = await r.text();
+        let j = {};
+        try {
+          j = text ? JSON.parse(text) : {};
+        } catch {
+          j = { error: text.slice(0, 180) || "Request failed" };
+        }
         if (!r.ok) throw Error(j.error || "Request failed");
         return j;
+      }
+      let toastTimer = 0;
+      function toast(message, kind = "ok") {
+        const el = q("toast");
+        if (!el) return;
+        el.textContent = String(message || "Request failed");
+        el.className = "toast on " + (kind === "bad" ? "bad" : "ok");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          el.className = "toast";
+        }, 7000);
       }
       async function claimOwner() {
         return af(C, { method: "POST", body: "{}" });
@@ -2187,7 +2235,7 @@
             await af(M, { method: "POST", body: JSON.stringify({ action: "set_featured", id: f.dataset.id, featured }) });
             await loadR();
           } catch (err) {
-            alert(err.message);
+            toast(err.message || "Featured update failed.", "bad");
           } finally {
             setBusy(f, false);
           }
@@ -2206,18 +2254,25 @@
                 product_id: t.dataset.id,
               }),
             });
+            toast("Storefront Off.", "ok");
           } else {
-            await af(M, {
+            const published = await af(M, {
               method: "POST",
               body: JSON.stringify({
                 action: "publish",
                 product_id: t.dataset.id,
               }),
             });
+            toast(
+              published.release?.cover_art_path
+                ? "Storefront On."
+                : "Storefront On. Upload cover art so the fan page can list it.",
+              "ok",
+            );
           }
           await Promise.all([loadR(), loadAnalytics()]);
         } catch (err) {
-          alert(err.message);
+          toast(err.message || "Storefront update failed.", "bad");
         } finally {
           setBusy(t, false);
         }
