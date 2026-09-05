@@ -97,6 +97,17 @@ assert.match(beatbay, /function beatArt\(b\)/);
 assert.match(beatbay, /www\.RosettaCrew\.com\/BeatBay/);
 assert.match(beatbay, /BEATBAY  ·  BEATBAY  ·  BEATBAY/);
 assert.match(beatbay, /classList\.add\("is-playing"\)/);
+assert.match(beatbay, /role="tablist" aria-label="BeatBay sales options"/);
+assert.match(beatbay, /data-channel="lease"/);
+assert.match(beatbay, /data-channel="auction"/);
+assert.match(
+  beatbay,
+  /channel==="auction"\?hasAuction\(b\):!hasAuction\(b\)/,
+  "Auction beats must be separated from lease beats",
+);
+assert.match(beatbay, /function commerceMarkup\(b\)/);
+assert.match(beatbay, /hasAuction\(b\).*Place bid/s);
+assert.match(beatbay, /hasAuction\(b\).*License beat/s);
 assert.doesNotMatch(
   storefront,
   /www\.RosettaCrew\.com\/BeatBay/,
