@@ -134,6 +134,10 @@ const adminData = readFileSync("supabase/functions/release-admin-data/index.ts",
 const socialManager = readFileSync("supabase/functions/release-social-manager/index.ts", "utf8");
 assert.match(musicStudio, /Approved music-team accounts only/);
 assert.match(musicStudio, /shouldCreateUser:false/);
+assert.match(musicStudio, /Activity reporting/);
+assert.match(musicStudio, /save immediately/);
+assert.match(musicStudio, /added to the activity report/);
+assert.doesNotMatch(musicStudio, /owner review|submit(?:ted)?[^<.]*review/i);
 assert.match(musicStudio, /action:"save_auction"/);
 assert.match(musicStudio, /starting_bid:bid/);
 assert.match(musicStudio, /action:"download_full_beat"/);
@@ -142,6 +146,7 @@ assert.match(musicStudio, /Automatic BeatBay cover/);
 assert.doesNotMatch(musicStudio, /release-admin-data|release-social-manager|STRIPE|stripe|checkout/i);
 assert.doesNotMatch(musicStudio, /set_storefront|set_featured|set_auction_status/);
 assert.match(releaseManager, /music_uploader/);
+assert.doesNotMatch(releaseManager, /owner_review_required/);
 assert.match(releaseManager, /if \(!ownerAccess\) return json\(\{ error: "Owner approval required" \}, 403\);/);
 assert.match(releaseManager, /view === "activity"/);
 assert.match(beatbayManager, /music_uploader/);
