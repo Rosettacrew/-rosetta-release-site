@@ -7,6 +7,7 @@ const files = [
   "index.html",
   "beatbay-admin.html",
   "beatbay/index.html",
+  "studio/index.html",
 ];
 
 for (const file of files) {
@@ -122,10 +123,47 @@ const releaseStorefront = readFileSync(
   "supabase/functions/release-storefront/index.ts",
   "utf8",
 );
+const studioManager = readFileSync(
+  "supabase/functions/studio-manager/index.ts",
+  "utf8",
+);
 assert.match(releaseManager, /release_artist_contacts/);
 assert.match(releaseManager, /normalizeArtistType/);
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
+assert.match(
+  releaseManager,
+  /music_uploader is intentionally excluded/,
+);
+assert.doesNotMatch(
+  releaseManager,
+  /\["owner","admin","staff","music_uploader"\]/,
+);
+assert.match(releaseManager, /action === "grant_uploader"/);
+assert.match(releaseManager, /action === "assign_uploader"/);
+assert.match(studioManager, /admin.role !== "music_uploader"/);
+assert.match(studioManager, /FINANCE_OR_OWNER_ACTIONS/);
+assert.match(studioManager, /release_product_assignees/);
+assert.match(studioManager, /return json\(\{ error: "Forbidden" \}, 403\)/);
+assert.doesNotMatch(studioManager, /release_analytics_summary/);
+assert.doesNotMatch(studioManager, /release_orders/);
+assert.doesNotMatch(studioManager, /STRIPE_SECRET_KEY/);
+assert.doesNotMatch(studioManager, /createCheckout/);
+
+const studio = readFileSync("studio/index.html", "utf8");
+assert.match(studio, /<title>Rosetta Crew Music Studio Portal<\/title>/);
+assert.match(studio, /<meta name="robots" content="noindex,nofollow"\s*\/?>/);
+assert.match(studio, /MUSIC STUDIO PORTAL/);
+assert.match(studio, /functions\/v1\/studio-manager/);
+assert.match(studio, /shouldCreateUser: false/);
+assert.doesNotMatch(studio, /id="email"[^>]*value=/s);
+assert.doesNotMatch(studio, /admin-dashboard\.html/);
+assert.doesNotMatch(studio, /data-tab="analytics"/);
+assert.doesNotMatch(studio, /data-tab="orders"/);
+assert.doesNotMatch(studio, /data-tab="delivery"/);
+assert.doesNotMatch(studio, /data-tab="promote"/);
+assert.doesNotMatch(studio, /release-admin-data/);
+assert.doesNotMatch(studio, /release-manager/);
 
 const publicFiles = [
   "admin-dashboard.html",
@@ -140,6 +178,7 @@ const publicFiles = [
   "admin.webmanifest",
   "beatbay-admin.html",
   "beatbay/index.html",
+  "studio/index.html",
 ];
 const publicBundle = publicFiles
   .filter((file) => existsSync(file))
@@ -218,6 +257,7 @@ assert.equal(
 
 const robots = readFileSync("robots.txt", "utf8");
 assert.match(robots, /Disallow: \/admin-dashboard\.html/);
+assert.match(robots, /Disallow: \/studio\//);
 assert.match(robots, /Allow: \//);
 
 console.log("Static HTML and private-preview checks passed.");
