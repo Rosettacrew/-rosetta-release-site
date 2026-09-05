@@ -8,6 +8,7 @@ const files = [
   "beatbay-admin.html",
   "beatbay/index.html",
   "studio/index.html",
+  "music-studio.html",
 ];
 
 for (const file of files) {
@@ -165,6 +166,29 @@ assert.doesNotMatch(studio, /data-tab="promote"/);
 assert.doesNotMatch(studio, /release-admin-data/);
 assert.doesNotMatch(studio, /release-manager/);
 
+const musicStudio = readFileSync("music-studio.html", "utf8");
+const beatbayManager = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
+const adminPreview = readFileSync("supabase/functions/release-admin-preview/index.ts", "utf8");
+const adminData = readFileSync("supabase/functions/release-admin-data/index.ts", "utf8");
+const socialManager = readFileSync("supabase/functions/release-social-manager/index.ts", "utf8");
+assert.match(musicStudio, /location\.replace\("\/studio\/"\)/);
+assert.match(musicStudio, /<meta http-equiv="refresh" content="0; url=\/studio\/">/);
+assert.doesNotMatch(musicStudio, /release-manager|beatbay-manager|release-admin-data/i);
+assert.doesNotMatch(musicStudio, /data-tab="analytics"|data-tab="orders"|STRIPE|checkout/i);
+assert.match(releaseManager, /view === "activity"/);
+assert.match(releaseManager, /hasOwnerAccess\(sessionAdmin, fallbackKey\)/);
+assert.match(beatbayManager, /music_uploader is intentionally excluded/);
+assert.doesNotMatch(beatbayManager, /\["owner", "admin", "staff", "music_uploader"\]/);
+assert.match(beatbayManager, /action === "save_auction"/);
+assert.doesNotMatch(adminPreview, /music_uploader/);
+assert.match(adminData, /\["owner", "admin"\]\.includes\(member\.role\)/);
+assert.match(socialManager, /member\.role !== "owner"/);
+assert.doesNotMatch(socialManager, /\["owner", "admin"\]/);
+assert.doesNotMatch(socialManager, /music_uploader/);
+assert.match(socialManager, /Owner approval required/);
+assert.match(admin, /Music Team Activity Report/);
+assert.match(admin, /href="studio\/"/);
+
 const publicFiles = [
   "admin-dashboard.html",
   "owner-login.html",
@@ -179,6 +203,7 @@ const publicFiles = [
   "beatbay-admin.html",
   "beatbay/index.html",
   "studio/index.html",
+  "music-studio.html",
 ];
 const publicBundle = publicFiles
   .filter((file) => existsSync(file))
@@ -258,6 +283,7 @@ assert.equal(
 const robots = readFileSync("robots.txt", "utf8");
 assert.match(robots, /Disallow: \/admin-dashboard\.html/);
 assert.match(robots, /Disallow: \/studio\//);
+assert.match(robots, /Disallow: \/music-studio\.html/);
 assert.match(robots, /Allow: \//);
 
 console.log("Static HTML and private-preview checks passed.");

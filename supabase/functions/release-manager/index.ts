@@ -50,6 +50,31 @@ function hasOwnerAccess(sessionAdmin: { admin?: { role?: string } } | null, fall
   return fallbackKey || ["owner", "admin"].includes(sessionAdmin?.admin?.role ?? "");
 }
 
+async function activityReport(
+  supabase: ReturnType<typeof adminClient>,
+  session: { user?: { id: string; email?: string | null }; admin?: { role?: string } } | null,
+  input: { action: string; entityType: string; entityId?: string | null; summary: string; details?: Record<string, unknown> },
+) {
+  if (!session?.user) return;
+  try {
+    const { data: event, error } = await supabase.from("music_activity_log").insert({
+      actor_user_id: session.user.id,
+      actor_email: session.user.email ?? null,
+      actor_role: session.admin?.role ?? "owner-key",
+      surface: "release_station",
+      action: input.action,
+      entity_type: input.entityType,
+      entity_id: input.entityId ?? null,
+      summary: input.summary,
+      details: input.details ?? {},
+    }).select("id").single();
+    if (error || !event) return;
+    await supabase.from("music_activity_log").update({ email_status: "not_configured" }).eq("id", event.id);
+  } catch (error) {
+    console.error("Activity reporting failed", error);
+  }
+}
+
 async function findAuthUserByEmail(supabase: ReturnType<typeof adminClient>, email: string) {
   const needle = email.trim().toLowerCase();
   if (!needle) return null;
@@ -201,6 +226,15 @@ Deno.serve(async (req: Request) => {
         }
         return json({ assignees });
       }
+      if (view === "activity") {
+        if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
+        const { data, error } = await supabase.from("music_activity_log")
+          .select("id,actor_email,actor_role,surface,action,entity_type,entity_id,summary,details,email_status,email_sent_at,created_at")
+          .order("created_at", { ascending: false })
+          .limit(200);
+        if (error) throw error;
+        return json({ activity: data ?? [] });
+      }
       const { data, error } = await supabase.from("release_products").select("*, tracks:release_tracks(*)").order("created_at", { ascending: false });
       if (error) throw error;
       const ids = (data ?? []).map((release: any) => release.id);
@@ -232,6 +266,7 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await supabase.from("release_products").insert(payload).select("*").single();
       if (error) throw error;
       const artistContact = await syncArtistContact(supabase, data.id, data.artist_type, body.artist_contact);
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "create_release", entityType: "release", entityId: data.id, summary: `Created release: ${artist} — ${title}` });
       return json({ release: { ...data, artist_contact: artistContact } }, 201);
     }
 
@@ -253,6 +288,7 @@ Deno.serve(async (req: Request) => {
         if (result.error) throw result.error;
         artistContact = result.data;
       }
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "update_release", entityType: "release", entityId: data.id, summary: `Updated release: ${data.artist_name} — ${data.title}` });
       return json({ release: { ...data, artist_contact: artistContact } });
     }
 
@@ -277,6 +313,7 @@ Deno.serve(async (req: Request) => {
         .select("*")
         .single();
       if (error) throw error;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "set_featured", entityType: "release", entityId: data.id, summary: `${featured ? "Featured" : "Unfeatured"} release: ${data.artist_name} — ${data.title}` });
       return json({ release: data });
     }
 
@@ -286,7 +323,9 @@ Deno.serve(async (req: Request) => {
       const ext = safeExt(body.filename ?? "audio.mp3"), safeName = slugify(String(body.filename ?? `${trackNumber}-${title}`).replace(/\.[^.]+$/, "")) || `track-${trackNumber}`;
       const path = `${productId}/tracks/${String(trackNumber).padStart(2,"0")}-${safeName}.${ext}`;
       const payload = { product_id: productId, track_number: trackNumber, title, version: body.version ?? null, explicit: !!body.explicit, audio_bucket: "release-private", audio_object_path: path, is_downloadable: body.is_downloadable !== false, metadata: body.metadata ?? {} };
-      const { data, error } = await supabase.from("release_tracks").upsert(payload, { onConflict: "product_id,track_number" }).select("*").single(); if (error) throw error; return json({ track: data });
+      const { data, error } = await supabase.from("release_tracks").upsert(payload, { onConflict: "product_id,track_number" }).select("*").single(); if (error) throw error;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "save_release_track", entityType: "track", entityId: data.id, summary: `Saved release track ${trackNumber}: ${title}`, details: { product_id: productId } });
+      return json({ track: data });
     }
 
     if (action === "signed_upload") {
@@ -303,6 +342,20 @@ Deno.serve(async (req: Request) => {
       return json({ bucket, path, token: data.token, signed_url: data.signedUrl, public_url: bucket === "release-public" ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${bucket}/${path}` : null });
     }
 
+    if (action === "download_track") {
+      const trackId = String(body.track_id ?? "");
+      if (!trackId) return json({ error: "Track is required" }, 400);
+      const { data: track, error } = await supabase.from("release_tracks")
+        .select("id,title,audio_bucket,audio_object_path,release:release_products(artist_name,title)")
+        .eq("id", trackId)
+        .single();
+      if (error) throw error;
+      const { data: signed, error: signedError } = await supabase.storage.from(track.audio_bucket).createSignedUrl(track.audio_object_path, 300, { download: true });
+      if (signedError) throw signedError;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "download_release_track", entityType: "track", entityId: track.id, summary: `Downloaded release track: ${(track.release as any)?.artist_name ?? ""} — ${track.title}` });
+      return json({ download_url: signed.signedUrl, expires_in: 300 });
+    }
+
     if (action === "attach_asset") {
       const productId = String(body.product_id ?? ""), kind = String(body.kind ?? ""), path = String(body.path ?? ""); if (!productId || !path) return json({ error: "product_id and path are required" }, 400);
       const changes: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -310,7 +363,9 @@ Deno.serve(async (req: Request) => {
       else if (kind === "preview") changes.preview_path = path;
       else if (kind === "package") { changes.storage_object_path = path; changes.delivery_filename = body.delivery_filename ?? path.split("/").pop(); }
       else return json({ error: "Invalid asset kind" }, 400);
-      const { data, error } = await supabase.from("release_products").update(changes).eq("id", productId).select("*").single(); if (error) throw error; return json({ release: data });
+      const { data, error } = await supabase.from("release_products").update(changes).eq("id", productId).select("*").single(); if (error) throw error;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "attach_release_asset", entityType: "release", entityId: productId, summary: `Uploaded ${kind} for ${data.artist_name} — ${data.title}`, details: { kind } });
+      return json({ release: data });
     }
 
     if (action === "publish") {
@@ -320,11 +375,15 @@ Deno.serve(async (req: Request) => {
         stripe = await createCheckout(product);
         const { error: ue } = await supabase.from("release_products").update({ stripe_payment_link_id: stripe.link.id, stripe_payment_link_url: stripe.link.url, status: product.status === "draft" ? (new Date(product.release_at).getTime() > Date.now() && product.presale_price_cents != null ? "presale" : "live") : product.status, storefront_enabled: true, published_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { ...(product.metadata ?? {}), stripe_product_id: stripe.stripeProduct.id, stripe_price_id: stripe.stripePrice.id } }).eq("id", productId); if (ue) throw ue;
       } else await supabase.from("release_products").update({ storefront_enabled: true, published_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", productId);
-      const { data: current } = await supabase.from("release_products").select("*").eq("id", productId).single(); return json({ release: current, checkout_created: !!stripe });
+      const { data: current } = await supabase.from("release_products").select("*").eq("id", productId).single();
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "publish_release", entityType: "release", entityId: productId, summary: `Published release: ${current?.artist_name ?? ""} — ${current?.title ?? ""}` });
+      return json({ release: current, checkout_created: !!stripe });
     }
 
     if (action === "unpublish") {
-      const productId = String(body.product_id ?? ""); const { data, error } = await supabase.from("release_products").update({ storefront_enabled: false, status: "archived", updated_at: new Date().toISOString() }).eq("id", productId).select("*").single(); if (error) throw error; return json({ release: data });
+      const productId = String(body.product_id ?? ""); const { data, error } = await supabase.from("release_products").update({ storefront_enabled: false, status: "archived", updated_at: new Date().toISOString() }).eq("id", productId).select("*").single(); if (error) throw error;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "unpublish_release", entityType: "release", entityId: productId, summary: `Unpublished release: ${data.artist_name} — ${data.title}` });
+      return json({ release: data });
     }
 
     if (action === "grant_uploader") {
@@ -346,6 +405,7 @@ Deno.serve(async (req: Request) => {
         is_active: true,
       }, { onConflict: "user_id" });
       if (error) throw error;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "grant_uploader", entityType: "account", entityId: user.id, summary: `Granted Music Studio access to ${user.email ?? email}` });
       return json({ ok: true, user_id: user.id, email: user.email ?? email, role: "music_uploader" });
     }
 
@@ -367,6 +427,7 @@ Deno.serve(async (req: Request) => {
         assigned_by: sessionAdmin?.user?.id ?? null,
       }, { onConflict: "product_id,user_id" });
       if (error) throw error;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "assign_uploader", entityType: "release", entityId: productId, summary: `Assigned studio uploader to release`, details: { user_id: userId } });
       return json({ ok: true, product_id: productId, user_id: userId });
     }
 

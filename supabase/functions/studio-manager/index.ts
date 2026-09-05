@@ -97,6 +97,59 @@ async function requireAssignedProduct(
   return !!data;
 }
 
+async function activityReport(
+  supabase: ReturnType<typeof adminClient>,
+  session: { user: { id: string; email?: string | null }; admin: { role: string } },
+  input: { action: string; entityType: string; entityId?: string | null; summary: string; details?: Record<string, unknown> },
+) {
+  try {
+    const { data: event, error } = await supabase.from("music_activity_log").insert({
+      actor_user_id: session.user.id,
+      actor_email: session.user.email ?? null,
+      actor_role: session.admin.role,
+      surface: "studio",
+      action: input.action,
+      entity_type: input.entityType,
+      entity_id: input.entityId ?? null,
+      summary: input.summary,
+      details: input.details ?? {},
+    }).select("id,created_at").single();
+    if (error || !event) return;
+
+    const apiKey = Deno.env.get("RESEND_API_KEY");
+    const from = Deno.env.get("ACTIVITY_EMAIL_FROM");
+    let recipients = (Deno.env.get("OWNER_ACTIVITY_EMAIL") ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+    if (!recipients.length) {
+      const { data: owners } = await supabase.from("release_admin_users").select("user_id").eq("role", "owner").eq("is_active", true);
+      for (const owner of owners ?? []) {
+        const { data } = await supabase.auth.admin.getUserById(owner.user_id);
+        if (data.user?.email) recipients.push(data.user.email);
+      }
+    }
+    recipients = [...new Set(recipients)];
+    if (!apiKey || !from || !recipients.length) {
+      await supabase.from("music_activity_log").update({ email_status: "not_configured" }).eq("id", event.id);
+      return;
+    }
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: recipients,
+        subject: `[Rosetta Crew] ${input.summary}`,
+        text: `${session.user.email ?? "Music uploader"} completed this action in Music Studio Portal:\n\n${input.summary}\n\nArea: /studio/\nTime: ${event.created_at}\n\nReview the Activity Report in Release Station.`,
+      }),
+    });
+    await supabase.from("music_activity_log").update(response.ok
+      ? { email_status: "sent", email_sent_at: new Date().toISOString(), email_error: null }
+      : { email_status: "failed", email_error: (await response.text()).slice(0, 500) }
+    ).eq("id", event.id);
+  } catch (error) {
+    console.error("Studio activity reporting failed", error);
+  }
+}
+
 function publicLibraryItem(release: any) {
   const tracks = (release.tracks ?? []).map((track: any) => ({
     id: track.id,
@@ -233,6 +286,13 @@ Deno.serve(async (req: Request) => {
       };
       const { data, error } = await supabase.from("release_tracks").upsert(payload, { onConflict: "product_id,track_number" }).select("id,product_id,track_number,title,audio_object_path").single();
       if (error) throw error;
+      await activityReport(supabase, session, {
+        action: "save_release_track",
+        entityType: "track",
+        entityId: data.id,
+        summary: `Studio partner saved track ${trackNumber}: ${title}`,
+        details: { product_id: productId },
+      });
       return json({ track: data });
     }
 
@@ -263,6 +323,13 @@ Deno.serve(async (req: Request) => {
         .select("id,artist_name,title,cover_art_path,preview_path,storage_object_path")
         .single();
       if (error) throw error;
+      await activityReport(supabase, session, {
+        action: "attach_release_asset",
+        entityType: "release",
+        entityId: productId,
+        summary: `Studio partner uploaded ${kind} for ${data.artist_name} — ${data.title}`,
+        details: { kind },
+      });
       return json({ release: publicLibraryItem({ ...data, tracks: [] }) });
     }
 
