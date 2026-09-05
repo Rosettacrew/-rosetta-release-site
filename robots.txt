@@ -1,6 +1,8 @@
 User-agent: *
 Allow: /
 Disallow: /admin-dashboard.html
+Disallow: /studio/
+Disallow: /studio/index.html
 Disallow: /owner-login.html
 Disallow: /admin.html
 Disallow: /admin-v2.html

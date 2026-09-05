@@ -41,8 +41,27 @@ async function authenticatedAdmin(req: Request, supabase: ReturnType<typeof admi
     .eq("user_id", userData.user.id)
     .eq("is_active", true)
     .maybeSingle();
+  // music_uploader is intentionally excluded. Partners use studio-manager only.
   if (error || !admin || !["owner","admin","staff"].includes(admin.role)) return null;
   return { user: userData.user, admin };
+}
+
+function hasOwnerAccess(sessionAdmin: { admin?: { role?: string } } | null, fallbackKey: boolean) {
+  return fallbackKey || ["owner", "admin"].includes(sessionAdmin?.admin?.role ?? "");
+}
+
+async function findAuthUserByEmail(supabase: ReturnType<typeof adminClient>, email: string) {
+  const needle = email.trim().toLowerCase();
+  if (!needle) return null;
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    const users = data?.users ?? [];
+    const found = users.find((user) => (user.email || "").toLowerCase() === needle);
+    if (found) return found;
+    if (users.length < 200) return null;
+  }
+  return null;
 }
 
 function slugify(input: string) {
@@ -152,6 +171,35 @@ Deno.serve(async (req: Request) => {
       if (view === "analytics") {
         const { data, error } = await supabase.from("release_analytics_summary").select("*").order("title");
         if (error) throw error; return json({ analytics: data });
+      }
+      if (view === "studio_uploaders") {
+        if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
+        const { data, error } = await supabase.from("release_admin_users")
+          .select("user_id,role,is_active")
+          .eq("role", "music_uploader")
+          .eq("is_active", true);
+        if (error) throw error;
+        const uploaders = [];
+        for (const row of data ?? []) {
+          const { data: userData } = await supabase.auth.admin.getUserById(row.user_id);
+          uploaders.push({ user_id: row.user_id, email: userData.user?.email ?? null, role: row.role });
+        }
+        return json({ uploaders });
+      }
+      if (view === "studio_assignees") {
+        if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
+        const productId = url.searchParams.get("product_id") ?? "";
+        if (!productId) return json({ error: "product_id is required" }, 400);
+        const { data, error } = await supabase.from("release_product_assignees")
+          .select("product_id,user_id,created_at")
+          .eq("product_id", productId);
+        if (error) throw error;
+        const assignees = [];
+        for (const row of data ?? []) {
+          const { data: userData } = await supabase.auth.admin.getUserById(row.user_id);
+          assignees.push({ user_id: row.user_id, email: userData.user?.email ?? null, created_at: row.created_at });
+        }
+        return json({ assignees });
       }
       const { data, error } = await supabase.from("release_products").select("*, tracks:release_tracks(*)").order("created_at", { ascending: false });
       if (error) throw error;
@@ -277,6 +325,62 @@ Deno.serve(async (req: Request) => {
 
     if (action === "unpublish") {
       const productId = String(body.product_id ?? ""); const { data, error } = await supabase.from("release_products").update({ storefront_enabled: false, status: "archived", updated_at: new Date().toISOString() }).eq("id", productId).select("*").single(); if (error) throw error; return json({ release: data });
+    }
+
+    if (action === "grant_uploader") {
+      if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
+      const email = String(body.email ?? "").trim().toLowerCase();
+      if (!email || !email.includes("@")) return json({ error: "A valid partner email is required" }, 400);
+      let user = await findAuthUserByEmail(supabase, email);
+      if (!user) {
+        const invited = await supabase.auth.admin.inviteUserByEmail(email, {
+          redirectTo: "https://rosettacrew.com/studio/",
+        });
+        if (invited.error) throw invited.error;
+        user = invited.data.user;
+      }
+      if (!user) return json({ error: "Unable to provision studio account" }, 500);
+      const { error } = await supabase.from("release_admin_users").upsert({
+        user_id: user.id,
+        role: "music_uploader",
+        is_active: true,
+      }, { onConflict: "user_id" });
+      if (error) throw error;
+      return json({ ok: true, user_id: user.id, email: user.email ?? email, role: "music_uploader" });
+    }
+
+    if (action === "assign_uploader") {
+      if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
+      const productId = String(body.product_id ?? "");
+      const userId = String(body.user_id ?? "");
+      if (!productId || !userId) return json({ error: "product_id and user_id are required" }, 400);
+      const { data: member, error: memberError } = await supabase.from("release_admin_users")
+        .select("user_id,role,is_active")
+        .eq("user_id", userId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (memberError) throw memberError;
+      if (!member || member.role !== "music_uploader") return json({ error: "Account is not an active music_uploader" }, 400);
+      const { error } = await supabase.from("release_product_assignees").upsert({
+        product_id: productId,
+        user_id: userId,
+        assigned_by: sessionAdmin?.user?.id ?? null,
+      }, { onConflict: "product_id,user_id" });
+      if (error) throw error;
+      return json({ ok: true, product_id: productId, user_id: userId });
+    }
+
+    if (action === "unassign_uploader") {
+      if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
+      const productId = String(body.product_id ?? "");
+      const userId = String(body.user_id ?? "");
+      if (!productId || !userId) return json({ error: "product_id and user_id are required" }, 400);
+      const { error } = await supabase.from("release_product_assignees")
+        .delete()
+        .eq("product_id", productId)
+        .eq("user_id", userId);
+      if (error) throw error;
+      return json({ ok: true });
     }
 
     return json({ error: "Unknown action" }, 400);

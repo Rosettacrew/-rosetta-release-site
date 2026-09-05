@@ -846,6 +846,25 @@
                 </div>
               </div>
               <div class="wide">
+                <label>Music Studio assignee</label>
+                <div class="hint">
+                  Grants a music_uploader account access to upload assets for
+                  this release only. Partners cannot see finance, orders, or
+                  publishing.
+                </div>
+                <div class="form">
+                  <div>
+                    <select id="eUploader" aria-label="Studio uploader"></select>
+                  </div>
+                  <div>
+                    <button id="assignUploader" class="secondary" type="button">
+                      Assign to Studio
+                    </button>
+                  </div>
+                  <div id="eAssigneeList" class="wide list"></div>
+                </div>
+              </div>
+              <div class="wide">
                 <button id="saveEdit" class="btn">Save Changes</button>
                 <div id="editMsg" class="hint"></div>
               </div>
@@ -991,6 +1010,33 @@
           </div>
         </section>
         <section id="settings" class="section">
+          <div class="card">
+            <h2>Music Studio partners</h2>
+            <p class="muted">
+              Invite a partner to
+              <a href="studio/" style="color: var(--gold2)">/studio/</a>
+              as role music_uploader. Then assign them to a release on Edit
+              Release.
+            </p>
+            <div class="form">
+              <div class="wide">
+                <label>Partner email</label>
+                <input
+                  id="studioEmail"
+                  type="email"
+                  autocomplete="off"
+                  placeholder="Partner work email"
+                />
+              </div>
+              <div class="wide">
+                <button id="grantUploader" class="btn" type="button">
+                  Grant Music Studio access
+                </button>
+                <div id="studioGrantMsg" class="hint"></div>
+              </div>
+            </div>
+            <div id="studioUploaderList" class="list"></div>
+          </div>
           <div class="card">
             <h2>System</h2>
             <div class="list">
@@ -1280,6 +1326,7 @@
         setVisibleLabel();
         q("editMsg").textContent = "";
         goto("edit");
+        loadAssignees(r.id);
       }
       function options() {
         const previous = Object.fromEntries(
@@ -1329,6 +1376,54 @@
         const j = await af(M);
         rels = j.releases || [];
         rows();
+      }
+      async function loadStudioUploaders() {
+        try {
+          const j = await af(M + "?view=studio_uploaders");
+          const uploaders = j.uploaders || [];
+          q("eUploader").innerHTML = uploaders
+            .map(
+              (user) =>
+                `<option value="${esc(user.user_id)}">${esc(user.email || user.user_id)}</option>`,
+            )
+            .join("");
+          q("studioUploaderList").innerHTML =
+            uploaders
+              .map(
+                (user) =>
+                  `<div class="row"><div><b>${esc(user.email || user.user_id)}</b><div class="muted">music_uploader</div></div></div>`,
+              )
+              .join("") ||
+            '<div class="muted">No Music Studio partners yet.</div>';
+          return uploaders;
+        } catch (error) {
+          q("studioUploaderList").innerHTML =
+            '<div class="muted">Studio partner list unavailable. Deploy the updated release-manager and apply the music_uploader migration.</div>';
+          return [];
+        }
+      }
+      async function loadAssignees(productId) {
+        if (!q("eAssigneeList")) return;
+        if (!productId) {
+          q("eAssigneeList").innerHTML = "";
+          return;
+        }
+        try {
+          const j = await af(
+            M + "?view=studio_assignees&product_id=" + encodeURIComponent(productId),
+          );
+          q("eAssigneeList").innerHTML =
+            (j.assignees || [])
+              .map(
+                (user) =>
+                  `<div class="row"><div><b>${esc(user.email || user.user_id)}</b><div class="muted">Assigned uploader</div></div><button class="secondary unassignUploader" data-user="${esc(user.user_id)}" type="button">Remove</button></div>`,
+              )
+              .join("") ||
+            '<div class="muted">No studio uploader assigned to this release.</div>';
+        } catch (error) {
+          q("eAssigneeList").innerHTML =
+            '<div class="muted">' + esc(error.message) + "</div>";
+        }
       }
       async function loadO() {
         const j = await af(D + "?view=overview"),
@@ -1411,6 +1506,7 @@
         await Promise.all([loadR(), loadO(), loadAnalytics(), social()]).catch(
           (e) => alert(e.message),
         );
+        loadStudioUploaders();
       }
       q("send").onclick = async () => {
         const e = q("email").value.trim();
@@ -1464,6 +1560,8 @@
         if (b.dataset.tab === "orders") orders();
         if (b.dataset.tab === "delivery") delivery();
         if (b.dataset.tab === "promote") social();
+        if (b.dataset.tab === "settings") loadStudioUploaders();
+        if (b.dataset.tab === "edit") loadAssignees(q("eRelease").value);
       };
       q("eRelease").onchange = () => fillEdit(q("eRelease").value);
       ["psActual", "psAi"].forEach((id) => {
@@ -1595,7 +1693,68 @@
           setBusy(b, false);
         }
       };
+      q("grantUploader").onclick = async () => {
+        const b = q("grantUploader");
+        try {
+          setBusy(b, true, "Granting…");
+          const email = q("studioEmail").value.trim();
+          if (!email) throw Error("Partner email is required.");
+          await af(M, {
+            method: "POST",
+            body: JSON.stringify({ action: "grant_uploader", email }),
+          });
+          q("studioGrantMsg").textContent =
+            "Music Studio access granted. Assign this account to a release on Edit Release.";
+          q("studioEmail").value = "";
+          await loadStudioUploaders();
+        } catch (error) {
+          q("studioGrantMsg").textContent = error.message;
+        } finally {
+          setBusy(b, false);
+        }
+      };
+      q("assignUploader").onclick = async () => {
+        const b = q("assignUploader");
+        try {
+          setBusy(b, true, "Assigning…");
+          const productId = q("eRelease").value;
+          const userId = q("eUploader").value;
+          if (!productId || !userId)
+            throw Error("Choose a release and a studio partner.");
+          await af(M, {
+            method: "POST",
+            body: JSON.stringify({
+              action: "assign_uploader",
+              product_id: productId,
+              user_id: userId,
+            }),
+          });
+          q("editMsg").textContent = "Studio uploader assigned.";
+          await loadAssignees(productId);
+        } catch (error) {
+          q("editMsg").textContent = error.message;
+        } finally {
+          setBusy(b, false);
+        }
+      };
       document.addEventListener("click", async (e) => {
+        const unassign = e.target.closest(".unassignUploader");
+        if (unassign) {
+          try {
+            await af(M, {
+              method: "POST",
+              body: JSON.stringify({
+                action: "unassign_uploader",
+                product_id: q("eRelease").value,
+                user_id: unassign.dataset.user,
+              }),
+            });
+            await loadAssignees(q("eRelease").value);
+          } catch (err) {
+            q("editMsg").textContent = err.message;
+          }
+          return;
+        }
         const ed = e.target.closest(".editBtn"),
           f = e.target.closest(".featureToggle"),
           t = e.target.closest(".storefrontToggle");
