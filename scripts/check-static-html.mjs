@@ -131,6 +131,7 @@ assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 const musicStudio = readFileSync("music-studio.html", "utf8");
 const beatbayManager = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
 const adminData = readFileSync("supabase/functions/release-admin-data/index.ts", "utf8");
+const socialManager = readFileSync("supabase/functions/release-social-manager/index.ts", "utf8");
 assert.match(musicStudio, /Approved music-team accounts only/);
 assert.match(musicStudio, /shouldCreateUser:false/);
 assert.match(musicStudio, /action:"save_auction"/);
@@ -148,6 +149,10 @@ assert.match(beatbayManager, /if \(!ownerAccess\) return json\(\{ error: "Owner 
 assert.match(beatbayManager, /action === "save_auction"/);
 assert.match(beatbayManager, /current\.status !== "draft"/);
 assert.match(adminData, /\["owner", "admin"\]\.includes\(member\.role\)/);
+assert.match(socialManager, /member\.role !== "owner"/);
+assert.doesNotMatch(socialManager, /\["owner", "admin"\]/);
+assert.doesNotMatch(socialManager, /music_uploader/);
+assert.match(socialManager, /Owner approval required/);
 assert.match(admin, /Music Team Activity Report/);
 
 const publicFiles = [
