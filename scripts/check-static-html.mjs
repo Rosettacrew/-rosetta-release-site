@@ -134,13 +134,25 @@ assert.match(releaseManager, /release_artist_contacts/);
 assert.match(releaseManager, /normalizeArtistType/);
 assert.match(releaseManager, /function activeCheckoutPrice/);
 assert.match(releaseManager, /function nextStorefrontStatus/);
+assert.match(releaseManager, /function formatErrorMessage/);
+assert.match(releaseManager, /function storefrontError/);
 assert.match(releaseManager, /digital_product/);
 assert.match(releaseManager, /description\.slice\(0, 400\)/);
 assert.match(
   releaseManager,
   /Set a regular or pre-sale price greater than \$0\.00/,
 );
-assert.match(releaseManager, /if \(ue\) throw ue;/);
+assert.match(releaseManager, /return json\(\{ error: storefrontError\(ue\) \}, 400\)/);
+assert.match(releaseManager, /formatErrorMessage\(error\)/);
+assert.doesNotMatch(
+  releaseManager,
+  /error instanceof Error \? error\.message : String\(error\)/,
+  "Publish errors must never stringify as [object Object]",
+);
+assert.match(
+  readFileSync("supabase/migrations/20260905_storefront_publish_followup.sql", "utf8"),
+  /stripe_payment_link_id type text/,
+);
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 assert.match(
@@ -258,7 +270,10 @@ assert.match(admin, /id="menuBtn"/);
 assert.match(admin, /\.shell\.navOpen \.nav/);
 assert.match(admin, /id="toast"/);
 assert.match(admin, /function toast\(/);
-assert.match(admin, /toast\(err\.message \|\| "Storefront update failed\."/);
+assert.match(admin, /function formatErrorMessage/);
+assert.match(admin, /throw Error\(formatErrorMessage\(j\.error \|\| j/);
+assert.match(admin, /toast\(err \|\| "Storefront update failed\."/);
+assert.doesNotMatch(admin, /textContent = String\(message/);
 assert.match(admin, /Turning On…/);
 assert.doesNotMatch(
   admin,

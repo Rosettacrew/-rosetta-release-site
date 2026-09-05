@@ -1323,14 +1323,49 @@
         } catch {
           j = { error: text.slice(0, 180) || "Request failed" };
         }
-        if (!r.ok) throw Error(j.error || "Request failed");
+        if (!r.ok) throw Error(formatErrorMessage(j.error || j, "Request failed"));
         return j;
+      }
+      function readableText(value) {
+        if (typeof value !== "string") return "";
+        const text = value.trim();
+        return !text || text === "[object Object]" ? "" : text;
+      }
+      function formatErrorMessage(error, fallback = "Request failed") {
+        if (error == null) return fallback;
+        const direct = readableText(error);
+        if (direct) return direct;
+        if (typeof error !== "object") {
+          const text = readableText(String(error));
+          return text || fallback;
+        }
+        const nested = [error.message, error.error, error.msg, error.details, error.hint]
+          .map((value) =>
+            value && typeof value === "object"
+              ? formatErrorMessage(value, "")
+              : readableText(value),
+          )
+          .filter(Boolean);
+        const unique = [...new Set(nested)];
+        if (unique.length) {
+          const code = readableText(error.code);
+          const body = unique.join(" — ");
+          return code && !body.includes(code) ? `${body} (${code})` : body;
+        }
+        try {
+          const dumped = JSON.stringify(error);
+          if (dumped && dumped !== "{}" && dumped !== "null")
+            return dumped.slice(0, 280);
+        } catch {
+          /* ignore circular objects */
+        }
+        return readableText(String(error)) || fallback;
       }
       let toastTimer = 0;
       function toast(message, kind = "ok") {
         const el = q("toast");
         if (!el) return;
-        el.textContent = String(message || "Request failed");
+        el.textContent = formatErrorMessage(message, "Request failed");
         el.className = "toast on " + (kind === "bad" ? "bad" : "ok");
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => {
@@ -2235,7 +2270,7 @@
             await af(M, { method: "POST", body: JSON.stringify({ action: "set_featured", id: f.dataset.id, featured }) });
             await loadR();
           } catch (err) {
-            toast(err.message || "Featured update failed.", "bad");
+            toast(err || "Featured update failed.", "bad");
           } finally {
             setBusy(f, false);
           }
@@ -2272,7 +2307,7 @@
           }
           await Promise.all([loadR(), loadAnalytics()]);
         } catch (err) {
-          toast(err.message || "Storefront update failed.", "bad");
+          toast(err || "Storefront update failed.", "bad");
         } finally {
           setBusy(t, false);
         }

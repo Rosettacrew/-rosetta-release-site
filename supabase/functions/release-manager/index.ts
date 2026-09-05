@@ -161,16 +161,65 @@ function productMetadata(product: any) {
   return metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {};
 }
 
+function readableText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  return !text || text === "[object Object]" ? "" : text;
+}
+
+function formatErrorMessage(error: unknown, fallback = "Request failed") {
+  if (error == null) return fallback;
+  const direct = readableText(error);
+  if (direct) return direct;
+  if (typeof error !== "object") {
+    const text = readableText(String(error));
+    return text || fallback;
+  }
+  const rec = error as Record<string, unknown>;
+  const nested = [rec.message, rec.error, rec.msg, rec.details, rec.hint]
+    .map((value) => (typeof value === "object" && value ? formatErrorMessage(value, "") : readableText(value)))
+    .filter(Boolean);
+  const unique = [...new Set(nested)];
+  if (unique.length) {
+    const code = readableText(rec.code);
+    const body = unique.join(" — ");
+    return code && !body.includes(code) ? `${body} (${code})` : body;
+  }
+  try {
+    const dumped = JSON.stringify(error);
+    if (dumped && dumped !== "{}" && dumped !== "null") return dumped.slice(0, 280);
+  } catch {
+    /* ignore circular objects */
+  }
+  const fallbackText = readableText(String(error));
+  return fallbackText || fallback;
+}
+
+function storefrontError(error: unknown) {
+  const text = formatErrorMessage(error, "Storefront update failed.");
+  const lower = text.toLowerCase();
+  if (lower.includes("invalid input syntax for type uuid")) {
+    return "Stripe Payment Link ids cannot be stored on this column type. Apply supabase/migrations/20260905_storefront_publish_followup.sql (converts stripe_payment_link_id to text). Come Here / EP rows are not rewritten.";
+  }
+  if (/\b23514\b/.test(text) || lower.includes("check constraint")) {
+    if (lower.includes("product_type") || lower.includes("digital_product")) {
+      return "This product type is blocked by a database check. Apply supabase/migrations/20260905_storefront_publish_followup.sql so digital_product can go live. Come Here / EP are not changed.";
+    }
+    return `${text} If this mentions product_type or storefront_enabled, apply supabase/migrations/20260905_storefront_publish_followup.sql.`;
+  }
+  return text;
+}
+
 async function stripePost(path: string, params: URLSearchParams) {
   const secret = Deno.env.get("STRIPE_SECRET_KEY");
-  if (!secret) throw new Error("Stripe is not configured. Add STRIPE_SECRET_KEY before turning Storefront On.");
+  if (!secret) throw new Error("Stripe is not configured. Add STRIPE_SECRET_KEY to the release-manager function secrets before turning Storefront On.");
   const res = await fetch(`https://api.stripe.com/v1/${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${secret}`, "content-type": "application/x-www-form-urlencoded" },
     body: params,
   });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body?.error?.message ?? `Stripe ${path} failed`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(formatErrorMessage(body?.error?.message ?? body?.error ?? body, `Stripe ${path} failed`));
   return body;
 }
 
@@ -178,8 +227,11 @@ async function createCheckout(product: any) {
   const activePrice = activeCheckoutPrice(product);
   if (activePrice == null) throw new Error("Set a regular or pre-sale price greater than $0.00 before turning Storefront On.");
   const currency = String(product.currency ?? "usd").trim().toLowerCase() || "usd";
+  if (!/^[a-z]{3}$/.test(currency)) throw new Error("Currency must be a 3-letter code such as usd.");
+  const name = `${product.artist_name ?? ""} — ${product.title ?? ""}`.replace(/\s+/g, " ").trim().slice(0, 250);
+  if (!name || name === "—") throw new Error("Artist and title are required before turning Storefront On.");
   const p = new URLSearchParams();
-  p.set("name", `${product.artist_name} — ${product.title}`.slice(0, 250));
+  p.set("name", name);
   const description = String(product.description ?? "").trim();
   if (description) p.set("description", description.slice(0, 400));
   p.set("metadata[release_product_id]", String(product.id ?? ""));
@@ -426,7 +478,7 @@ Deno.serve(async (req: Request) => {
       const productId = String(body.product_id ?? "");
       if (!productId) return json({ error: "product_id is required" }, 400);
       const { data: product, error } = await supabase.from("release_products").select("*").eq("id", productId).single();
-      if (error) throw error;
+      if (error) return json({ error: storefrontError(error) }, 400);
       if (activeCheckoutPrice(product) == null) {
         return json({ error: "Set a regular or pre-sale price greater than $0.00 before turning Storefront On." }, 400);
       }
@@ -435,7 +487,7 @@ Deno.serve(async (req: Request) => {
       const status = nextStorefrontStatus(product);
       if (!product.stripe_payment_link_url || body.force_new_checkout === true) {
         stripe = await createCheckout(product);
-        const { error: ue } = await supabase.from("release_products").update({
+        const published = {
           stripe_payment_link_id: stripe.link.id,
           stripe_payment_link_url: stripe.link.url,
           status,
@@ -443,8 +495,14 @@ Deno.serve(async (req: Request) => {
           published_at: now,
           updated_at: now,
           metadata: { ...productMetadata(product), stripe_product_id: stripe.stripeProduct.id, stripe_price_id: stripe.stripePrice.id },
-        }).eq("id", productId);
-        if (ue) throw ue;
+        };
+        let { error: ue } = await supabase.from("release_products").update(published).eq("id", productId);
+        if (ue && /invalid input syntax for type uuid/i.test(formatErrorMessage(ue))) {
+          const withoutLinkId = { ...published };
+          delete withoutLinkId.stripe_payment_link_id;
+          ({ error: ue } = await supabase.from("release_products").update(withoutLinkId).eq("id", productId));
+        }
+        if (ue) return json({ error: storefrontError(ue) }, 400);
       } else {
         const { error: ue } = await supabase.from("release_products").update({
           storefront_enabled: true,
@@ -452,10 +510,10 @@ Deno.serve(async (req: Request) => {
           published_at: product.published_at ?? now,
           updated_at: now,
         }).eq("id", productId);
-        if (ue) throw ue;
+        if (ue) return json({ error: storefrontError(ue) }, 400);
       }
       const { data: current, error: currentError } = await supabase.from("release_products").select("*").eq("id", productId).single();
-      if (currentError) throw currentError;
+      if (currentError) return json({ error: storefrontError(currentError) }, 400);
       if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "publish_release", entityType: "release", entityId: productId, summary: `Published release: ${current?.artist_name ?? ""} — ${current?.title ?? ""}` });
       return json({ release: current, checkout_created: !!stripe });
     }
@@ -526,7 +584,8 @@ Deno.serve(async (req: Request) => {
 
     return json({ error: "Unknown action" }, 400);
   } catch (error) {
-    console.error(error); return json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    console.error(error);
+    return json({ error: formatErrorMessage(error) }, 500);
   }
 });
 
