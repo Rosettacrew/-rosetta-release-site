@@ -4,6 +4,8 @@ Disallow: /admin-dashboard.html
 Disallow: /owner-login.html
 Disallow: /admin.html
 Disallow: /admin-v2.html
+Disallow: /beatbay-admin.html
+Disallow: /music-studio.html
 Disallow: /manifest.webmanifest
 Disallow: /admin.webmanifest
 Disallow: /admin-sw.js

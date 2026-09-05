@@ -626,6 +626,7 @@
           ><button data-tab="edit">Edit Release</button
           ><button data-tab="uploads">Uploads</button
           ><button data-tab="analytics">Analytics</button
+          ><button data-tab="activity">Activity Report</button
           ><button data-tab="orders">Orders</button
           ><button data-tab="delivery">Delivery</button
           ><button data-tab="promote">Publish & Promote</button
@@ -913,6 +914,13 @@
           <div class="card">
             <h2>Release Performance</h2>
             <div id="perf" class="releasePerf"></div>
+          </div>
+        </section>
+        <section id="activity" class="section">
+          <div class="card">
+            <h2>Music Team Activity Report</h2>
+            <p class="muted">A permanent record of Release Station, BeatBay, upload, and auction-draft activity. Partner actions also trigger an owner email when email delivery is connected.</p>
+            <div id="activityList" class="list"><div class="muted">Loading activity…</div></div>
           </div>
         </section>
         <section id="orders" class="section">
@@ -1364,6 +1372,12 @@
             .join("") ||
           '<div class="muted">Analytics will appear after storefront activity begins.</div>';
       }
+      async function loadActivity() {
+        const j = await af(M + "?view=activity");
+        q("activityList").innerHTML = (j.activity || [])
+          .map((event) => `<div class="row"><div><b>${esc(event.summary)}</b><div class="muted">${esc(event.actor_email || event.actor_role)} · ${esc(String(event.surface).replace("_", " "))} · ${dt(event.created_at)}</div></div><div class="rowActions"><span class="status">${esc(String(event.email_status || "pending").replace("_", " "))}</span></div></div>`)
+          .join("") || '<div class="muted">No team activity has been recorded yet.</div>';
+      }
       async function orders() {
         const j = await af(D + "?view=orders");
         q("ordersBody").innerHTML = (j.orders || [])
@@ -1461,6 +1475,7 @@
         goto(b.dataset.tab);
         setNavOpen(false);
         if (b.dataset.tab === "analytics") loadAnalytics();
+        if (b.dataset.tab === "activity") loadActivity();
         if (b.dataset.tab === "orders") orders();
         if (b.dataset.tab === "delivery") delivery();
         if (b.dataset.tab === "promote") social();

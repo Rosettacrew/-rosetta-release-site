@@ -7,6 +7,7 @@ const files = [
   "index.html",
   "beatbay-admin.html",
   "beatbay/index.html",
+  "music-studio.html",
 ];
 
 for (const file of files) {
@@ -127,6 +128,28 @@ assert.match(releaseManager, /normalizeArtistType/);
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 
+const musicStudio = readFileSync("music-studio.html", "utf8");
+const beatbayManager = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
+const adminData = readFileSync("supabase/functions/release-admin-data/index.ts", "utf8");
+assert.match(musicStudio, /Approved music-team accounts only/);
+assert.match(musicStudio, /shouldCreateUser:false/);
+assert.match(musicStudio, /action:"save_auction"/);
+assert.match(musicStudio, /starting_bid:bid/);
+assert.match(musicStudio, /action:"download_full_beat"/);
+assert.match(musicStudio, /action:"download_track"/);
+assert.match(musicStudio, /Automatic BeatBay cover/);
+assert.doesNotMatch(musicStudio, /release-admin-data|release-social-manager|STRIPE|stripe|checkout/i);
+assert.doesNotMatch(musicStudio, /set_storefront|set_featured|set_auction_status/);
+assert.match(releaseManager, /music_uploader/);
+assert.match(releaseManager, /if \(!ownerAccess\) return json\(\{ error: "Owner approval required" \}, 403\);/);
+assert.match(releaseManager, /view === "activity"/);
+assert.match(beatbayManager, /music_uploader/);
+assert.match(beatbayManager, /if \(!ownerAccess\) return json\(\{ error: "Owner approval required" \}, 403\);/);
+assert.match(beatbayManager, /action === "save_auction"/);
+assert.match(beatbayManager, /current\.status !== "draft"/);
+assert.match(adminData, /\["owner", "admin"\]\.includes\(member\.role\)/);
+assert.match(admin, /Music Team Activity Report/);
+
 const publicFiles = [
   "admin-dashboard.html",
   "owner-login.html",
@@ -140,6 +163,7 @@ const publicFiles = [
   "admin.webmanifest",
   "beatbay-admin.html",
   "beatbay/index.html",
+  "music-studio.html",
 ];
 const publicBundle = publicFiles
   .filter((file) => existsSync(file))
@@ -218,6 +242,7 @@ assert.equal(
 
 const robots = readFileSync("robots.txt", "utf8");
 assert.match(robots, /Disallow: \/admin-dashboard\.html/);
+assert.match(robots, /Disallow: \/music-studio\.html/);
 assert.match(robots, /Allow: \//);
 
 console.log("Static HTML and private-preview checks passed.");
