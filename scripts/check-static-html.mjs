@@ -7,6 +7,7 @@ const files = [
   "index.html",
   "beatbay-admin.html",
   "beatbay/index.html",
+  "studio/index.html",
   "music-studio.html",
 ];
 
@@ -123,42 +124,70 @@ const releaseStorefront = readFileSync(
   "supabase/functions/release-storefront/index.ts",
   "utf8",
 );
+const studioManager = readFileSync(
+  "supabase/functions/studio-manager/index.ts",
+  "utf8",
+);
 assert.match(releaseManager, /release_artist_contacts/);
 assert.match(releaseManager, /normalizeArtistType/);
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
+assert.match(
+  releaseManager,
+  /music_uploader is intentionally excluded/,
+);
+assert.doesNotMatch(
+  releaseManager,
+  /\["owner","admin","staff","music_uploader"\]/,
+);
+assert.match(releaseManager, /action === "grant_uploader"/);
+assert.match(releaseManager, /action === "assign_uploader"/);
+assert.match(studioManager, /admin.role !== "music_uploader"/);
+assert.match(studioManager, /FINANCE_OR_OWNER_ACTIONS/);
+assert.match(studioManager, /release_product_assignees/);
+assert.match(studioManager, /return json\(\{ error: "Forbidden" \}, 403\)/);
+assert.doesNotMatch(studioManager, /release_analytics_summary/);
+assert.doesNotMatch(studioManager, /release_orders/);
+assert.doesNotMatch(studioManager, /STRIPE_SECRET_KEY/);
+assert.doesNotMatch(studioManager, /createCheckout/);
+
+const studio = readFileSync("studio/index.html", "utf8");
+assert.match(studio, /<title>Rosetta Crew Music Studio Portal<\/title>/);
+assert.match(studio, /<meta name="robots" content="noindex,nofollow"\s*\/?>/);
+assert.match(studio, /MUSIC STUDIO PORTAL/);
+assert.match(studio, /functions\/v1\/studio-manager/);
+assert.match(studio, /shouldCreateUser: false/);
+assert.doesNotMatch(studio, /id="email"[^>]*value=/s);
+assert.doesNotMatch(studio, /admin-dashboard\.html/);
+assert.doesNotMatch(studio, /data-tab="analytics"/);
+assert.doesNotMatch(studio, /data-tab="orders"/);
+assert.doesNotMatch(studio, /data-tab="delivery"/);
+assert.doesNotMatch(studio, /data-tab="promote"/);
+assert.doesNotMatch(studio, /release-admin-data/);
+assert.doesNotMatch(studio, /release-manager/);
 
 const musicStudio = readFileSync("music-studio.html", "utf8");
 const beatbayManager = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
+const adminPreview = readFileSync("supabase/functions/release-admin-preview/index.ts", "utf8");
 const adminData = readFileSync("supabase/functions/release-admin-data/index.ts", "utf8");
 const socialManager = readFileSync("supabase/functions/release-social-manager/index.ts", "utf8");
-assert.match(musicStudio, /Approved music-team accounts only/);
-assert.match(musicStudio, /shouldCreateUser:false/);
-assert.match(musicStudio, /Activity reporting/);
-assert.match(musicStudio, /save immediately/);
-assert.match(musicStudio, /added to the activity report/);
-assert.doesNotMatch(musicStudio, /owner review|submit(?:ted)?[^<.]*review/i);
-assert.match(musicStudio, /action:"save_auction"/);
-assert.match(musicStudio, /starting_bid:bid/);
-assert.match(musicStudio, /action:"download_full_beat"/);
-assert.match(musicStudio, /action:"download_track"/);
-assert.match(musicStudio, /Automatic BeatBay cover/);
-assert.doesNotMatch(musicStudio, /release-admin-data|release-social-manager|STRIPE|stripe|checkout/i);
-assert.doesNotMatch(musicStudio, /set_storefront|set_featured|set_auction_status/);
-assert.match(releaseManager, /music_uploader/);
-assert.doesNotMatch(releaseManager, /owner_review_required/);
-assert.match(releaseManager, /if \(!ownerAccess\) return json\(\{ error: "Owner approval required" \}, 403\);/);
+assert.match(musicStudio, /location\.replace\("\/studio\/"\)/);
+assert.match(musicStudio, /<meta http-equiv="refresh" content="0; url=\/studio\/">/);
+assert.doesNotMatch(musicStudio, /release-manager|beatbay-manager|release-admin-data/i);
+assert.doesNotMatch(musicStudio, /data-tab="analytics"|data-tab="orders"|STRIPE|checkout/i);
 assert.match(releaseManager, /view === "activity"/);
-assert.match(beatbayManager, /music_uploader/);
-assert.match(beatbayManager, /if \(!ownerAccess\) return json\(\{ error: "Owner approval required" \}, 403\);/);
+assert.match(releaseManager, /hasOwnerAccess\(sessionAdmin, fallbackKey\)/);
+assert.match(beatbayManager, /music_uploader is intentionally excluded/);
+assert.doesNotMatch(beatbayManager, /\["owner", "admin", "staff", "music_uploader"\]/);
 assert.match(beatbayManager, /action === "save_auction"/);
-assert.match(beatbayManager, /current\.status !== "draft"/);
+assert.doesNotMatch(adminPreview, /music_uploader/);
 assert.match(adminData, /\["owner", "admin"\]\.includes\(member\.role\)/);
 assert.match(socialManager, /member\.role !== "owner"/);
 assert.doesNotMatch(socialManager, /\["owner", "admin"\]/);
 assert.doesNotMatch(socialManager, /music_uploader/);
 assert.match(socialManager, /Owner approval required/);
 assert.match(admin, /Music Team Activity Report/);
+assert.match(admin, /href="studio\/"/);
 
 const publicFiles = [
   "admin-dashboard.html",
@@ -173,6 +202,7 @@ const publicFiles = [
   "admin.webmanifest",
   "beatbay-admin.html",
   "beatbay/index.html",
+  "studio/index.html",
   "music-studio.html",
 ];
 const publicBundle = publicFiles
@@ -252,6 +282,7 @@ assert.equal(
 
 const robots = readFileSync("robots.txt", "utf8");
 assert.match(robots, /Disallow: \/admin-dashboard\.html/);
+assert.match(robots, /Disallow: \/studio\//);
 assert.match(robots, /Disallow: \/music-studio\.html/);
 assert.match(robots, /Allow: \//);
 

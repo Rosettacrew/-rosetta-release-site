@@ -25,7 +25,8 @@ async function requireTeam(req: Request, supabase: ReturnType<typeof client>) {
   if (userError || !userData.user) return null;
   const { data: admin, error } = await supabase.from("release_admin_users")
     .select("user_id,role,is_active").eq("user_id", userData.user.id).eq("is_active", true).maybeSingle();
-  if (error || !admin || !["owner", "admin", "staff", "music_uploader"].includes(admin.role)) return null;
+  // music_uploader is intentionally excluded. Partners use studio-manager only.
+  if (error || !admin || !["owner", "admin", "staff"].includes(admin.role)) return null;
   return { user: userData.user, admin };
 }
 
