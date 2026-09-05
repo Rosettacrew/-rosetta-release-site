@@ -45,6 +45,12 @@ function formatErrorMessage(error, fallback = "Request failed") {
   return readableText(String(error)) || fallback;
 }
 
+function artworkReadyForStorefront(product) {
+  const path = String(product?.cover_art_path ?? "").trim();
+  const bucket = String(product?.cover_art_bucket ?? "").trim() || "release-public";
+  return !!path && bucket === "release-public" && /\.(jpe?g|png|webp)$/i.test(path);
+}
+
 function storefrontError(error) {
   const text = formatErrorMessage(error, "Storefront update failed.");
   const lower = text.toLowerCase();
@@ -56,6 +62,9 @@ function storefrontError(error) {
       return "This product type is blocked by a database check. Apply supabase/migrations/20260905_storefront_publish_followup.sql so digital_product can go live. Come Here / EP are not changed.";
     }
     return `${text} If this mentions product_type or storefront_enabled, apply supabase/migrations/20260905_storefront_publish_followup.sql.`;
+  }
+  if (/\bp0001\b/.test(lower) || lower.includes("artwork must pass validation")) {
+    return "Publish blocked: artwork must pass validation before release. Upload a 3000 × 3000 JPG, PNG, or WebP cover to release-public and save it so cover_art_path is set, then try Storefront On again.";
   }
   return text;
 }
@@ -146,6 +155,49 @@ assert.match(
     code: "23514",
   }),
   /digital_product can go live/,
+);
+assert.match(
+  storefrontError({
+    message: "Publish blocked: artwork must pass validation before release.",
+    code: "P0001",
+  }),
+  /cover_art_path is set/,
+);
+
+const sandboxCover = {
+  product_type: "digital_product",
+  cover_art_path:
+    "11111111-1111-1111-1111-111111111111/cover/cover-aaaa-bbbb.jpeg",
+  cover_art_bucket: "release-public",
+};
+assert.equal(artworkReadyForStorefront(sandboxCover), true);
+assert.equal(
+  artworkReadyForStorefront({
+    ...sandboxCover,
+    cover_art_path: null,
+  }),
+  false,
+);
+assert.equal(
+  artworkReadyForStorefront({
+    ...sandboxCover,
+    cover_art_bucket: "release-private",
+  }),
+  false,
+);
+assert.equal(
+  artworkReadyForStorefront({
+    ...sandboxCover,
+    cover_art_path: "11111111-1111-1111-1111-111111111111/cover/cover.bin",
+  }),
+  false,
+);
+assert.equal(
+  artworkReadyForStorefront({
+    cover_art_path: sandboxCover.cover_art_path,
+    cover_art_bucket: null,
+  }),
+  true,
 );
 
 console.log("Publish helper checks passed.");

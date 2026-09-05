@@ -1008,8 +1008,9 @@
                       accept="image/jpeg,image/png,image/webp"
                     />
                     <div class="hint">
-                      Optional replacement. Use a square 3000 × 3000 JPG, PNG,
-                      or WebP; leave blank to keep the current cover.
+                      Required for Storefront On. Use a square 3000 × 3000 JPG,
+                      PNG, or WebP. Leave blank only to keep a cover that is
+                      already saved on this release.
                     </div>
                   </div>
                 </div>
@@ -1553,6 +1554,17 @@
         const b = document.querySelector(`[data-tab="${tab}"]`);
         q("heading").textContent = b ? b.textContent : tab;
       }
+      let pendingCover = null;
+      function artworkReadyForStorefront(release) {
+        const path = String(release?.cover_art_path ?? "").trim();
+        const bucket =
+          String(release?.cover_art_bucket ?? "").trim() || "release-public";
+        return (
+          !!path &&
+          bucket === "release-public" &&
+          /\.(jpe?g|png|webp)$/i.test(path)
+        );
+      }
       function coverUrl(release) {
         return release?.cover_art_bucket === "release-public" &&
           release.cover_art_path
@@ -1582,9 +1594,18 @@
           throw Error(
             `Cover art is ${dimensions.width} × ${dimensions.height}. Resize it to exactly 3000 × 3000 pixels.`,
           );
+        return dimensions;
       }
       async function uploadAsset(productId, kind, file, objectPath = null) {
-        if (kind === "cover") await validateCoverFile(file);
+        let coverInfo = null;
+        if (kind === "cover") {
+          const dimensions = await validateCoverFile(file);
+          coverInfo = {
+            width: dimensions.width,
+            height: dimensions.height,
+            mime: file.type || null,
+          };
+        }
         const signed = await af(M, {
             method: "POST",
             body: JSON.stringify({
@@ -1612,6 +1633,9 @@
               kind,
               path: signed.path,
               delivery_filename: file.name,
+              mime: file.type || null,
+              width: coverInfo?.width ?? null,
+              height: coverInfo?.height ?? null,
             }),
           });
         return signed;
@@ -1714,6 +1738,7 @@
         q("eStart").value = local(r.preorder_starts_at);
         q("eReleaseDate").value = local(r.release_at);
         q("eDesc").value = r.description || "";
+        pendingCover = null;
         q("eCover").value = "";
         const image = q("eCoverPreview"),
           imageUrl = coverUrl(r);
@@ -1723,7 +1748,9 @@
         q("eVisible").disabled = !r.published_at;
         q("previewRelease").value = r.id;
         setVisibleLabel();
-        q("editMsg").textContent = "";
+        q("editMsg").textContent = artworkReadyForStorefront(r)
+          ? ""
+          : "No cover attached yet. Storefront On requires a saved 3000 × 3000 JPG, PNG, or WebP.";
         goto("edit");
         loadAssignees(r.id);
       }
@@ -2034,12 +2061,18 @@
         const file = q("eCover").files[0];
         if (!file) return;
         try {
-          await validateCoverFile(file);
+          const dimensions = await validateCoverFile(file);
+          pendingCover = {
+            file,
+            width: dimensions.width,
+            height: dimensions.height,
+          };
           q("eCoverPreview").src = URL.createObjectURL(file);
           q("eCoverPreview").classList.remove("hidden");
           q("editMsg").textContent =
-            "Cover is ready. Save changes to upload it.";
+            "Cover is ready. Save changes to upload it to release-public.";
         } catch (error) {
+          pendingCover = null;
           q("eCover").value = "";
           q("editMsg").textContent = error.message;
         }
@@ -2160,7 +2193,11 @@
             throw Error("Regular price is invalid.");
           if (start && new Date(start) >= new Date(release))
             throw Error("Pre-sale start must be before the release date.");
-          const cover = q("eCover").files[0];
+          const cover = pendingCover?.file || q("eCover").files[0];
+          if (pendingCover && !cover)
+            throw Error(
+              "Cover art selection was lost. Choose the 3000 × 3000 file again, then save.",
+            );
           if (cover) await validateCoverFile(cover);
           await af(M, {
             method: "POST",
@@ -2183,8 +2220,14 @@
             }),
           });
           if (cover) await uploadAsset(id, "cover", cover);
+          pendingCover = null;
           await Promise.all([loadR(), loadAnalytics()]);
           fillEdit(id);
+          const saved = rels.find((x) => x.id === id);
+          if (cover && !artworkReadyForStorefront(saved))
+            throw Error(
+              "Cover upload finished, but cover_art_path was not saved. Try Uploads → Cover art, then confirm the preview before Storefront On.",
+            );
           q("editMsg").textContent = cover
             ? "Changes and cover art saved."
             : "Changes saved.";
@@ -2291,19 +2334,22 @@
             });
             toast("Storefront Off.", "ok");
           } else {
-            const published = await af(M, {
+            const release = rels.find((x) => x.id === t.dataset.id);
+            if (!artworkReadyForStorefront(release)) {
+              toast(
+                "Publish blocked: artwork must pass validation before release. Upload a 3000 × 3000 JPG, PNG, or WebP cover and save it before turning Storefront On.",
+                "bad",
+              );
+              return;
+            }
+            await af(M, {
               method: "POST",
               body: JSON.stringify({
                 action: "publish",
                 product_id: t.dataset.id,
               }),
             });
-            toast(
-              published.release?.cover_art_path
-                ? "Storefront On."
-                : "Storefront On. Upload cover art so the fan page can list it.",
-              "ok",
-            );
+            toast("Storefront On.", "ok");
           }
           await Promise.all([loadR(), loadAnalytics()]);
         } catch (err) {

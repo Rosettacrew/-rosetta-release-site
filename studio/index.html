@@ -475,6 +475,7 @@
           throw Error(
             `Cover art is ${dimensions.width} × ${dimensions.height}. Resize it to exactly 3000 × 3000 pixels.`,
           );
+        return dimensions;
       }
       async function loadLibrary() {
         const data = await api(API + "?view=library");
@@ -579,6 +580,8 @@
           });
           if (!uploaded.ok) throw Error("Upload failed");
           if (kind !== "track") {
+            const coverInfo =
+              kind === "cover" ? await validateCoverFile(file) : null;
             await api(API, {
               method: "POST",
               body: JSON.stringify({
@@ -587,6 +590,9 @@
                 kind,
                 path: signed.path,
                 delivery_filename: file.name,
+                mime: file.type || null,
+                width: coverInfo?.width ?? null,
+                height: coverInfo?.height ?? null,
               }),
             });
           }

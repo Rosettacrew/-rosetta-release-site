@@ -304,10 +304,36 @@ Deno.serve(async (req: Request) => {
       if (!(await requireAssignedProduct(supabase, session.user.id, productId))) {
         return json({ error: "Forbidden" }, 403);
       }
+      const { data: current, error: currentError } = await supabase
+        .from("release_products")
+        .select("id,artist_name,title,cover_art_path,preview_path,storage_object_path,metadata")
+        .eq("id", productId)
+        .single();
+      if (currentError) throw currentError;
       const changes: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (kind === "cover") {
+        if (!/\.(jpe?g|png|webp)$/i.test(path)) {
+          return json({ error: "Cover art must be a JPG, PNG, or WebP object on release-public." }, 400);
+        }
+        const metadata = current.metadata && typeof current.metadata === "object" && !Array.isArray(current.metadata)
+          ? current.metadata
+          : {};
+        const width = body.width == null ? null : Number(body.width);
+        const height = body.height == null ? null : Number(body.height);
         changes.cover_art_path = path;
         changes.cover_art_bucket = "release-public";
+        changes.metadata = {
+          ...metadata,
+          artwork_validated: true,
+          cover_art: {
+            path,
+            bucket: "release-public",
+            mime: String(body.mime ?? "").trim() || null,
+            width: Number.isFinite(width) ? width : null,
+            height: Number.isFinite(height) ? height : null,
+            validated_at: new Date().toISOString(),
+          },
+        };
       } else if (kind === "preview") {
         changes.preview_path = path;
       } else if (kind === "package") {

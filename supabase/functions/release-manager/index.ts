@@ -156,6 +156,15 @@ function nextStorefrontStatus(product: any) {
   return "live";
 }
 
+function artworkReadyForStorefront(product: any) {
+  const path = String(product?.cover_art_path ?? "").trim();
+  const bucket = String(product?.cover_art_bucket ?? "").trim() || "release-public";
+  return !!path && bucket === "release-public" && /\.(jpe?g|png|webp)$/i.test(path);
+}
+
+const ARTWORK_PUBLISH_BLOCKED =
+  "Publish blocked: artwork must pass validation before release. Upload a 3000 × 3000 JPG, PNG, or WebP cover to release-public and save it so cover_art_path is set, then try Storefront On again.";
+
 function productMetadata(product: any) {
   const metadata = product?.metadata;
   return metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {};
@@ -206,6 +215,9 @@ function storefrontError(error: unknown) {
       return "This product type is blocked by a database check. Apply supabase/migrations/20260905_storefront_publish_followup.sql so digital_product can go live. Come Here / EP are not changed.";
     }
     return `${text} If this mentions product_type or storefront_enabled, apply supabase/migrations/20260905_storefront_publish_followup.sql.`;
+  }
+  if (/\bp0001\b/.test(lower) || lower.includes("artwork must pass validation")) {
+    return ARTWORK_PUBLISH_BLOCKED;
   }
   return text;
 }
@@ -464,9 +476,30 @@ Deno.serve(async (req: Request) => {
 
     if (action === "attach_asset") {
       const productId = String(body.product_id ?? ""), kind = String(body.kind ?? ""), path = String(body.path ?? ""); if (!productId || !path) return json({ error: "product_id and path are required" }, 400);
+      const { data: current, error: currentError } = await supabase.from("release_products").select("*").eq("id", productId).single();
+      if (currentError) throw currentError;
       const changes: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (kind === "cover") { changes.cover_art_path = path; changes.cover_art_bucket = "release-public"; }
-      else if (kind === "preview") changes.preview_path = path;
+      if (kind === "cover") {
+        if (!artworkReadyForStorefront({ cover_art_path: path, cover_art_bucket: "release-public" })) {
+          return json({ error: "Cover art must be a JPG, PNG, or WebP object on release-public." }, 400);
+        }
+        const width = body.width == null ? null : Number(body.width);
+        const height = body.height == null ? null : Number(body.height);
+        changes.cover_art_path = path;
+        changes.cover_art_bucket = "release-public";
+        changes.metadata = {
+          ...productMetadata(current),
+          artwork_validated: true,
+          cover_art: {
+            path,
+            bucket: "release-public",
+            mime: readableText(body.mime) || null,
+            width: Number.isFinite(width) ? width : null,
+            height: Number.isFinite(height) ? height : null,
+            validated_at: new Date().toISOString(),
+          },
+        };
+      } else if (kind === "preview") changes.preview_path = path;
       else if (kind === "package") { changes.storage_object_path = path; changes.delivery_filename = body.delivery_filename ?? path.split("/").pop(); }
       else return json({ error: "Invalid asset kind" }, 400);
       const { data, error } = await supabase.from("release_products").update(changes).eq("id", productId).select("*").single(); if (error) throw error;
@@ -479,6 +512,9 @@ Deno.serve(async (req: Request) => {
       if (!productId) return json({ error: "product_id is required" }, 400);
       const { data: product, error } = await supabase.from("release_products").select("*").eq("id", productId).single();
       if (error) return json({ error: storefrontError(error) }, 400);
+      if (!artworkReadyForStorefront(product)) {
+        return json({ error: ARTWORK_PUBLISH_BLOCKED }, 400);
+      }
       if (activeCheckoutPrice(product) == null) {
         return json({ error: "Set a regular or pre-sale price greater than $0.00 before turning Storefront On." }, 400);
       }

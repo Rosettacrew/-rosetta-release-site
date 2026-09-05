@@ -45,6 +45,17 @@ assert.match(
   admin,
   /dimensions\.width !== 3000 \|\| dimensions\.height !== 3000/,
 );
+assert.match(admin, /function artworkReadyForStorefront/);
+assert.match(admin, /let pendingCover = null/);
+assert.match(
+  admin,
+  /Publish blocked: artwork must pass validation before release/,
+);
+assert.match(admin, /Required for Storefront On/);
+assert.doesNotMatch(
+  admin,
+  /Storefront On\. Upload cover art so the fan page can list it/,
+);
 assert.match(admin, /"rosetta_customer_preview"/);
 assert.match(admin, /title: release\.title/);
 assert.match(admin, /checkout_url: null/);
@@ -136,6 +147,12 @@ assert.match(releaseManager, /function activeCheckoutPrice/);
 assert.match(releaseManager, /function nextStorefrontStatus/);
 assert.match(releaseManager, /function formatErrorMessage/);
 assert.match(releaseManager, /function storefrontError/);
+assert.match(releaseManager, /function artworkReadyForStorefront/);
+assert.match(
+  releaseManager,
+  /Publish blocked: artwork must pass validation before release/,
+);
+assert.match(releaseManager, /artwork_validated: true/);
 assert.match(releaseManager, /digital_product/);
 assert.match(releaseManager, /description\.slice\(0, 400\)/);
 assert.match(
@@ -153,6 +170,21 @@ assert.match(
   readFileSync("supabase/migrations/20260905_storefront_publish_followup.sql", "utf8"),
   /stripe_payment_link_id type text/,
 );
+const artworkGuard = readFileSync(
+  "supabase/migrations/20260905_artwork_validation_publish_guard.sql",
+  "utf8",
+);
+assert.match(
+  artworkGuard,
+  /Publish blocked: artwork must pass validation before release/,
+);
+assert.match(artworkGuard, /release_artwork_ready_for_storefront/);
+assert.match(artworkGuard, /release_products_artwork_publish_guard/);
+assert.doesNotMatch(
+  artworkGuard,
+  /update\s+public\.release_products/i,
+  "Artwork migration must not UPDATE Come Here / EP or any product rows",
+);
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 assert.match(
@@ -166,6 +198,8 @@ assert.doesNotMatch(
 assert.match(releaseManager, /action === "grant_uploader"/);
 assert.match(releaseManager, /action === "assign_uploader"/);
 assert.match(studioManager, /admin.role !== "music_uploader"/);
+assert.match(studioManager, /artwork_validated: true/);
+assert.doesNotMatch(studioManager, /action === "publish"/);
 assert.match(studioManager, /FINANCE_OR_OWNER_ACTIONS/);
 assert.match(studioManager, /release_product_assignees/);
 assert.match(studioManager, /return json\(\{ error: "Forbidden" \}, 403\)/);
