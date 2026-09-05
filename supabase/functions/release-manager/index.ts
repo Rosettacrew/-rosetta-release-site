@@ -43,6 +43,10 @@ async function authenticatedAdmin(req: Request, supabase: ReturnType<typeof admi
     .maybeSingle();
   // music_uploader is intentionally excluded. Partners use studio-manager only.
   if (error || !admin || !["owner","admin","staff"].includes(admin.role)) return null;
+  // AAL2 (TOTP) is enforced on the Release Station client for owner/admin
+  // before Overview/finance unlock. This function does not hard-reject aal1
+  // JWT claims: staff may remain aal1, x-admin-key fallback has no aal, and
+  // aal is absent until project MFA is enabled.
   return { user: userData.user, admin };
 }
 
