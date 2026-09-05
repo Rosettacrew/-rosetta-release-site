@@ -134,35 +134,78 @@ async function syncArtistContact(supabase: ReturnType<typeof adminClient>, produ
   return data;
 }
 
+function normalizeProductType(value: unknown) {
+  const type = String(value ?? "").trim().toLowerCase();
+  return ["single", "ep", "album", "beat", "digital_product"].includes(type) ? type : null;
+}
+
+function activeCheckoutPrice(product: any) {
+  const raw = product?.status === "presale" && product?.presale_price_cents != null
+    ? product.presale_price_cents
+    : product?.release_price_cents ?? product?.presale_price_cents;
+  const cents = Math.round(Number(raw));
+  return Number.isFinite(cents) && cents > 0 ? cents : null;
+}
+
+function nextStorefrontStatus(product: any) {
+  if (product?.status === "presale" || product?.status === "live") return product.status;
+  const releaseAt = new Date(product?.release_at).getTime();
+  if (!Number.isNaN(releaseAt) && releaseAt > Date.now() && product?.presale_price_cents != null) {
+    return "presale";
+  }
+  return "live";
+}
+
+function productMetadata(product: any) {
+  const metadata = product?.metadata;
+  return metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {};
+}
+
 async function stripePost(path: string, params: URLSearchParams) {
   const secret = Deno.env.get("STRIPE_SECRET_KEY");
-  if (!secret) throw new Error("STRIPE_SECRET_KEY is not configured");
+  if (!secret) throw new Error("Stripe is not configured. Add STRIPE_SECRET_KEY before turning Storefront On.");
   const res = await fetch(`https://api.stripe.com/v1/${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${secret}`, "content-type": "application/x-www-form-urlencoded" },
     body: params,
   });
   const body = await res.json();
-  if (!res.ok) throw new Error(body?.error?.message ?? "Stripe request failed");
+  if (!res.ok) throw new Error(body?.error?.message ?? `Stripe ${path} failed`);
   return body;
 }
 
 async function createCheckout(product: any) {
+  const activePrice = activeCheckoutPrice(product);
+  if (activePrice == null) throw new Error("Set a regular or pre-sale price greater than $0.00 before turning Storefront On.");
+  const currency = String(product.currency ?? "usd").trim().toLowerCase() || "usd";
   const p = new URLSearchParams();
-  p.set("name", `${product.artist_name} — ${product.title}`);
-  if (product.description) p.set("description", product.description);
-  p.set("metadata[release_product_id]", product.id);
-  p.set("metadata[release_slug]", product.slug);
+  p.set("name", `${product.artist_name} — ${product.title}`.slice(0, 250));
+  const description = String(product.description ?? "").trim();
+  if (description) p.set("description", description.slice(0, 400));
+  p.set("metadata[release_product_id]", String(product.id ?? ""));
+  p.set("metadata[product_type]", String(product.product_type ?? ""));
+  if (product.slug) p.set("metadata[release_slug]", String(product.slug));
   const stripeProduct = await stripePost("products", p);
-  const activePrice = product.status === "presale" && product.presale_price_cents != null ? product.presale_price_cents : product.release_price_cents ?? product.presale_price_cents;
-  if (activePrice == null) throw new Error("Release price is required");
-  const pp = new URLSearchParams(); pp.set("currency", product.currency ?? "usd"); pp.set("unit_amount", String(activePrice)); pp.set("product", stripeProduct.id);
+  const pp = new URLSearchParams();
+  pp.set("currency", currency);
+  pp.set("unit_amount", String(activePrice));
+  pp.set("product", stripeProduct.id);
   const stripePrice = await stripePost("prices", pp);
   const lp = new URLSearchParams();
-  lp.set("line_items[0][price]", stripePrice.id); lp.set("line_items[0][quantity]", "1"); lp.set("customer_creation", "always");
-  lp.set("metadata[release_product_id]", product.id); lp.set("metadata[release_slug]", product.slug);
+  lp.set("line_items[0][price]", stripePrice.id);
+  lp.set("line_items[0][quantity]", "1");
+  lp.set("customer_creation", "always");
+  lp.set("metadata[release_product_id]", String(product.id ?? ""));
+  if (product.slug) lp.set("metadata[release_slug]", String(product.slug));
   lp.set("after_completion[type]", "hosted_confirmation");
-  lp.set("after_completion[hosted_confirmation][custom_message]", product.status === "presale" ? `Pre-order confirmed. Your digital release unlocks ${new Date(product.release_at).toLocaleDateString("en-US")}.` : "Thank you for your purchase. Your digital release is ready through your secure delivery link.");
+  const unlockAt = product.release_at ? new Date(product.release_at) : null;
+  const unlockLabel = unlockAt && !Number.isNaN(unlockAt.getTime()) ? unlockAt.toLocaleDateString("en-US") : "on release day";
+  lp.set(
+    "after_completion[hosted_confirmation][custom_message]",
+    (nextStorefrontStatus(product) === "presale"
+      ? `Pre-order confirmed. Your digital release unlocks ${unlockLabel}.`
+      : "Thank you for your purchase. Your digital release is ready through your secure delivery link.").slice(0, 500),
+  );
   const link = await stripePost("payment_links", lp);
   return { stripeProduct, stripePrice, link };
 }
@@ -266,7 +309,9 @@ Deno.serve(async (req: Request) => {
       const releaseAt = new Date(body.release_at); if (Number.isNaN(releaseAt.getTime())) return json({ error: "Valid release_at is required" }, 400);
       const presale = body.presale_price_cents == null ? null : Number(body.presale_price_cents), regular = body.release_price_cents == null ? null : Number(body.release_price_cents);
       if (presale == null && regular == null) return json({ error: "A price is required" }, 400);
-      const payload = { slug: slugify(String(body.slug || `${artist}-${title}`)), artist_name: artist, title, product_type: body.product_type ?? "single", description: body.description ?? null, presale_price_cents: presale ?? regular, release_price_cents: regular, currency: String(body.currency ?? "usd").toLowerCase(), release_at: releaseAt.toISOString(), preorder_starts_at: body.preorder_starts_at ? new Date(body.preorder_starts_at).toISOString() : new Date().toISOString(), preorder_ends_at: body.preorder_ends_at ? new Date(body.preorder_ends_at).toISOString() : releaseAt.toISOString(), status: body.status ?? "draft", storefront_enabled: body.storefront_enabled !== false, cover_art_bucket: "release-public", storage_bucket: "release-private", artist_type: normalizeArtistType(body.artist_type), metadata: body.metadata ?? {} };
+      const productType = normalizeProductType(body.product_type ?? "single");
+      if (!productType) return json({ error: "product_type must be single, ep, album, beat, or digital_product" }, 400);
+      const payload = { slug: slugify(String(body.slug || `${artist}-${title}`)), artist_name: artist, title, product_type: productType, description: body.description ?? null, presale_price_cents: presale ?? regular, release_price_cents: regular, currency: String(body.currency ?? "usd").toLowerCase(), release_at: releaseAt.toISOString(), preorder_starts_at: body.preorder_starts_at ? new Date(body.preorder_starts_at).toISOString() : new Date().toISOString(), preorder_ends_at: body.preorder_ends_at ? new Date(body.preorder_ends_at).toISOString() : releaseAt.toISOString(), status: body.status ?? "draft", storefront_enabled: body.storefront_enabled !== false, cover_art_bucket: "release-public", storage_bucket: "release-private", artist_type: normalizeArtistType(body.artist_type), metadata: body.metadata ?? {} };
       const { data, error } = await supabase.from("release_products").insert(payload).select("*").single();
       if (error) throw error;
       const artistContact = await syncArtistContact(supabase, data.id, data.artist_type, body.artist_contact);
@@ -278,6 +323,11 @@ Deno.serve(async (req: Request) => {
       const id = String(body.id ?? ""); if (!id) return json({ error: "id is required" }, 400);
       const allowed = ["artist_name","title","product_type","description","presale_price_cents","release_price_cents","currency","release_at","preorder_starts_at","preorder_ends_at","status","storefront_enabled","cover_art_path","cover_art_bucket","preview_path","is_featured","featured_at","artist_type","metadata"];
       const changes: Record<string, unknown> = { updated_at: new Date().toISOString() }; for (const k of allowed) if (body[k] !== undefined) changes[k] = body[k];
+      if (body.product_type !== undefined) {
+        const productType = normalizeProductType(body.product_type);
+        if (!productType) return json({ error: "product_type must be single, ep, album, beat, or digital_product" }, 400);
+        changes.product_type = productType;
+      }
       if (body.artist_type !== undefined) changes.artist_type = normalizeArtistType(body.artist_type);
       const { data, error } = await supabase.from("release_products").update(changes).eq("id", id).select("*").single();
       if (error) throw error;
@@ -373,13 +423,39 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "publish") {
-      const productId = String(body.product_id ?? ""); const { data: product, error } = await supabase.from("release_products").select("*").eq("id", productId).single(); if (error) throw error;
+      const productId = String(body.product_id ?? "");
+      if (!productId) return json({ error: "product_id is required" }, 400);
+      const { data: product, error } = await supabase.from("release_products").select("*").eq("id", productId).single();
+      if (error) throw error;
+      if (activeCheckoutPrice(product) == null) {
+        return json({ error: "Set a regular or pre-sale price greater than $0.00 before turning Storefront On." }, 400);
+      }
       let stripe = null;
+      const now = new Date().toISOString();
+      const status = nextStorefrontStatus(product);
       if (!product.stripe_payment_link_url || body.force_new_checkout === true) {
         stripe = await createCheckout(product);
-        const { error: ue } = await supabase.from("release_products").update({ stripe_payment_link_id: stripe.link.id, stripe_payment_link_url: stripe.link.url, status: product.status === "draft" ? (new Date(product.release_at).getTime() > Date.now() && product.presale_price_cents != null ? "presale" : "live") : product.status, storefront_enabled: true, published_at: new Date().toISOString(), updated_at: new Date().toISOString(), metadata: { ...(product.metadata ?? {}), stripe_product_id: stripe.stripeProduct.id, stripe_price_id: stripe.stripePrice.id } }).eq("id", productId); if (ue) throw ue;
-      } else await supabase.from("release_products").update({ storefront_enabled: true, published_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", productId);
-      const { data: current } = await supabase.from("release_products").select("*").eq("id", productId).single();
+        const { error: ue } = await supabase.from("release_products").update({
+          stripe_payment_link_id: stripe.link.id,
+          stripe_payment_link_url: stripe.link.url,
+          status,
+          storefront_enabled: true,
+          published_at: now,
+          updated_at: now,
+          metadata: { ...productMetadata(product), stripe_product_id: stripe.stripeProduct.id, stripe_price_id: stripe.stripePrice.id },
+        }).eq("id", productId);
+        if (ue) throw ue;
+      } else {
+        const { error: ue } = await supabase.from("release_products").update({
+          storefront_enabled: true,
+          status,
+          published_at: product.published_at ?? now,
+          updated_at: now,
+        }).eq("id", productId);
+        if (ue) throw ue;
+      }
+      const { data: current, error: currentError } = await supabase.from("release_products").select("*").eq("id", productId).single();
+      if (currentError) throw currentError;
       if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "publish_release", entityType: "release", entityId: productId, summary: `Published release: ${current?.artist_name ?? ""} — ${current?.title ?? ""}` });
       return json({ release: current, checkout_created: !!stripe });
     }
