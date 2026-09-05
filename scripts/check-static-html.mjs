@@ -9,6 +9,8 @@ const files = [
   "beatbay/index.html",
   "studio/index.html",
   "music-studio.html",
+  "password-login.html",
+  "owner-recovery.html",
 ];
 
 for (const file of files) {
@@ -204,6 +206,8 @@ const publicFiles = [
   "beatbay/index.html",
   "studio/index.html",
   "music-studio.html",
+  "password-login.html",
+  "owner-recovery.html",
 ];
 const publicBundle = publicFiles
   .filter((file) => existsSync(file))
@@ -221,6 +225,23 @@ assert.match(admin, /<meta name="robots" content="noindex,nofollow"\s*\/?>/);
 assert.match(admin, /shouldCreateUser:\s*false/);
 assert.match(admin, /id="email"[^>]*placeholder="Owner email"/s);
 assert.doesNotMatch(admin, /id="email"[^>]*value=/s);
+assert.match(admin, /id="password"/);
+assert.match(admin, /id="signin"/);
+assert.match(admin, /Sign in/);
+assert.match(admin, /signInWithPassword/);
+assert.match(admin, /getAuthenticatorAssuranceLevel/);
+assert.match(admin, /currentLevel !== "aal2"/);
+assert.match(admin, /challengeAndVerify/);
+assert.match(admin, /mfa\.enroll/);
+assert.match(admin, /Emergency email link/);
+assert.match(admin, /Send emergency sign-in link/);
+assert.doesNotMatch(admin, /Send secure sign-in link/);
+assert.match(admin, /resetPasswordForEmail/);
+assert.match(admin, /owner-recovery\.html/);
+assert.doesNotMatch(
+  admin,
+  /console\.(log|debug|info)\([^)]*(access_token|refresh_token|totp\.secret|session)/,
+);
 assert.match(admin, /rel="manifest" href="manifest.webmanifest"/);
 assert.match(admin, /apple-mobile-web-app-capable/);
 assert.match(admin, /apple-mobile-web-app-title" content="Release Station"/);
@@ -281,9 +302,27 @@ assert.equal(
 );
 
 const robots = readFileSync("robots.txt", "utf8");
+const passwordLogin = readFileSync("password-login.html", "utf8");
+assert.match(passwordLogin, /signInWithPassword/);
+assert.doesNotMatch(passwordLogin, /id="email"[^>]*value=/s);
+assert.match(passwordLogin, /admin-dashboard\.html/);
+assert.match(
+  passwordLogin,
+  /authenticator verification \(AAL2\)/,
+);
+
+const ownerRecovery = readFileSync("owner-recovery.html", "utf8");
+assert.match(ownerRecovery, /<meta name="robots" content="noindex,nofollow"\s*\/?>/);
+assert.match(ownerRecovery, /updateUser\(\{ password \}\)/);
+assert.match(ownerRecovery, /PASSWORD_RECOVERY/);
+assert.doesNotMatch(ownerRecovery, /release-admin-data/);
+assert.doesNotMatch(ownerRecovery, /data-tab="overview"/);
+
 assert.match(robots, /Disallow: \/admin-dashboard\.html/);
 assert.match(robots, /Disallow: \/studio\//);
 assert.match(robots, /Disallow: \/music-studio\.html/);
+assert.match(robots, /Disallow: \/password-login\.html/);
+assert.match(robots, /Disallow: \/owner-recovery\.html/);
 assert.match(robots, /Allow: \//);
 
 console.log("Static HTML and private-preview checks passed.");

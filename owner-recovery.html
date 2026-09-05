@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#080808" />
+    <title>Release Station · Reset Password</title>
+    <style>
+      :root {
+        --bg: #080808;
+        --panel: #111;
+        --gold: #d2ad56;
+        --gold2: #f2d18a;
+        --text: #f5f0e7;
+        --muted: #999;
+        --line: #302b21;
+        --bad: #ff8c8c;
+        --ok: #82d7a0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top, #d2ad5618, transparent 30rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+      }
+      .card {
+        width: min(470px, 100%);
+        padding: 24px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+      }
+      .brand {
+        color: var(--gold);
+        font-weight: 900;
+        letter-spacing: 0.12em;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      label {
+        display: block;
+        color: #c6ab70;
+        font-size: 11px;
+        margin: 14px 0 5px;
+      }
+      input {
+        width: 100%;
+        background: #090909;
+        color: #eee;
+        border: 1px solid #353129;
+        border-radius: 9px;
+        padding: 12px;
+        font: inherit;
+      }
+      .btn {
+        width: 100%;
+        margin-top: 18px;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-weight: 900;
+        cursor: pointer;
+        background: linear-gradient(135deg, #c79c46, #efd18b);
+        color: #151109;
+      }
+      .btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .msg {
+        margin-top: 12px;
+        min-height: 18px;
+      }
+      .bad {
+        color: var(--bad);
+      }
+      .ok {
+        color: var(--ok);
+      }
+      a {
+        color: var(--gold2);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">ROSETTA CREW</div>
+      <h1>Reset password</h1>
+      <p class="muted">
+        Open this page from the reset link in your email. The email contains a
+        link only — never a password. After you save a new password, Release
+        Station still requires authenticator verification (AAL2) before
+        Overview unlocks.
+      </p>
+      <form id="form">
+        <label for="password">New password</label>
+        <input
+          id="password"
+          type="password"
+          autocomplete="new-password"
+          minlength="8"
+          required
+        />
+        <label for="confirm">Confirm password</label>
+        <input
+          id="confirm"
+          type="password"
+          autocomplete="new-password"
+          minlength="8"
+          required
+        />
+        <button id="submit" class="btn" type="submit">Update password</button>
+        <div id="msg" class="muted msg" aria-live="polite"></div>
+      </form>
+      <p class="muted">
+        <a href="admin-dashboard.html">Back to Release Station sign-in</a>
+      </p>
+    </main>
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+      const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co";
+      const KEY = "sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju";
+      const sb = createClient(BASE, KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      });
+      const form = document.getElementById("form");
+      const submit = document.getElementById("submit");
+      const msg = document.getElementById("msg");
+      let ready = false;
+      function setMsg(text, kind) {
+        msg.className = "msg " + (kind || "muted");
+        msg.textContent = text;
+      }
+      sb.auth.onAuthStateChange(async (event, session) => {
+        if (event === "PASSWORD_RECOVERY" || session) {
+          ready = true;
+          setMsg("Choose a new password, then continue to authenticator verification.");
+        }
+      });
+      const existing = await sb.auth.getSession();
+      if (existing.data.session) ready = true;
+      if (!ready) {
+        setMsg("Open the reset link from your email to continue.");
+      }
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const password = document.getElementById("password").value;
+        const confirm = document.getElementById("confirm").value;
+        if (!ready) {
+          setMsg("Open the reset link from your email to continue.", "bad");
+          return;
+        }
+        if (password.length < 8) {
+          setMsg("Choose a new password with at least 8 characters.", "bad");
+          return;
+        }
+        if (password !== confirm) {
+          setMsg("Passwords do not match.", "bad");
+          return;
+        }
+        submit.disabled = true;
+        setMsg("Updating password…");
+        const { error } = await sb.auth.updateUser({ password });
+        document.getElementById("password").value = "";
+        document.getElementById("confirm").value = "";
+        if (error) {
+          setMsg(error.message, "bad");
+          submit.disabled = false;
+          return;
+        }
+        setMsg("Password updated. Opening Release Station for authenticator verification…", "ok");
+        location.replace("admin-dashboard.html");
+      });
+    </script>
+  </body>
+</html>

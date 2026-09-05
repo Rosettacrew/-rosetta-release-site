@@ -59,6 +59,62 @@
         border: 1px solid var(--line);
         border-radius: 18px;
       }
+      .login h1 {
+        margin: 8px 0 6px;
+        font-size: 28px;
+      }
+      .login h2 {
+        margin: 8px 0 6px;
+        font-size: 20px;
+      }
+      .login .btn,
+      .login .secondary {
+        width: 100%;
+      }
+      .login .secondary {
+        margin-top: 8px;
+      }
+      .login details {
+        margin-top: 18px;
+        border-top: 1px solid var(--line);
+        padding-top: 14px;
+      }
+      .login summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .linkBtn {
+        background: none;
+        border: 0;
+        color: var(--gold2);
+        padding: 0;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: underline;
+      }
+      .mfaQr {
+        display: block;
+        width: 220px;
+        max-width: 100%;
+        height: auto;
+        margin: 12px 0;
+        background: #fff;
+        border-radius: 12px;
+        padding: 8px;
+      }
+      .manualSecret {
+        word-break: break-all;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--gold2);
+        background: #090909;
+        border: 1px dashed #353129;
+        border-radius: 9px;
+        padding: 10px;
+      }
       .brand {
         color: var(--gold);
         font-weight: 900;
@@ -587,14 +643,106 @@
     <div id="login" class="login">
       <div class="brand">ROSETTA CREW</div>
       <h1>Release Station</h1>
-      <p class="muted">Secure owner access.</p>
-      <input
-        id="email"
-        type="email"
-        placeholder="Owner email"
-        autocomplete="email"
-      />
-      <p><button id="send" class="btn">Send secure sign-in link</button></p>
+      <p class="muted">
+        Owner sign-in with email, password, and authenticator. Overview stays
+        locked until two-factor assurance (AAL2).
+      </p>
+      <div id="passwordStep">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          placeholder="Owner email"
+          autocomplete="username"
+        />
+        <label for="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          placeholder="Password"
+          autocomplete="current-password"
+        />
+        <p>
+          <button id="signin" class="btn" type="button">Sign in</button>
+        </p>
+        <p>
+          <button id="forgot" class="linkBtn" type="button">
+            Forgot password?
+          </button>
+        </p>
+        <details id="emergencyWrap">
+          <summary>Emergency email link</summary>
+          <p class="muted">
+            Secondary backup only. Prefer password and authenticator. This
+            still requires MFA before Overview unlocks.
+          </p>
+          <button id="send" class="secondary" type="button">
+            Send emergency sign-in link
+          </button>
+        </details>
+      </div>
+      <div id="mfaChallenge" class="hidden">
+        <h2>Authenticator code</h2>
+        <p class="muted">
+          Enter the 6-digit code from your authenticator app.
+        </p>
+        <label for="mfaCode">One-time code</label>
+        <input
+          id="mfaCode"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          maxlength="8"
+        />
+        <p>
+          <button id="mfaVerify" class="btn" type="button">Verify</button>
+        </p>
+      </div>
+      <div id="mfaEnroll" class="hidden">
+        <h2>Set up authenticator</h2>
+        <p class="muted">
+          Scan this QR code, then enter a verification code. Required before
+          opening Release Station.
+        </p>
+        <img id="mfaQr" class="mfaQr hidden" alt="Authenticator QR code" />
+        <p id="mfaSecret" class="hint"></p>
+        <div id="mfaManual" class="manualSecret hidden"></div>
+        <label for="mfaEnrollCode">Verification code</label>
+        <input
+          id="mfaEnrollCode"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          maxlength="8"
+        />
+        <p>
+          <button id="mfaEnrollVerify" class="btn" type="button">
+            Verify and continue
+          </button>
+        </p>
+      </div>
+      <div id="recoveryStep" class="hidden">
+        <h2>Choose a new password</h2>
+        <p class="muted">
+          This form updates your account password. Reset emails contain a
+          link only — never a password.
+        </p>
+        <label for="newPassword">New password</label>
+        <input
+          id="newPassword"
+          type="password"
+          autocomplete="new-password"
+        />
+        <label for="confirmPassword">Confirm password</label>
+        <input
+          id="confirmPassword"
+          type="password"
+          autocomplete="new-password"
+        />
+        <p>
+          <button id="savePassword" class="btn" type="button">
+            Update password
+          </button>
+        </p>
+      </div>
       <div id="loginMsg" class="muted"></div>
     </div>
     <div id="app" class="shell hidden">
@@ -1105,7 +1253,10 @@
       });
       let sess = null,
         rels = [],
-        analytics = [];
+        analytics = [],
+        bootLock = false,
+        appUnlocked = false,
+        pendingFactorId = "";
       const q = (id) => document.getElementById(id),
         money = (c) =>
           new Intl.NumberFormat("en-US", {
@@ -1140,6 +1291,163 @@
       }
       async function claimOwner() {
         return af(C, { method: "POST", body: "{}" });
+      }
+      function showLoginStep(step) {
+        q("passwordStep").classList.toggle("hidden", step !== "password");
+        q("mfaChallenge").classList.toggle("hidden", step !== "challenge");
+        q("mfaEnroll").classList.toggle("hidden", step !== "enroll");
+        q("recoveryStep").classList.toggle("hidden", step !== "recovery");
+        q("app").classList.add("hidden");
+        q("login").classList.remove("hidden");
+        appUnlocked = false;
+      }
+      function verifiedTotpFactors(factors) {
+        return (factors?.totp || []).filter((factor) => factor.status === "verified");
+      }
+      async function listTotp() {
+        const { data, error } = await sb.auth.mfa.listFactors();
+        if (error) throw error;
+        return data;
+      }
+      async function currentAal() {
+        const { data, error } =
+          await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (error) throw error;
+        return data;
+      }
+      async function adminRole() {
+        const who = await af(M + "?view=whoami");
+        return who.role || "";
+      }
+      async function denyStation(message) {
+        try {
+          await sb.auth.signOut();
+        } catch {}
+        sess = null;
+        pendingFactorId = "";
+        showLoginStep("password");
+        q("loginMsg").textContent = message;
+      }
+      async function startEnroll() {
+        const listed = await listTotp();
+        for (const factor of listed.totp || []) {
+          if (factor.status !== "verified") {
+            await sb.auth.mfa.unenroll({ factorId: factor.id });
+          }
+        }
+        const { data, error } = await sb.auth.mfa.enroll({
+          factorType: "totp",
+          friendlyName: "Release Station",
+        });
+        if (error || !data)
+          throw error || Error("Authenticator enrollment failed.");
+        pendingFactorId = data.id;
+        const qr = data.totp?.qr_code || "";
+        const img = q("mfaQr");
+        if (qr) {
+          img.src = qr;
+          img.classList.remove("hidden");
+        } else {
+          img.removeAttribute("src");
+          img.classList.add("hidden");
+        }
+        const secret = data.totp?.secret || "";
+        q("mfaSecret").textContent = secret
+          ? "If you cannot scan, enter this key in your authenticator app."
+          : "";
+        q("mfaManual").textContent = secret;
+        q("mfaManual").classList.toggle("hidden", !secret);
+        showLoginStep("enroll");
+        q("loginMsg").textContent =
+          "Scan the QR code, then enter a 6-digit code to finish setup.";
+      }
+      async function verifyTotp(code) {
+        const trimmed = String(code || "").replace(/\s+/g, "");
+        if (!/^\d{6,8}$/.test(trimmed))
+          throw Error("Enter the 6-digit authenticator code.");
+        if (!pendingFactorId)
+          throw Error("Authenticator challenge is not ready.");
+        const { error } = await sb.auth.mfa.challengeAndVerify({
+          factorId: pendingFactorId,
+          code: trimmed,
+        });
+        if (error) throw error;
+        pendingFactorId = "";
+        q("mfaCode").value = "";
+        q("mfaEnrollCode").value = "";
+      }
+      async function unlockIfAssured() {
+        if (!sess) return false;
+        let role = "";
+        try {
+          role = await adminRole();
+        } catch {
+          await denyStation(
+            "This account cannot open Release Station. Music partners use /studio/.",
+          );
+          return false;
+        }
+        if (role === "music_uploader") {
+          await denyStation(
+            "This account cannot open Release Station. Music partners use /studio/.",
+          );
+          return false;
+        }
+        const needsAal2 =
+          role === "owner" || role === "admin" || role === "owner-key";
+        try {
+          const aal = await currentAal();
+          const listed = await listTotp();
+          const verified = verifiedTotpFactors(listed);
+          if (needsAal2) {
+            if (!verified.length) {
+              await startEnroll();
+              return false;
+            }
+            if (aal.currentLevel !== "aal2") {
+              pendingFactorId = verified[0].id;
+              showLoginStep("challenge");
+              q("loginMsg").textContent =
+                "Two-factor authentication is required before opening Overview.";
+              return false;
+            }
+          } else if (verified.length && aal.currentLevel !== "aal2") {
+            pendingFactorId = verified[0].id;
+            showLoginStep("challenge");
+            q("loginMsg").textContent =
+              "Enter your authenticator code to continue.";
+            return false;
+          }
+        } catch (error) {
+          if (needsAal2) {
+            showLoginStep("enroll");
+            try {
+              await startEnroll();
+            } catch (enrollError) {
+              q("loginMsg").textContent =
+                enrollError.message ||
+                error.message ||
+                "Authenticator setup is required. Enable TOTP MFA for this project, then try again.";
+            }
+            return false;
+          }
+        }
+        if (appUnlocked && !q("app").classList.contains("hidden")) return true;
+        try {
+          await claimOwner();
+        } catch {}
+        q("login").classList.add("hidden");
+        q("app").classList.remove("hidden");
+        appUnlocked = true;
+        q("who").textContent =
+          (sess.user.email || "Admin") +
+          " · " +
+          (role === "staff" ? "Staff" : "Owner");
+        await Promise.all([loadR(), loadO(), loadAnalytics(), social()]).catch(
+          (e) => alert(e.message),
+        );
+        loadStudioUploaders();
+        return true;
       }
       function setBusy(el, on, label) {
         if (!el) return;
@@ -1507,33 +1815,128 @@
             )
             .join("") || '<div class="muted">No drafts yet.</div>';
       }
-      async function boot() {
-        const g = await sb.auth.getSession();
-        sess = g.data.session;
-        if (!sess) return;
+      async function boot(event) {
+        if (bootLock) return;
+        bootLock = true;
         try {
-          await claimOwner();
-        } catch {}
-        q("login").classList.add("hidden");
-        q("app").classList.remove("hidden");
-        q("who").textContent = (sess.user.email || "Admin") + " · Owner";
-        await Promise.all([loadR(), loadO(), loadAnalytics(), social()]).catch(
-          (e) => alert(e.message),
-        );
-        loadStudioUploaders();
+          if (event === "PASSWORD_RECOVERY") {
+            showLoginStep("recovery");
+            q("loginMsg").textContent =
+              "Choose a new password. Reset emails contain a link, not your password.";
+            return;
+          }
+          const g = await sb.auth.getSession();
+          sess = g.data.session;
+          if (!sess) {
+            showLoginStep("password");
+            return;
+          }
+          await unlockIfAssured();
+        } finally {
+          bootLock = false;
+        }
       }
+      q("signin").onclick = async () => {
+        const email = q("email").value.trim(),
+          password = q("password").value;
+        if (!email || !password) {
+          q("loginMsg").textContent = "Email and password are required.";
+          return;
+        }
+        q("loginMsg").textContent = "Signing in…";
+        const { error } = await sb.auth.signInWithPassword({
+          email,
+          password,
+        });
+        q("password").value = "";
+        if (error) {
+          q("loginMsg").textContent = error.message;
+          return;
+        }
+        q("loginMsg").textContent = "Password accepted. Checking authenticator…";
+      };
+      q("forgot").onclick = async () => {
+        const email = q("email").value.trim();
+        if (!email) {
+          q("loginMsg").textContent = "Enter your email first.";
+          return;
+        }
+        q("loginMsg").textContent = "Sending password reset email…";
+        const { error } = await sb.auth.resetPasswordForEmail(email, {
+          redirectTo: new URL("owner-recovery.html", location.href).href,
+        });
+        q("loginMsg").textContent = error
+          ? error.message
+          : "Password reset email sent. The message contains a link, not your password.";
+      };
       q("send").onclick = async () => {
         const e = q("email").value.trim();
-        if (!e) return;
-        q("loginMsg").textContent = "Sending…";
+        if (!e) {
+          q("loginMsg").textContent = "Enter your email first.";
+          return;
+        }
+        q("loginMsg").textContent = "Sending emergency link…";
         const r = await sb.auth.signInWithOtp({
           email: e,
           options: { emailRedirectTo: location.href, shouldCreateUser: false },
         });
         q("loginMsg").textContent = r.error
           ? r.error.message
-          : "Secure sign-in link sent. Check your email.";
+          : "Emergency sign-in link sent. Check your email, then complete authenticator verification.";
       };
+      q("mfaVerify").onclick = async () => {
+        try {
+          q("loginMsg").textContent = "Verifying…";
+          await verifyTotp(q("mfaCode").value);
+          q("loginMsg").textContent = "Authenticator verified.";
+          await boot();
+        } catch (error) {
+          q("loginMsg").textContent = error.message;
+        }
+      };
+      q("mfaEnrollVerify").onclick = async () => {
+        try {
+          q("loginMsg").textContent = "Verifying…";
+          await verifyTotp(q("mfaEnrollCode").value);
+          q("loginMsg").textContent = "Authenticator enrolled.";
+          await boot();
+        } catch (error) {
+          q("loginMsg").textContent = error.message;
+        }
+      };
+      q("savePassword").onclick = async () => {
+        const password = q("newPassword").value,
+          confirm = q("confirmPassword").value;
+        if (!password || password.length < 8) {
+          q("loginMsg").textContent =
+            "Choose a new password with at least 8 characters.";
+          return;
+        }
+        if (password !== confirm) {
+          q("loginMsg").textContent = "Passwords do not match.";
+          return;
+        }
+        q("loginMsg").textContent = "Updating password…";
+        const { error } = await sb.auth.updateUser({ password });
+        q("newPassword").value = "";
+        q("confirmPassword").value = "";
+        if (error) {
+          q("loginMsg").textContent = error.message;
+          return;
+        }
+        q("loginMsg").textContent =
+          "Password updated. Complete authenticator verification to open Release Station.";
+        await boot();
+      };
+      q("password").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") q("signin").click();
+      });
+      q("mfaCode").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") q("mfaVerify").click();
+      });
+      q("mfaEnrollCode").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") q("mfaEnrollVerify").click();
+      });
       q("out").onclick = async () => {
         await sb.auth.signOut();
         location.reload();
@@ -1898,8 +2301,12 @@
           setBusy(b, false);
         }
       };
-      sb.auth.onAuthStateChange((_e, s) => {
+      sb.auth.onAuthStateChange((event, s) => {
         sess = s;
+        if (event === "PASSWORD_RECOVERY") {
+          boot(event);
+          return;
+        }
         if (s) boot();
       });
       boot();
