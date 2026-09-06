@@ -1,4 +1,5 @@
 
+
 <!doctype html>
 <html lang="en">
   <head>
@@ -430,11 +431,12 @@
               "'": "&#39;",
             })[m],
         );
+      let bootGen = 0;
+      let bootInFlight = null;
       async function ensureSession() {
-        if (sess?.access_token) return sess;
         const { data } = await sb.auth.getSession();
-        sess = data.session;
-        return sess;
+        if (data.session?.access_token) sess = data.session;
+        return sess?.access_token ? sess : data.session;
       }
       async function api(url, opt = {}) {
         const session = await ensureSession();
@@ -535,24 +537,41 @@
         q("deniedMsg").textContent = message;
       }
       async function boot() {
-        const { data } = await sb.auth.getSession();
-        sess = data.session;
-        if (!sess) return;
-        q("login").classList.add("hidden");
+        const myGen = ++bootGen;
+        const run = (async () => {
+          const session = await ensureSession();
+          if (myGen !== bootGen) return;
+          sess = session;
+          if (!sess?.access_token) return;
+          q("login").classList.add("hidden");
+          try {
+            const me = await api(API + "?view=whoami");
+            if (myGen !== bootGen) return;
+            if (me.role !== "music_uploader")
+              throw Error("Music Studio access required");
+            q("denied").classList.add("hidden");
+            q("app").classList.remove("hidden");
+            q("who").textContent =
+              (sess.user?.email || me.email || "Studio account") +
+              " · music_uploader";
+            await loadLibrary();
+          } catch (error) {
+            if (myGen !== bootGen) return;
+            // Stale/failed boots must not override a newer successful session.
+            const still = await ensureSession();
+            if (myGen !== bootGen || !still?.access_token) return;
+            sess = still;
+            showDenied(
+              error.message ||
+                "This portal is for approved Music Studio accounts only.",
+            );
+          }
+        })();
+        bootInFlight = run;
         try {
-          const me = await api(API + "?view=whoami");
-          if (me.role !== "music_uploader")
-            throw Error("Music Studio access required");
-          q("denied").classList.add("hidden");
-          q("app").classList.remove("hidden");
-          q("who").textContent =
-            (sess.user.email || "Studio account") + " · music_uploader";
-          await loadLibrary();
-        } catch (error) {
-          showDenied(
-            error.message ||
-              "This portal is for approved Music Studio accounts only.",
-          );
+          await run;
+        } finally {
+          if (bootInFlight === run) bootInFlight = null;
         }
       }
       function setLoginMsg(text, kind) {
@@ -753,12 +772,10 @@
         }
       };
       sb.auth.onAuthStateChange((event, next) => {
-        sess = next;
-        // INITIAL_SESSION / TOKEN_REFRESHED can race password sign-in; boot
-        // explicitly after signInWithPassword. Only auto-boot signed-in loads.
-        if (next?.access_token && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
-          boot();
-        }
+        if (next?.access_token) sess = next;
+        else if (event === "SIGNED_OUT") sess = null;
+        // Password sign-in calls boot() itself. Only auto-boot restored sessions.
+        if (event === "INITIAL_SESSION" && next?.access_token) boot();
       });
       boot();
     </script>
