@@ -36,13 +36,64 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function adminClient() {
+function supabaseUrl() {
   const url = Deno.env.get("SUPABASE_URL");
+  if (!url) throw new Error("Studio backend unavailable");
+  return url;
+}
+
+function serviceRoleKey() {
   const secretJson = Deno.env.get("SUPABASE_SECRET_KEYS");
   const legacy = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const key = secretJson ? JSON.parse(secretJson)?.default : legacy;
-  if (!url || !key) throw new Error("Studio backend unavailable");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  if (!key) throw new Error("Studio backend unavailable");
+  return key;
+}
+
+function publishableOrAnonKey() {
+  const pubJson = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
+  if (pubJson) {
+    try {
+      const parsed = JSON.parse(pubJson);
+      const key = parsed?.default ?? parsed?.publishable ?? null;
+      if (key) return key;
+    } catch (_) {}
+  }
+  return Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SB_PUBLISHABLE_KEY") ?? "";
+}
+
+function adminClient() {
+  return createClient(supabaseUrl(), serviceRoleKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function bearerToken(req: Request) {
+  const auth = req.headers.get("authorization") ?? "";
+  return auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+}
+
+async function userFromAccessToken(token: string) {
+  // Direct Auth API — avoids service-role client getUser(jwt) quirks with asymmetric JWTs.
+  const apikey = publishableOrAnonKey() || serviceRoleKey();
+  const res = await fetch(`${supabaseUrl()}/auth/v1/user`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey,
+    },
+  });
+  if (res.ok) {
+    const user = await res.json();
+    if (user?.id) return user;
+  }
+  // Fallback for environments where /user rejects publishable apikey pairing.
+  const supabase = createClient(supabaseUrl(), apikey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+  return data.user;
 }
 
 function slugify(input: string) {
@@ -54,19 +105,18 @@ function safeExt(filename: string) {
 }
 
 async function requireMusicUploader(req: Request, supabase: ReturnType<typeof adminClient>) {
-  const auth = req.headers.get("authorization") ?? "";
-  const token = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+  const token = bearerToken(req);
   if (!token) return null;
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !userData.user) return null;
+  const user = await userFromAccessToken(token);
+  if (!user?.id) return null;
   const { data: admin, error } = await supabase
     .from("release_admin_users")
     .select("user_id,role,is_active")
-    .eq("user_id", userData.user.id)
+    .eq("user_id", user.id)
     .eq("is_active", true)
     .maybeSingle();
   if (error || !admin || admin.role !== "music_uploader") return null;
-  return { user: userData.user, admin };
+  return { user, admin };
 }
 
 async function assignedProductIds(

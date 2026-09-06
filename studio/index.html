@@ -431,8 +431,7 @@
               "'": "&#39;",
             })[m],
         );
-      let bootGen = 0;
-      let bootInFlight = null;
+      let bootQueue = Promise.resolve();
       async function ensureSession() {
         const { data } = await sb.auth.getSession();
         if (data.session?.access_token) sess = data.session;
@@ -537,16 +536,14 @@
         q("deniedMsg").textContent = message;
       }
       async function boot() {
-        const myGen = ++bootGen;
-        const run = (async () => {
+        // Serialize boots so a newer run cannot strand Loading after whoami.
+        const run = async () => {
           const session = await ensureSession();
-          if (myGen !== bootGen) return;
           sess = session;
           if (!sess?.access_token) return;
           q("login").classList.add("hidden");
           try {
             const me = await api(API + "?view=whoami");
-            if (myGen !== bootGen) return;
             if (me.role !== "music_uploader")
               throw Error("Music Studio access required");
             q("denied").classList.add("hidden");
@@ -556,24 +553,20 @@
               " · music_uploader";
             await loadLibrary();
           } catch (error) {
-            if (myGen !== bootGen) return;
-            // Stale/failed boots must not override a newer successful session.
             const still = await ensureSession();
-            if (myGen !== bootGen || !still?.access_token) return;
+            if (!still?.access_token) return;
             sess = still;
             showDenied(
               error.message ||
                 "This portal is for approved Music Studio accounts only.",
             );
           }
-        })();
-        bootInFlight = run;
-        try {
-          await run;
-        } finally {
-          if (bootInFlight === run) bootInFlight = null;
-        }
+        };
+        const queued = bootQueue.then(run, run);
+        bootQueue = queued.catch(() => {});
+        await queued;
       }
+
       function setLoginMsg(text, kind) {
         const el = q("loginMsg");
         el.textContent = text;
