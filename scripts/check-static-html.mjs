@@ -174,6 +174,10 @@ const artworkGuard = readFileSync(
   "supabase/migrations/20260905_artwork_validation_publish_guard.sql",
   "utf8",
 );
+const artworkReadyHotfix = readFileSync(
+  "supabase/migrations/20260906_artwork_ready_extension_like.sql",
+  "utf8",
+);
 assert.match(
   artworkGuard,
   /Publish blocked: artwork must pass validation before release/,
@@ -185,6 +189,26 @@ assert.doesNotMatch(
   /update\s+public\.release_products/i,
   "Artwork migration must not UPDATE Come Here / EP or any product rows",
 );
+assert.doesNotMatch(
+  artworkReadyHotfix,
+  /update\s+public\.release_products/i,
+  "Artwork hotfix must not UPDATE Come Here / EP or any product rows",
+);
+for (const [label, sql] of [
+  ["artwork guard", artworkGuard],
+  ["artwork ready hotfix", artworkReadyHotfix],
+]) {
+  assert.match(sql, /release_artwork_ready_for_storefront/);
+  assert.match(sql, /lower\(btrim\(p_path\)\) like '%\.jpg'/);
+  assert.match(sql, /lower\(btrim\(p_path\)\) like '%\.jpeg'/);
+  assert.match(sql, /lower\(btrim\(p_path\)\) like '%\.png'/);
+  assert.match(sql, /lower\(btrim\(p_path\)\) like '%\.webp'/);
+  assert.doesNotMatch(
+    sql.replace(/--[^\n]*/g, ""),
+    /~/,
+    `${label} must use LIKE suffixes, not POSIX regex (backslash/ARE false negatives)`,
+  );
+}
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 assert.match(

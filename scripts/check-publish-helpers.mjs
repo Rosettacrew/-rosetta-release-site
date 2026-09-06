@@ -51,6 +51,21 @@ function artworkReadyForStorefront(product) {
   return !!path && bucket === "release-public" && /\.(jpe?g|png|webp)$/i.test(path);
 }
 
+// Mirrors public.release_artwork_ready_for_storefront (LIKE suffixes, not ~*).
+function sqlArtworkReadyForStorefront(path, bucket) {
+  const trimmedPath = String(path ?? "").trim();
+  const trimmedBucket = String(bucket ?? "").trim() || "release-public";
+  const lower = trimmedPath.toLowerCase();
+  return (
+    trimmedPath !== "" &&
+    trimmedBucket === "release-public" &&
+    (lower.endsWith(".jpg") ||
+      lower.endsWith(".jpeg") ||
+      lower.endsWith(".png") ||
+      lower.endsWith(".webp"))
+  );
+}
+
 function storefrontError(error) {
   const text = formatErrorMessage(error, "Storefront update failed.");
   const lower = text.toLowerCase();
@@ -199,5 +214,24 @@ assert.equal(
   }),
   true,
 );
+
+const sandboxPngPath =
+  "42e87b92-353b-479f-8b95-0d56799bd6e5/cover/cover-85e71111-eaa5-43a9-99d9-78acb0106cd9.png";
+assert.equal(sqlArtworkReadyForStorefront(sandboxPngPath, "release-public"), true);
+assert.equal(sqlArtworkReadyForStorefront(`  ${sandboxPngPath}  `, ""), true);
+assert.equal(sqlArtworkReadyForStorefront(sandboxPngPath, null), true);
+assert.equal(sqlArtworkReadyForStorefront(sandboxPngPath, "release-private"), false);
+assert.equal(sqlArtworkReadyForStorefront(null, "release-public"), false);
+assert.equal(
+  sqlArtworkReadyForStorefront(
+    "42e87b92-353b-479f-8b95-0d56799bd6e5/cover/cover.bin",
+    "release-public",
+  ),
+  false,
+);
+assert.equal(artworkReadyForStorefront({
+  cover_art_path: sandboxPngPath,
+  cover_art_bucket: "release-public",
+}), true);
 
 console.log("Publish helper checks passed.");
