@@ -19,6 +19,7 @@
         --muted: #9a948a;
         --line: #302b21;
         --ok: #82d7a0;
+        --bad: #ff8c8c;
       }
       * {
         box-sizing: border-box;
@@ -97,6 +98,19 @@
         border: 1px solid #584b34;
         background: #111;
         color: var(--text);
+      }
+      .login .btn,
+      .login .ghost {
+        width: 100%;
+      }
+      .login .alt {
+        margin: 18px 0 8px;
+      }
+      .msg.bad {
+        color: var(--bad);
+      }
+      .msg.ok {
+        color: var(--ok);
       }
       button:disabled {
         opacity: 0.55;
@@ -261,16 +275,40 @@
       <div class="brand">ROSETTA CREW</div>
       <h1>Music Studio Portal</h1>
       <p class="muted">
-        Approved music-team accounts only. Upload assets for assigned releases.
+        Approved music-team accounts only. Sign in with email and password to
+        upload assets for assigned releases. This portal does not use owner
+        authenticator codes.
       </p>
-      <label for="email">Work email</label>
-      <input id="email" type="email" autocomplete="email" placeholder="Work email" />
-      <p>
-        <button id="send" class="btn" type="button">
-          Send secure sign-in link
-        </button>
-      </p>
-      <div id="loginMsg" class="muted"></div>
+      <form id="loginForm">
+        <label for="email">Work email</label>
+        <input
+          id="email"
+          type="email"
+          autocomplete="username"
+          placeholder="Work email"
+          required
+        />
+        <label for="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Password"
+        />
+        <p>
+          <button id="signin" class="btn" type="submit">Sign in</button>
+        </p>
+        <p class="muted alt">
+          Optional if you can open the inbox. Password sign-in is the primary
+          method for studio partners.
+        </p>
+        <p>
+          <button id="send" class="ghost" type="button">
+            Send a sign-in link instead
+          </button>
+        </p>
+        <div id="loginMsg" class="muted" aria-live="polite"></div>
+      </form>
     </section>
 
     <div id="denied" class="denied hidden">
@@ -509,17 +547,105 @@
           );
         }
       }
+      function setLoginMsg(text, kind) {
+        const el = q("loginMsg");
+        el.textContent = text;
+        el.className =
+          kind === "bad" ? "msg bad" : kind === "ok" ? "msg ok" : "muted";
+      }
+      function authMessage(error, fallback) {
+        const raw = String(error?.message || "").trim();
+        const lower = raw.toLowerCase();
+        if (!raw) return fallback;
+        if (
+          lower.includes("invalid login credentials") ||
+          lower.includes("invalid credentials")
+        )
+          return "Incorrect email or password.";
+        if (lower.includes("email not confirmed"))
+          return "This email is not confirmed yet. Ask the owner to finish account setup.";
+        if (lower.includes("user not found"))
+          return "This email is not an approved Music Studio account.";
+        if (lower.includes("signup") && lower.includes("disabled"))
+          return "This portal does not create accounts. Ask the owner to grant Music Studio access.";
+        if (lower.includes("rate limit") || lower.includes("too many"))
+          return "Too many attempts. Wait a moment and try again.";
+        return raw;
+      }
+      function setLoginBusy(busy) {
+        q("signin").disabled = busy;
+        q("send").disabled = busy;
+      }
+      q("loginForm").onsubmit = async (event) => {
+        event.preventDefault();
+        const email = q("email").value.trim();
+        const password = q("password").value;
+        if (!email || !password) {
+          setLoginMsg("Email and password are required.", "bad");
+          return;
+        }
+        setLoginBusy(true);
+        setLoginMsg("Signing in…");
+        try {
+          const { error } = await sb.auth.signInWithPassword({
+            email,
+            password,
+          });
+          q("password").value = "";
+          if (error) {
+            setLoginMsg(
+              authMessage(
+                error,
+                "Sign-in failed. Check your email and password.",
+              ),
+              "bad",
+            );
+            return;
+          }
+          setLoginMsg("Signed in. Opening Music Studio…", "ok");
+        } catch (error) {
+          q("password").value = "";
+          setLoginMsg(
+            authMessage(
+              error,
+              "Sign-in failed. Check your email and password.",
+            ),
+            "bad",
+          );
+        } finally {
+          if (!sess) setLoginBusy(false);
+        }
+      };
       q("send").onclick = async () => {
         const email = q("email").value.trim();
-        if (!email) return;
-        q("loginMsg").textContent = "Sending…";
-        const { error } = await sb.auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: location.href, shouldCreateUser: false },
-        });
-        q("loginMsg").textContent = error
-          ? error.message
-          : "Secure sign-in link sent. Check your email.";
+        if (!email) {
+          setLoginMsg("Enter your work email first.", "bad");
+          return;
+        }
+        setLoginBusy(true);
+        setLoginMsg("Sending sign-in link…");
+        try {
+          const { error } = await sb.auth.signInWithOtp({
+            email,
+            options: {
+              emailRedirectTo: location.href,
+              shouldCreateUser: false,
+            },
+          });
+          setLoginMsg(
+            error
+              ? authMessage(error, "Could not send a sign-in link.")
+              : "Sign-in link sent. Check your email, or use your password instead.",
+            error ? "bad" : "ok",
+          );
+        } catch (error) {
+          setLoginMsg(
+            authMessage(error, "Could not send a sign-in link."),
+            "bad",
+          );
+        } finally {
+          setLoginBusy(false);
+        }
       };
       q("out").onclick = q("deniedOut").onclick = async () => {
         await sb.auth.signOut();
