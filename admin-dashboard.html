@@ -298,6 +298,13 @@
         font-size: 11px;
         margin-bottom: 5px;
       }
+      .login label {
+        margin: 14px 0 5px;
+      }
+      .btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
       input,
       select,
       textarea {
@@ -678,102 +685,130 @@
         locked until two-factor assurance (AAL2).
       </p>
       <div id="passwordStep">
-        <label for="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          placeholder="Owner email"
-          autocomplete="username"
-        />
-        <label for="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          placeholder="Password"
-          autocomplete="current-password"
-        />
-        <p>
-          <button id="signin" class="btn" type="button">Sign in</button>
-        </p>
-        <p>
-          <button id="forgot" class="linkBtn" type="button">
-            Forgot password?
-          </button>
-        </p>
-        <details id="emergencyWrap">
-          <summary>Emergency email link</summary>
-          <p class="muted">
-            Secondary backup only. Prefer password and authenticator. This
-            still requires MFA before Overview unlocks.
+        <form id="passwordForm">
+          <label for="email">Owner email</label>
+          <input
+            id="email"
+            type="email"
+            placeholder="Owner email"
+            autocomplete="username"
+          />
+          <label for="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            placeholder="Password"
+            autocomplete="current-password"
+          />
+          <p>
+            <button id="signin" class="btn" type="submit">Sign in</button>
           </p>
-          <button id="send" class="secondary" type="button">
-            Send emergency sign-in link
-          </button>
-        </details>
+          <p>
+            <button id="forgot" class="linkBtn" type="button">
+              Forgot password?
+            </button>
+          </p>
+          <details id="emergencyWrap">
+            <summary>Emergency email link</summary>
+            <p class="muted">
+              Secondary backup only. Prefer password and authenticator. This
+              still requires MFA before Overview unlocks.
+            </p>
+            <button id="send" class="secondary" type="button">
+              Send emergency sign-in link
+            </button>
+          </details>
+        </form>
       </div>
       <div id="mfaChallenge" class="hidden">
-        <h2>Authenticator code</h2>
-        <p class="muted">
-          Enter the 6-digit code from your authenticator app.
-        </p>
-        <label for="mfaCode">One-time code</label>
-        <input
-          id="mfaCode"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          maxlength="8"
-        />
-        <p>
-          <button id="mfaVerify" class="btn" type="button">Verify</button>
-        </p>
+        <form id="mfaChallengeForm">
+          <h2>Authenticator code</h2>
+          <p class="muted">
+            Enter the 6-digit code from your authenticator app.
+          </p>
+          <label for="mfaCode">One-time code</label>
+          <input
+            id="mfaCode"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="8"
+          />
+          <p>
+            <button id="mfaVerify" class="btn" type="submit">Verify</button>
+          </p>
+          <p>
+            <button id="mfaChallengeSignOut" class="linkBtn" type="button">
+              Sign out / use a different account
+            </button>
+          </p>
+        </form>
       </div>
       <div id="mfaEnroll" class="hidden">
-        <h2>Set up authenticator</h2>
-        <p class="muted">
-          Scan this QR code, then enter a verification code. Required before
-          opening Release Station.
-        </p>
-        <img id="mfaQr" class="mfaQr hidden" alt="Authenticator QR code" />
-        <p id="mfaSecret" class="hint"></p>
-        <div id="mfaManual" class="manualSecret hidden"></div>
-        <label for="mfaEnrollCode">Verification code</label>
-        <input
-          id="mfaEnrollCode"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          maxlength="8"
-        />
-        <p>
-          <button id="mfaEnrollVerify" class="btn" type="button">
-            Verify and continue
-          </button>
-        </p>
+        <form id="mfaEnrollForm">
+          <h2>Set up authenticator</h2>
+          <p class="muted">
+            Scan this QR code, then enter a verification code. Required before
+            opening Release Station.
+          </p>
+          <img id="mfaQr" class="mfaQr hidden" alt="Authenticator QR code" />
+          <p id="mfaSecret" class="hint"></p>
+          <div id="mfaManual" class="manualSecret hidden"></div>
+          <label for="mfaEnrollCode">Verification code</label>
+          <input
+            id="mfaEnrollCode"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="8"
+          />
+          <p>
+            <button id="mfaEnrollVerify" class="btn" type="submit">
+              Verify and continue
+            </button>
+          </p>
+          <p>
+            <button id="mfaEnrollSignOut" class="linkBtn" type="button">
+              Sign out / use a different account
+            </button>
+          </p>
+        </form>
       </div>
       <div id="recoveryStep" class="hidden">
-        <h2>Choose a new password</h2>
-        <p class="muted">
-          This form updates your account password. Reset emails contain a
-          link only — never a password.
-        </p>
-        <label for="newPassword">New password</label>
-        <input
-          id="newPassword"
-          type="password"
-          autocomplete="new-password"
-        />
-        <label for="confirmPassword">Confirm password</label>
-        <input
-          id="confirmPassword"
-          type="password"
-          autocomplete="new-password"
-        />
-        <p>
-          <button id="savePassword" class="btn" type="button">
-            Update password
-          </button>
-        </p>
+        <form id="recoveryForm">
+          <h2>Choose a new password</h2>
+          <p class="muted">
+            Prefer the dedicated reset page
+            (<a href="owner-recovery.html">owner-recovery.html</a>). Reset
+            emails contain a link only — never a password.
+          </p>
+          <label for="newPassword">New password</label>
+          <input
+            id="newPassword"
+            type="password"
+            autocomplete="new-password"
+            minlength="8"
+            required
+          />
+          <label for="confirmPassword">Confirm password</label>
+          <input
+            id="confirmPassword"
+            type="password"
+            autocomplete="new-password"
+            minlength="8"
+            required
+          />
+          <p>
+            <button id="savePassword" class="btn" type="submit">
+              Update password
+            </button>
+          </p>
+          <p>
+            <button id="recoverySignOut" class="linkBtn" type="button">
+              Sign out / use a different account
+            </button>
+          </p>
+        </form>
       </div>
-      <div id="loginMsg" class="muted"></div>
+      <div id="loginMsg" class="muted" aria-live="polite"></div>
     </div>
     <div id="app" class="shell hidden">
       <aside class="side">
@@ -1268,6 +1303,21 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script type="module">
       import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+      // Canonical password-reset UI is owner-recovery.html (redirectTo target).
+      // Forward recovery tokens before this page consumes the URL session.
+      {
+        const hash = location.hash || "";
+        const search = location.search || "";
+        if (
+          /(?:^|[?#&])type=recovery(?:&|$)/.test(hash) ||
+          /(?:^|[?&])type=recovery(?:&|$)/.test(search)
+        ) {
+          location.replace(
+            "owner-recovery.html" + location.search + location.hash,
+          );
+          throw new Error("Redirecting to owner-recovery");
+        }
+      }
       const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co",
         KEY = "sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju",
         M = BASE + "/functions/v1/release-manager",
@@ -1275,7 +1325,7 @@
         S = BASE + "/functions/v1/release-social-manager",
         C = BASE + "/functions/v1/release-owner-claim",
         P = BASE + "/functions/v1/release-admin-preview",
-        FRONT = "https://rosettacrew.github.io/-rosetta-release-site/";
+        FRONT = "https://rosettacrew.com/";
       const sb = createClient(BASE, KEY, {
         auth: {
           persistSession: true,
@@ -1930,9 +1980,10 @@
         bootLock = true;
         try {
           if (event === "PASSWORD_RECOVERY") {
+            // Fallback UI if recovery landed here without URL tokens (session already set).
             showLoginStep("recovery");
             q("loginMsg").textContent =
-              "Choose a new password. Reset emails contain a link, not your password.";
+              "Choose a new password here, or use the dedicated reset page (owner-recovery.html). Reset emails contain a link, not your password.";
             return;
           }
           const g = await sb.auth.getSession();
@@ -1946,24 +1997,44 @@
           bootLock = false;
         }
       }
-      q("signin").onclick = async () => {
+      async function loginSignOutEscape() {
+        try {
+          await sb.auth.signOut();
+        } catch {}
+        sess = null;
+        pendingFactorId = "";
+        q("mfaCode").value = "";
+        q("mfaEnrollCode").value = "";
+        q("newPassword").value = "";
+        q("confirmPassword").value = "";
+        showLoginStep("password");
+        q("loginMsg").textContent = "Signed out. Sign in with a different account.";
+      }
+      q("passwordForm").onsubmit = async (e) => {
+        e.preventDefault();
         const email = q("email").value.trim(),
           password = q("password").value;
         if (!email || !password) {
           q("loginMsg").textContent = "Email and password are required.";
           return;
         }
+        q("signin").disabled = true;
         q("loginMsg").textContent = "Signing in…";
-        const { error } = await sb.auth.signInWithPassword({
-          email,
-          password,
-        });
-        q("password").value = "";
-        if (error) {
-          q("loginMsg").textContent = error.message;
-          return;
+        try {
+          const { error } = await sb.auth.signInWithPassword({
+            email,
+            password,
+          });
+          q("password").value = "";
+          if (error) {
+            q("loginMsg").textContent = error.message;
+            return;
+          }
+          q("loginMsg").textContent =
+            "Password accepted. Checking authenticator…";
+        } finally {
+          q("signin").disabled = false;
         }
-        q("loginMsg").textContent = "Password accepted. Checking authenticator…";
       };
       q("forgot").onclick = async () => {
         const email = q("email").value.trim();
@@ -1971,13 +2042,18 @@
           q("loginMsg").textContent = "Enter your email first.";
           return;
         }
+        q("forgot").disabled = true;
         q("loginMsg").textContent = "Sending password reset email…";
-        const { error } = await sb.auth.resetPasswordForEmail(email, {
-          redirectTo: new URL("owner-recovery.html", location.href).href,
-        });
-        q("loginMsg").textContent = error
-          ? error.message
-          : "Password reset email sent. The message contains a link, not your password.";
+        try {
+          const { error } = await sb.auth.resetPasswordForEmail(email, {
+            redirectTo: new URL("owner-recovery.html", location.href).href,
+          });
+          q("loginMsg").textContent = error
+            ? error.message
+            : "Password reset email sent. Open the link to continue on the reset page. The message contains a link, not your password.";
+        } finally {
+          q("forgot").disabled = false;
+        }
       };
       q("send").onclick = async () => {
         const e = q("email").value.trim();
@@ -1985,16 +2061,26 @@
           q("loginMsg").textContent = "Enter your email first.";
           return;
         }
+        q("send").disabled = true;
         q("loginMsg").textContent = "Sending emergency link…";
-        const r = await sb.auth.signInWithOtp({
-          email: e,
-          options: { emailRedirectTo: location.href, shouldCreateUser: false },
-        });
-        q("loginMsg").textContent = r.error
-          ? r.error.message
-          : "Emergency sign-in link sent. Check your email, then complete authenticator verification.";
+        try {
+          const r = await sb.auth.signInWithOtp({
+            email: e,
+            options: {
+              emailRedirectTo: location.href,
+              shouldCreateUser: false,
+            },
+          });
+          q("loginMsg").textContent = r.error
+            ? r.error.message
+            : "Emergency sign-in link sent. Check your email, then complete authenticator verification.";
+        } finally {
+          q("send").disabled = false;
+        }
       };
-      q("mfaVerify").onclick = async () => {
+      q("mfaChallengeForm").onsubmit = async (e) => {
+        e.preventDefault();
+        q("mfaVerify").disabled = true;
         try {
           q("loginMsg").textContent = "Verifying…";
           await verifyTotp(q("mfaCode").value);
@@ -2002,9 +2088,13 @@
           await boot();
         } catch (error) {
           q("loginMsg").textContent = error.message;
+        } finally {
+          q("mfaVerify").disabled = false;
         }
       };
-      q("mfaEnrollVerify").onclick = async () => {
+      q("mfaEnrollForm").onsubmit = async (e) => {
+        e.preventDefault();
+        q("mfaEnrollVerify").disabled = true;
         try {
           q("loginMsg").textContent = "Verifying…";
           await verifyTotp(q("mfaEnrollCode").value);
@@ -2012,9 +2102,12 @@
           await boot();
         } catch (error) {
           q("loginMsg").textContent = error.message;
+        } finally {
+          q("mfaEnrollVerify").disabled = false;
         }
       };
-      q("savePassword").onclick = async () => {
+      q("recoveryForm").onsubmit = async (e) => {
+        e.preventDefault();
         const password = q("newPassword").value,
           confirm = q("confirmPassword").value;
         if (!password || password.length < 8) {
@@ -2026,27 +2119,26 @@
           q("loginMsg").textContent = "Passwords do not match.";
           return;
         }
+        q("savePassword").disabled = true;
         q("loginMsg").textContent = "Updating password…";
-        const { error } = await sb.auth.updateUser({ password });
-        q("newPassword").value = "";
-        q("confirmPassword").value = "";
-        if (error) {
-          q("loginMsg").textContent = error.message;
-          return;
+        try {
+          const { error } = await sb.auth.updateUser({ password });
+          q("newPassword").value = "";
+          q("confirmPassword").value = "";
+          if (error) {
+            q("loginMsg").textContent = error.message;
+            return;
+          }
+          q("loginMsg").textContent =
+            "Password updated. Complete authenticator verification to open Release Station.";
+          await boot();
+        } finally {
+          q("savePassword").disabled = false;
         }
-        q("loginMsg").textContent =
-          "Password updated. Complete authenticator verification to open Release Station.";
-        await boot();
       };
-      q("password").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") q("signin").click();
-      });
-      q("mfaCode").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") q("mfaVerify").click();
-      });
-      q("mfaEnrollCode").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") q("mfaEnrollVerify").click();
-      });
+      q("mfaChallengeSignOut").onclick = () => loginSignOutEscape();
+      q("mfaEnrollSignOut").onclick = () => loginSignOutEscape();
+      q("recoverySignOut").onclick = () => loginSignOutEscape();
       q("out").onclick = async () => {
         await sb.auth.signOut();
         location.reload();
