@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
   <head>
@@ -429,13 +430,20 @@
               "'": "&#39;",
             })[m],
         );
+      async function ensureSession() {
+        if (sess?.access_token) return sess;
+        const { data } = await sb.auth.getSession();
+        sess = data.session;
+        return sess;
+      }
       async function api(url, opt = {}) {
-        if (!sess) throw Error("Not signed in");
+        const session = await ensureSession();
+        if (!session?.access_token) throw Error("Not signed in");
         const r = await fetch(url, {
           ...opt,
           headers: {
             ...(opt.headers || {}),
-            Authorization: "Bearer " + sess.access_token,
+            Authorization: "Bearer " + session.access_token,
             apikey: KEY,
             "content-type": "application/json",
           },
@@ -587,7 +595,7 @@
         setLoginBusy(true);
         setLoginMsg("Signing in…");
         try {
-          const { error } = await sb.auth.signInWithPassword({
+          const { data, error } = await sb.auth.signInWithPassword({
             email,
             password,
           });
@@ -602,7 +610,20 @@
             );
             return;
           }
+          sess = data.session;
+          if (!sess?.access_token) {
+            const refreshed = await sb.auth.getSession();
+            sess = refreshed.data.session;
+          }
+          if (!sess?.access_token) {
+            setLoginMsg(
+              "Signed in, but the session was not ready. Refresh and try again.",
+              "bad",
+            );
+            return;
+          }
           setLoginMsg("Signed in. Opening Music Studio…", "ok");
+          await boot();
         } catch (error) {
           q("password").value = "";
           setLoginMsg(
@@ -613,7 +634,7 @@
             "bad",
           );
         } finally {
-          if (!sess) setLoginBusy(false);
+          if (!sess?.access_token) setLoginBusy(false);
         }
       };
       q("send").onclick = async () => {
@@ -731,9 +752,13 @@
           button.disabled = false;
         }
       };
-      sb.auth.onAuthStateChange((_event, next) => {
+      sb.auth.onAuthStateChange((event, next) => {
         sess = next;
-        if (next) boot();
+        // INITIAL_SESSION / TOKEN_REFRESHED can race password sign-in; boot
+        // explicitly after signInWithPassword. Only auto-boot signed-in loads.
+        if (next?.access_token && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+          boot();
+        }
       });
       boot();
     </script>
