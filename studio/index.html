@@ -147,6 +147,28 @@
         background: #1d170d;
         color: var(--gold2);
       }
+      .surface-toggle {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+        margin: 16px 0 10px;
+      }
+      .surface-toggle button {
+        border: 1px solid #3b372f;
+        border-radius: 9px;
+        background: #111;
+        color: #aaa;
+        padding: 9px 8px;
+        font-size: 0.74rem;
+        font-weight: 800;
+        cursor: pointer;
+        text-align: center;
+      }
+      .surface-toggle button.on {
+        background: linear-gradient(135deg, var(--gold2), #ad7824);
+        color: #090705;
+        border-color: transparent;
+      }
       .access {
         margin-top: 22px;
         padding: 13px;
@@ -326,15 +348,20 @@
       <aside class="side">
         <div class="brand">ROSETTA CREW</div>
         <p class="muted">MUSIC STUDIO PORTAL</p>
+        <div class="surface-toggle" role="tablist" aria-label="Upload surface">
+          <button type="button" class="on" data-surface="release">Release Station</button>
+          <button type="button" data-surface="beatbay">BeatBay</button>
+          <button type="button" data-surface="auction">Live Auction</button>
+        </div>
         <nav class="nav" aria-label="Music Studio">
           <button class="on" data-tab="library" type="button">Library</button>
           <button data-tab="upload" type="button">Upload</button>
         </nav>
         <div class="access">
           <b>Music access only</b>
-          Upload and attach assets for releases assigned to you. Orders,
-          revenue, analytics, delivery, Stripe, and publishing stay with the
-          owner.
+          Switch surfaces above, then upload assets for items assigned to you.
+          Orders, revenue, analytics, delivery, Stripe, and publishing stay
+          with the owner.
         </div>
       </aside>
       <main class="main">
@@ -348,8 +375,8 @@
 
         <section id="library" class="section on">
           <div class="card">
-            <h2>Assigned releases</h2>
-            <p class="muted">
+            <h2 id="libraryTitle">Assigned releases</h2>
+            <p class="muted" id="libraryHint">
               Only products the owner assigned to your music_uploader account.
             </p>
             <div id="libraryList" class="list">
@@ -360,14 +387,18 @@
 
         <section id="upload" class="section">
           <div class="card">
-            <h2>Upload assets</h2>
-            <p class="muted">
+            <h2 id="uploadTitle">Upload assets</h2>
+            <p class="muted" id="uploadHint">
               Signed upload to your assigned release. Full audio stays private.
             </p>
             <div class="form">
-              <div class="wide">
+              <div class="wide" id="releasePick">
                 <label for="uRelease">Assigned release</label>
                 <select id="uRelease"></select>
+              </div>
+              <div class="wide hidden" id="beatPick">
+                <label for="uBeat">Assigned beat</label>
+                <select id="uBeat"></select>
               </div>
               <div>
                 <label for="uKind">Asset type</label>
@@ -417,7 +448,9 @@
         },
       });
       let sess = null,
-        releases = [];
+        releases = [],
+        beats = [],
+        surface = "release";
       const q = (id) => document.getElementById(id);
       const esc = (s) =>
         String(s ?? "").replace(
@@ -480,24 +513,113 @@
           )
           .join("");
       }
+      function surfaceLabel() {
+        return surface === "auction"
+          ? "Live Auction"
+          : surface === "beatbay"
+            ? "BeatBay"
+            : "Release Station";
+      }
+      function syncSurfaceUi() {
+        document.querySelectorAll("[data-surface]").forEach((btn) => {
+          btn.classList.toggle("on", btn.dataset.surface === surface);
+        });
+        const releaseMode = surface === "release";
+        q("releasePick").classList.toggle("hidden", !releaseMode);
+        q("beatPick").classList.toggle("hidden", releaseMode);
+        q("libraryTitle").textContent = releaseMode
+          ? "Assigned releases"
+          : surface === "auction"
+            ? "Assigned auction beats"
+            : "Assigned BeatBay beats";
+        q("libraryHint").textContent = releaseMode
+          ? "Only products the owner assigned to your music_uploader account."
+          : surface === "auction"
+            ? "Assigned beats that have an auction draft or live auction. Upload preview/full audio only — go-live stays with the owner."
+            : "Only BeatBay beats the owner assigned to your music_uploader account.";
+        q("uploadTitle").textContent = releaseMode
+          ? "Upload assets"
+          : surface === "auction"
+            ? "Upload auction audio"
+            : "Upload BeatBay audio";
+        q("uploadHint").textContent = releaseMode
+          ? "Signed upload to your assigned release. Full audio stays private."
+          : "Signed upload of protected preview or full master for your assigned beat. Publishing and auction go-live stay with the owner.";
+        const kind = q("uKind");
+        if (releaseMode) {
+          kind.innerHTML =
+            '<option value="track">Full track / master</option><option value="preview">Protected preview</option><option value="cover">Cover art</option><option value="package">Release ZIP package</option>';
+        } else {
+          kind.innerHTML =
+            '<option value="preview">Protected preview</option><option value="full">Full master</option>';
+        }
+        q("trackFields").classList.toggle(
+          "hidden",
+          !(releaseMode && kind.value === "track"),
+        );
+      }
       function render() {
-        q("libraryList").innerHTML =
-          releases
+        if (surface === "release") {
+          q("libraryList").innerHTML =
+            releases
+              .map(
+                (release) =>
+                  `<div class="row"><div><b>${esc(release.artist_name)} — ${esc(release.title)}</b><div class="muted">${esc(release.product_type || "release")} · ${esc(release.status)}</div><div class="pills" style="margin-top:8px">${pills(release)}</div></div></div>`,
+              )
+              .join("") ||
+            '<div class="muted">No releases are assigned to this account yet. Ask the owner to assign a product in Release Station.</div>';
+          const previous = q("uRelease").value;
+          q("uRelease").innerHTML = releases
             .map(
               (release) =>
-                `<div class="row"><div><b>${esc(release.artist_name)} — ${esc(release.title)}</b><div class="muted">${esc(release.product_type || "release")} · ${esc(release.status)}</div><div class="pills" style="margin-top:8px">${pills(release)}</div></div></div>`,
+                `<option value="${esc(release.id)}">${esc(release.artist_name)} — ${esc(release.title)}</option>`,
             )
+            .join("");
+          if (releases.some((release) => release.id === previous))
+            q("uRelease").value = previous;
+          return;
+        }
+        q("libraryList").innerHTML =
+          beats
+            .map((beat) => {
+              const auction = beat.auction
+                ? ` · auction ${esc(beat.auction.status)}`
+                : "";
+              const pillsHtml = [
+                ["Preview", beat.preview_attached],
+                ["Full master", beat.full_attached],
+              ]
+                .map(
+                  ([label, on]) =>
+                    `<span class="pill">${esc(label)} · ${on ? "ready" : "needed"}</span>`,
+                )
+                .join("");
+              return `<div class="row"><div><b>${esc(beat.beat_code)} — ${esc(beat.title)}</b><div class="muted">${esc(beat.style || "Style pending")}${beat.bpm ? ` · ${esc(beat.bpm)} BPM` : ""}${auction}</div><div class="pills" style="margin-top:8px">${pillsHtml}</div></div></div>`;
+            })
             .join("") ||
-          '<div class="muted">No releases are assigned to this account yet. Ask the owner to assign a product in Release Station.</div>';
-        const previous = q("uRelease").value;
-        q("uRelease").innerHTML = releases
+          `<div class="muted">No ${surface === "auction" ? "auction beats" : "BeatBay beats"} are assigned yet. Ask the owner to assign beats for your account.</div>`;
+        const previous = q("uBeat").value;
+        q("uBeat").innerHTML = beats
           .map(
-            (release) =>
-              `<option value="${esc(release.id)}">${esc(release.artist_name)} — ${esc(release.title)}</option>`,
+            (beat) =>
+              `<option value="${esc(beat.id)}">${esc(beat.beat_code)} — ${esc(beat.title)}</option>`,
           )
           .join("");
-        if (releases.some((release) => release.id === previous))
-          q("uRelease").value = previous;
+        if (beats.some((beat) => beat.id === previous)) q("uBeat").value = previous;
+      }
+      async function loadLibrary() {
+        if (surface === "release") {
+          const data = await api(API + "?view=library");
+          releases = data.releases || [];
+          beats = [];
+        } else {
+          const view =
+            surface === "auction" ? "auction_library" : "beatbay_library";
+          const data = await api(API + "?view=" + view);
+          beats = data.beats || [];
+          releases = [];
+        }
+        render();
       }
       async function validateCoverFile(file) {
         if (
@@ -523,11 +645,6 @@
             `Cover art is ${dimensions.width} × ${dimensions.height}. Resize it to exactly 3000 × 3000 pixels.`,
           );
         return dimensions;
-      }
-      async function loadLibrary() {
-        const data = await api(API + "?view=library");
-        releases = data.releases || [];
-        render();
       }
       function showDenied(message) {
         q("login").classList.add("hidden");
@@ -684,15 +801,29 @@
         await sb.auth.signOut();
         location.reload();
       };
+      document.querySelectorAll("[data-surface]").forEach((btn) => {
+        btn.onclick = async () => {
+          surface = btn.dataset.surface;
+          syncSurfaceUi();
+          q("upMsg").textContent = "";
+          try {
+            await loadLibrary();
+          } catch (error) {
+            q("libraryList").innerHTML =
+              `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;
+          }
+        };
+      });
       document.querySelectorAll(".nav button").forEach((btn) => {
         btn.onclick = () => goto(btn.dataset.tab);
       });
       q("uKind").onchange = () => {
         q("trackFields").classList.toggle(
           "hidden",
-          q("uKind").value !== "track",
+          surface !== "release" || q("uKind").value !== "track",
         );
       };
+      syncSurfaceUi();
       q("uKind").onchange();
       q("upload").onclick = async () => {
         const button = q("upload");
@@ -700,58 +831,96 @@
         q("upMsg").textContent = "Uploading…";
         try {
           const file = q("file").files[0];
-          const productId = q("uRelease").value;
-          const kind = q("uKind").value;
-          if (!file || !productId) throw Error("Choose a release and a file.");
-          if (kind === "cover") await validateCoverFile(file);
-          let objectPath = null;
-          if (kind === "track") {
-            const title = q("trackTitle").value.trim();
-            if (!title) throw Error("Track title required");
-            const track = await api(API, {
+          if (!file) throw Error("Choose a file.");
+          if (surface === "release") {
+            const productId = q("uRelease").value;
+            const kind = q("uKind").value;
+            if (!productId) throw Error("Choose a release and a file.");
+            if (kind === "cover") await validateCoverFile(file);
+            let objectPath = null;
+            if (kind === "track") {
+              const title = q("trackTitle").value.trim();
+              if (!title) throw Error("Track title required");
+              const track = await api(API, {
+                method: "POST",
+                body: JSON.stringify({
+                  action: "add_track",
+                  product_id: productId,
+                  track_number: Number(q("trackNo").value),
+                  title,
+                  filename: file.name,
+                }),
+              });
+              objectPath = track.track.audio_object_path;
+            }
+            const signed = await api(API, {
               method: "POST",
               body: JSON.stringify({
-                action: "add_track",
+                action: "signed_upload",
                 product_id: productId,
-                track_number: Number(q("trackNo").value),
-                title,
+                kind,
+                filename: file.name,
+                object_path: objectPath,
+              }),
+            });
+            const uploaded = await fetch(signed.signed_url, {
+              method: "PUT",
+              headers: {
+                "content-type": file.type || "application/octet-stream",
+              },
+              body: file,
+            });
+            if (!uploaded.ok) throw Error("Upload failed");
+            if (kind !== "track") {
+              const coverInfo =
+                kind === "cover" ? await validateCoverFile(file) : null;
+              await api(API, {
+                method: "POST",
+                body: JSON.stringify({
+                  action: "attach_asset",
+                  product_id: productId,
+                  kind,
+                  path: signed.path,
+                  delivery_filename: file.name,
+                  mime: file.type || null,
+                  width: coverInfo?.width ?? null,
+                  height: coverInfo?.height ?? null,
+                }),
+              });
+            }
+          } else {
+            const beatId = q("uBeat").value;
+            const kind = q("uKind").value;
+            if (!beatId) throw Error("Choose a beat and a file.");
+            if (!["preview", "full"].includes(kind))
+              throw Error("Choose preview or full master.");
+            const signed = await api(API, {
+              method: "POST",
+              body: JSON.stringify({
+                action: "beatbay_signed_upload",
+                beat_id: beatId,
+                kind,
                 filename: file.name,
               }),
             });
-            objectPath = track.track.audio_object_path;
-          }
-          const signed = await api(API, {
-            method: "POST",
-            body: JSON.stringify({
-              action: "signed_upload",
-              product_id: productId,
-              kind,
-              filename: file.name,
-              object_path: objectPath,
-            }),
-          });
-          const uploaded = await fetch(signed.signed_url, {
-            method: "PUT",
-            headers: {
-              "content-type": file.type || "application/octet-stream",
-            },
-            body: file,
-          });
-          if (!uploaded.ok) throw Error("Upload failed");
-          if (kind !== "track") {
-            const coverInfo =
-              kind === "cover" ? await validateCoverFile(file) : null;
+            const uploaded = await fetch(signed.signed_url, {
+              method: "PUT",
+              headers: {
+                "content-type": file.type || "application/octet-stream",
+              },
+              body: file,
+            });
+            if (!uploaded.ok) throw Error("Upload failed");
             await api(API, {
               method: "POST",
               body: JSON.stringify({
-                action: "attach_asset",
-                product_id: productId,
+                action: "beatbay_attach_asset",
+                beat_id: beatId,
                 kind,
                 path: signed.path,
-                delivery_filename: file.name,
-                mime: file.type || null,
-                width: coverInfo?.width ?? null,
-                height: coverInfo?.height ?? null,
+                public_url: signed.public_url,
+                duration_seconds: kind === "preview" ? 30 : null,
+                surface,
               }),
             });
           }
