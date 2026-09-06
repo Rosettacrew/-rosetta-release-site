@@ -147,6 +147,57 @@ async function requireAssignedProduct(
   return !!data;
 }
 
+
+async function assignedBeatIds(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("beatbay_beat_assignees")
+    .select("beat_id")
+    .eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []).map((row: { beat_id: string }) => row.beat_id);
+}
+
+async function requireAssignedBeat(
+  supabase: ReturnType<typeof adminClient>,
+  userId: string,
+  beatId: string,
+) {
+  if (!beatId) return false;
+  const { data, error } = await supabase
+    .from("beatbay_beat_assignees")
+    .select("beat_id")
+    .eq("user_id", userId)
+    .eq("beat_id", beatId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+function publicBeatItem(beat: any, auction: any = null) {
+  return {
+    id: beat.id,
+    beat_code: beat.beat_code,
+    title: beat.title,
+    style: beat.style ?? null,
+    bpm: beat.bpm ?? null,
+    status: beat.status,
+    storefront_enabled: !!beat.storefront_enabled,
+    preview_attached: !!beat.preview_url,
+    full_attached: !!(beat.full_audio_bucket && beat.full_audio_path),
+    auction: auction
+      ? {
+          id: auction.id,
+          status: auction.status,
+          starts_at: auction.starts_at,
+          ends_at: auction.ends_at,
+        }
+      : null,
+  };
+}
+
 async function activityReport(
   supabase: ReturnType<typeof adminClient>,
   session: { user: { id: string; email?: string | null }; admin: { role: string } },
@@ -244,23 +295,53 @@ Deno.serve(async (req: Request) => {
           portal: "music_studio",
           role: session.admin.role,
           email: session.user.email ?? null,
+          surfaces: ["release", "beatbay", "auction"],
         });
       }
-      if (view !== "library") return json({ error: "Forbidden" }, 403);
 
-      const ids = await assignedProductIds(supabase, session.user.id);
-      if (!ids.length) return json({ releases: [], role: session.admin.role });
+      if (view === "library") {
+        const ids = await assignedProductIds(supabase, session.user.id);
+        if (!ids.length) return json({ surface: "release", releases: [], role: session.admin.role });
+        const { data, error } = await supabase
+          .from("release_products")
+          .select("id,artist_name,title,product_type,status,release_at,cover_art_path,preview_path,storage_object_path,tracks:release_tracks(id,track_number,title,audio_bucket,audio_object_path)")
+          .in("id", ids)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return json({
+          surface: "release",
+          releases: (data ?? []).map(publicLibraryItem),
+          role: session.admin.role,
+        });
+      }
 
-      const { data, error } = await supabase
-        .from("release_products")
-        .select("id,artist_name,title,product_type,status,release_at,cover_art_path,preview_path,storage_object_path,tracks:release_tracks(id,track_number,title,audio_bucket,audio_object_path)")
-        .in("id", ids)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return json({
-        releases: (data ?? []).map(publicLibraryItem),
-        role: session.admin.role,
-      });
+      if (view === "beatbay_library" || view === "auction_library") {
+        const ids = await assignedBeatIds(supabase, session.user.id);
+        if (!ids.length) return json({ surface: view === "auction_library" ? "auction" : "beatbay", beats: [], role: session.admin.role });
+        const { data: beats, error } = await supabase
+          .from("beatbay_beats")
+          .select("id,beat_code,title,style,bpm,status,storefront_enabled,preview_url,full_audio_bucket,full_audio_path")
+          .in("id", ids)
+          .order("beat_code");
+        if (error) throw error;
+        const { data: auctions, error: auctionError } = await supabase
+          .from("beatbay_auctions")
+          .select("id,beat_id,status,starts_at,ends_at")
+          .in("beat_id", ids);
+        if (auctionError) throw auctionError;
+        const auctionByBeat = new Map((auctions ?? []).map((row: any) => [row.beat_id, row]));
+        let list = (beats ?? []).map((beat: any) => publicBeatItem(beat, auctionByBeat.get(beat.id) ?? null));
+        if (view === "auction_library") {
+          list = list.filter((beat: any) => beat.auction);
+        }
+        return json({
+          surface: view === "auction_library" ? "auction" : "beatbay",
+          beats: list,
+          role: session.admin.role,
+        });
+      }
+
+      return json({ error: "Forbidden" }, 403);
     }
 
     if (req.method !== "POST") return json({ error: "Method Not Allowed" }, 405);
@@ -407,6 +488,70 @@ Deno.serve(async (req: Request) => {
         details: { kind },
       });
       return json({ release: publicLibraryItem({ ...data, tracks: [] }) });
+    }
+
+
+    if (action === "beatbay_signed_upload") {
+      const beatId = String(body.beat_id ?? "");
+      const kind = String(body.kind ?? "");
+      const filename = String(body.filename ?? "").trim();
+      if (!beatId || !filename || !["preview", "full"].includes(kind)) {
+        return json({ error: "beat_id, filename and kind (preview|full) are required" }, 400);
+      }
+      if (!(await requireAssignedBeat(supabase, session.user.id, beatId))) {
+        return json({ error: "Forbidden" }, 403);
+      }
+      const ext = safeExt(filename);
+      if (!["mp3", "wav"].includes(ext)) return json({ error: "Audio must be MP3 or WAV" }, 400);
+      const bucket = kind === "preview" ? "release-public" : "release-private";
+      const path = `beatbay/${beatId}/${kind}/${crypto.randomUUID()}.${ext}`;
+      const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path, { upsert: false });
+      if (error) throw error;
+      return json({
+        bucket,
+        path,
+        token: data.token,
+        signed_url: data.signedUrl,
+        public_url: kind === "preview"
+          ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${bucket}/${path}`
+          : null,
+      });
+    }
+
+    if (action === "beatbay_attach_asset") {
+      const beatId = String(body.beat_id ?? "");
+      const kind = String(body.kind ?? "");
+      const path = String(body.path ?? "");
+      if (!beatId || !path || !["preview", "full"].includes(kind)) {
+        return json({ error: "beat_id, path and kind (preview|full) are required" }, 400);
+      }
+      if (!(await requireAssignedBeat(supabase, session.user.id, beatId))) {
+        return json({ error: "Forbidden" }, 403);
+      }
+      const changes = kind === "preview"
+        ? {
+            preview_url: String(body.public_url ?? ""),
+            preview_duration_seconds: Number(body.duration_seconds || 30),
+          }
+        : {
+            full_audio_bucket: "release-private",
+            full_audio_path: path,
+          };
+      const { data, error } = await supabase
+        .from("beatbay_beats")
+        .update(changes)
+        .eq("id", beatId)
+        .select("id,beat_code,title,preview_url,full_audio_bucket,full_audio_path")
+        .single();
+      if (error) throw error;
+      await activityReport(supabase, session, {
+        action: "attach_beat_asset",
+        entityType: "beat",
+        entityId: beatId,
+        summary: `Uploaded BeatBay ${kind} audio for ${data.beat_code} — ${data.title}`,
+        details: { kind, surface: String(body.surface ?? "beatbay") },
+      });
+      return json({ beat: publicBeatItem(data) });
     }
 
     return json({ error: "Unknown action" }, 400);
