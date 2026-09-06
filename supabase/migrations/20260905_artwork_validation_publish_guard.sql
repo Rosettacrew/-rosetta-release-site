@@ -10,6 +10,13 @@
 --   cover_art_bucket is release-public (null/blank treated as that default)
 -- Extra moderation flags, checksums, and stored pixel columns are NOT
 -- required. Client UI still enforces 3000 × 3000 before upload.
+--
+-- Extension checks use LIKE, not ~*. A POSIX pattern like
+--   btrim(p_path) ~* '\.(jpe?g|png|webp)$'
+-- is stored/compiled (Postgres string + ARE escaping) as requiring a
+-- literal backslash before the suffix, so a valid Sandbox cover such as
+--   42e87b92-353b-479f-8b95-0d56799bd6e5/cover/cover-85e71111-eaa5-43a9-99d9-78acb0106cd9.png
+-- on release-public returned false and Storefront On raised P0001.
 
 create or replace function public.release_artwork_ready_for_storefront(
   p_path text,
@@ -21,7 +28,12 @@ as $$
   select
     nullif(btrim(coalesce(p_path, '')), '') is not null
     and coalesce(nullif(btrim(coalesce(p_bucket, '')), ''), 'release-public') = 'release-public'
-    and btrim(p_path) ~* '\.(jpe?g|png|webp)$'
+    and (
+      lower(btrim(p_path)) like '%.jpg'
+      or lower(btrim(p_path)) like '%.jpeg'
+      or lower(btrim(p_path)) like '%.png'
+      or lower(btrim(p_path)) like '%.webp'
+    )
 $$;
 
 comment on function public.release_artwork_ready_for_storefront(text, text) is
