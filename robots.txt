@@ -17,3 +17,5 @@ Disallow: /assets/release-station-180.png
 Disallow: /assets/release-station-192.png
 Disallow: /assets/release-station-512.png
 Disallow: /apple-touch-icon.png
+
+Sitemap: https://rosettacrew.com/sitemap.xml
