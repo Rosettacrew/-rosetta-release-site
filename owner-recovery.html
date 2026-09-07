@@ -8,6 +8,15 @@
     />
     <meta name="robots" content="noindex,nofollow" />
     <meta name="theme-color" content="#080808" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Release Station" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <title>Release Station · Reset Password</title>
     <style>
       :root {
@@ -97,6 +106,9 @@
       a {
         color: var(--gold2);
       }
+      .hidden {
+        display: none !important;
+      }
     </style>
   </head>
   <body>
@@ -109,6 +121,17 @@
         Station still requires authenticator verification (AAL2) before
         Overview unlocks.
       </p>
+      <div id="gate" class="hidden">
+        <p id="gateMsg" class="muted msg" aria-live="polite"></p>
+        <p class="muted">
+          <a href="admin-dashboard.html">Back to Release Station sign-in</a>
+        </p>
+        <p>
+          <button id="gateSignOut" class="btn" type="button">
+            Sign out / use a different account
+          </button>
+        </p>
+      </div>
       <form id="form">
         <label for="password">New password</label>
         <input
@@ -145,24 +168,58 @@
         },
       });
       const form = document.getElementById("form");
+      const gate = document.getElementById("gate");
       const submit = document.getElementById("submit");
       const msg = document.getElementById("msg");
+      const gateMsg = document.getElementById("gateMsg");
       let ready = false;
       function setMsg(text, kind) {
         msg.className = "msg " + (kind || "muted");
         msg.textContent = text;
       }
-      sb.auth.onAuthStateChange(async (event, session) => {
-        if (event === "PASSWORD_RECOVERY" || session) {
-          ready = true;
-          setMsg("Choose a new password, then continue to authenticator verification.");
+      function showGate(text) {
+        ready = false;
+        form.classList.add("hidden");
+        gate.classList.remove("hidden");
+        gateMsg.textContent = text;
+      }
+      function showReady() {
+        ready = true;
+        gate.classList.add("hidden");
+        form.classList.remove("hidden");
+        setMsg(
+          "Choose a new password, then continue to authenticator verification.",
+        );
+      }
+      sb.auth.onAuthStateChange(async (event) => {
+        if (event === "PASSWORD_RECOVERY") {
+          showReady();
         }
       });
-      const existing = await sb.auth.getSession();
-      if (existing.data.session) ready = true;
-      if (!ready) {
-        setMsg("Open the reset link from your email to continue.");
+      const fromRecoveryLink =
+        /(?:^|[?#&])type=recovery(?:&|$)/.test(location.hash || "") ||
+        /(?:^|[?&])type=recovery(?:&|$)/.test(location.search || "");
+      await sb.auth.getSession();
+      if (!ready && fromRecoveryLink) {
+        setMsg("Confirming reset link…");
+        await new Promise((r) => setTimeout(r, 600));
       }
+      if (!ready) {
+        const existing = await sb.auth.getSession();
+        if (existing.data.session) {
+          showGate(
+            "Open the password reset link from your email to continue. A normal signed-in session cannot reset a password here.",
+          );
+        } else {
+          setMsg("Open the reset link from your email to continue.");
+        }
+      }
+      document.getElementById("gateSignOut").onclick = async () => {
+        try {
+          await sb.auth.signOut();
+        } catch {}
+        location.replace("admin-dashboard.html");
+      };
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const password = document.getElementById("password").value;
@@ -189,7 +246,10 @@
           submit.disabled = false;
           return;
         }
-        setMsg("Password updated. Opening Release Station for authenticator verification…", "ok");
+        setMsg(
+          "Password updated. Opening Release Station for authenticator verification…",
+          "ok",
+        );
         location.replace("admin-dashboard.html");
       });
     </script>
