@@ -231,6 +231,21 @@ assert.doesNotMatch(studioManager, /release_analytics_summary/);
 assert.doesNotMatch(studioManager, /release_orders/);
 assert.doesNotMatch(studioManager, /STRIPE_SECRET_KEY/);
 assert.doesNotMatch(studioManager, /createCheckout/);
+assert.doesNotMatch(
+  studioManager,
+  /UNLIMITED_UPLOADER_IDS|hasUnlimitedCatalog|unlimited catalog/i,
+  "Every music_uploader must remain scoped to explicit assignments",
+);
+assert.match(
+  studioManager,
+  /const ids = await assignedProductIds\(supabase, session\.user\.id\);/,
+  "Release library access must resolve explicit uploader assignments",
+);
+assert.match(
+  studioManager,
+  /const ids = await assignedBeatIds\(supabase, session\.user\.id\);/,
+  "BeatBay and auction library access must resolve explicit uploader assignments",
+);
 
 const studio = readFileSync("studio/index.html", "utf8");
 assert.match(studio, /<title>Rosetta Crew Music Studio Portal<\/title>/);
