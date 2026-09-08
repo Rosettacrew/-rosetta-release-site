@@ -431,10 +431,6 @@ assert.match(robots, /Disallow: \/password-login\.html/);
 assert.match(robots, /Disallow: \/owner-recovery\.html/);
 assert.match(robots, /Allow: \//);
 
-const studioManager = readFileSync(
-  "supabase/functions/studio-manager/index.ts",
-  "utf8",
-);
 assert.match(studioManager, /function isScopedReleaseAssetPath/);
 assert.match(
   studioManager,
