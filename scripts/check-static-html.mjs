@@ -431,6 +431,28 @@ assert.match(robots, /Disallow: \/password-login\.html/);
 assert.match(robots, /Disallow: \/owner-recovery\.html/);
 assert.match(robots, /Allow: \//);
 
+const studioManager = readFileSync(
+  "supabase/functions/studio-manager/index.ts",
+  "utf8",
+);
+assert.match(studioManager, /function isScopedReleaseAssetPath/);
+assert.match(
+  studioManager,
+  /value\.startsWith\(\`\$\{productId\}\/\$\{rule\.folder\}\/\`\)/,
+);
+assert.match(studioManager, /value\.split\("\/"\)\.includes\("\.\."\)/);
+assert.equal(
+  (studioManager.match(
+    /isScopedReleaseAssetPath\(productId, kind, path\)/g,
+  ) ?? []).length,
+  2,
+  "Signed uploads and asset attachment must both enforce release path scoping",
+);
+assert.match(
+  studioManager,
+  /action === "add_track"[\s\S]*?if \(!\["mp3", "wav"\]\.includes\(ext\)\)/,
+);
+
 const helpers = spawnSync(process.execPath, ["scripts/check-publish-helpers.mjs"], {
   encoding: "utf8",
 });
