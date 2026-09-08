@@ -104,6 +104,33 @@ function safeExt(filename: string) {
   return filename.includes(".") ? filename.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
 }
 
+const RELEASE_ASSET_RULES: Record<string, { folder: string; extensions: readonly string[] }> = {
+  cover: { folder: "cover", extensions: ["jpg", "jpeg", "png", "webp"] },
+  track: { folder: "tracks", extensions: ["mp3", "wav"] },
+  preview: { folder: "preview", extensions: ["mp3", "wav"] },
+  package: { folder: "package", extensions: ["zip"] },
+};
+
+function isScopedReleaseAssetPath(
+  productId: string,
+  kind: string,
+  path: string,
+) {
+  const rule = RELEASE_ASSET_RULES[kind];
+  const value = String(path ?? "").trim();
+  if (
+    !productId ||
+    !rule ||
+    !value ||
+    value.includes("\\") ||
+    value.split("/").includes("..")
+  ) return false;
+  return (
+    value.startsWith(`${productId}/${rule.folder}/`) &&
+    rule.extensions.includes(safeExt(value))
+  );
+}
+
 async function requireMusicUploader(req: Request, supabase: ReturnType<typeof adminClient>) {
   const token = bearerToken(req);
   if (!token) return null;
@@ -377,6 +404,9 @@ Deno.serve(async (req: Request) => {
       } else {
         path = String(body.object_path ?? `${productId}/tracks/${crypto.randomUUID()}.${ext}`);
       }
+      if (!isScopedReleaseAssetPath(productId, kind, path)) {
+        return json({ error: "Upload path must stay inside the assigned release asset folder" }, 400);
+      }
 
       const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path, { upsert: false });
       if (error) throw error;
@@ -402,6 +432,9 @@ Deno.serve(async (req: Request) => {
         return json({ error: "Forbidden" }, 403);
       }
       const ext = safeExt(body.filename ?? "audio.mp3");
+      if (!["mp3", "wav"].includes(ext)) {
+        return json({ error: "Audio must be MP3 or WAV" }, 400);
+      }
       const safeName = slugify(String(body.filename ?? `${trackNumber}-${title}`).replace(/\.[^.]+$/, "")) || `track-${trackNumber}`;
       const path = `${productId}/tracks/${String(trackNumber).padStart(2, "0")}-${safeName}.${ext}`;
       const payload = {
@@ -431,7 +464,12 @@ Deno.serve(async (req: Request) => {
       const productId = String(body.product_id ?? "");
       const kind = String(body.kind ?? "");
       const path = String(body.path ?? "");
-      if (!productId || !path) return json({ error: "product_id and path are required" }, 400);
+      if (!productId || !path || !["cover", "preview", "package"].includes(kind)) {
+        return json({ error: "product_id, path and valid kind are required" }, 400);
+      }
+      if (!isScopedReleaseAssetPath(productId, kind, path)) {
+        return json({ error: "Asset path must stay inside the assigned release asset folder" }, 400);
+      }
       if (!(await requireAssignedProduct(supabase, session.user.id, productId))) {
         return json({ error: "Forbidden" }, 403);
       }
