@@ -131,6 +131,16 @@ function isScopedReleaseAssetPath(
   );
 }
 
+async function storageObjectExists(
+  supabase: ReturnType<typeof adminClient>,
+  bucket: string,
+  path: string,
+) {
+  const { data, error } = await supabase.storage.from(bucket).exists(path);
+  if (error) throw error;
+  return data;
+}
+
 async function requireMusicUploader(req: Request, supabase: ReturnType<typeof adminClient>) {
   const token = bearerToken(req);
   if (!token) return null;
@@ -425,18 +435,19 @@ Deno.serve(async (req: Request) => {
       const productId = String(body.product_id ?? "");
       const title = String(body.title ?? "").trim();
       const trackNumber = Number(body.track_number);
-      if (!productId || !title || !Number.isInteger(trackNumber) || trackNumber < 1) {
-        return json({ error: "product_id, title and track_number are required" }, 400);
+      const path = String(body.object_path ?? "").trim();
+      if (!productId || !title || !Number.isInteger(trackNumber) || trackNumber < 1 || !path) {
+        return json({ error: "product_id, title, track_number and object_path are required" }, 400);
       }
       if (!(await requireAssignedProduct(supabase, session.user.id, productId))) {
         return json({ error: "Forbidden" }, 403);
       }
-      const ext = safeExt(body.filename ?? "audio.mp3");
-      if (!["mp3", "wav"].includes(ext)) {
-        return json({ error: "Audio must be MP3 or WAV" }, 400);
+      if (!isScopedReleaseAssetPath(productId, "track", path)) {
+        return json({ error: "Track path must stay inside the assigned release tracks folder" }, 400);
       }
-      const safeName = slugify(String(body.filename ?? `${trackNumber}-${title}`).replace(/\.[^.]+$/, "")) || `track-${trackNumber}`;
-      const path = `${productId}/tracks/${String(trackNumber).padStart(2, "0")}-${safeName}.${ext}`;
+      if (!(await storageObjectExists(supabase, "release-private", path))) {
+        return json({ error: "Upload the track file before saving track metadata" }, 409);
+      }
       const payload = {
         product_id: productId,
         track_number: trackNumber,
@@ -473,6 +484,10 @@ Deno.serve(async (req: Request) => {
       }
       if (!(await requireAssignedProduct(supabase, session.user.id, productId))) {
         return json({ error: "Forbidden" }, 403);
+      }
+      const bucket = kind === "cover" ? "release-public" : "release-private";
+      if (!(await storageObjectExists(supabase, bucket, path))) {
+        return json({ error: "Upload the asset file before attaching it" }, 409);
       }
       const { data: current, error: currentError } = await supabase
         .from("release_products")
@@ -568,6 +583,10 @@ Deno.serve(async (req: Request) => {
       }
       if (!(await requireAssignedBeat(supabase, session.user.id, beatId))) {
         return json({ error: "Forbidden" }, 403);
+      }
+      const bucket = kind === "preview" ? "release-public" : "release-private";
+      if (!(await storageObjectExists(supabase, bucket, path))) {
+        return json({ error: "Upload the BeatBay audio before attaching it" }, 409);
       }
       const changes = kind === "preview"
         ? {
