@@ -507,6 +507,7 @@ Deno.serve(async (req: Request) => {
       } else if (kind === "preview") {
         changes.preview_path = path;
       } else if (kind === "package") {
+        changes.storage_bucket = "release-private";
         changes.storage_object_path = path;
         changes.delivery_filename = body.delivery_filename ?? path.split("/").pop();
       } else {
