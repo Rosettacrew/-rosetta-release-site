@@ -228,14 +228,14 @@ function publicBeatItem(beat: any, auction: any = null) {
 async function activityReport(
   supabase: ReturnType<typeof adminClient>,
   session: { user: { id: string; email?: string | null }; admin: { role: string } },
-  input: { action: string; entityType: string; entityId?: string | null; summary: string; details?: Record<string, unknown> },
+  input: { surface: "release_station" | "beatbay"; action: string; entityType: string; entityId?: string | null; summary: string; details?: Record<string, unknown> },
 ) {
   try {
     const { data: event, error } = await supabase.from("music_activity_log").insert({
       actor_user_id: session.user.id,
       actor_email: session.user.email ?? null,
       actor_role: session.admin.role,
-      surface: "studio",
+      surface: input.surface,
       action: input.action,
       entity_type: input.entityType,
       entity_id: input.entityId ?? null,
@@ -451,6 +451,7 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await supabase.from("release_tracks").upsert(payload, { onConflict: "product_id,track_number" }).select("id,product_id,track_number,title,audio_object_path").single();
       if (error) throw error;
       await activityReport(supabase, session, {
+        surface: "release_station",
         action: "save_release_track",
         entityType: "track",
         entityId: data.id,
@@ -519,6 +520,7 @@ Deno.serve(async (req: Request) => {
         .single();
       if (error) throw error;
       await activityReport(supabase, session, {
+        surface: "release_station",
         action: "attach_release_asset",
         entityType: "release",
         entityId: productId,
@@ -583,6 +585,7 @@ Deno.serve(async (req: Request) => {
         .single();
       if (error) throw error;
       await activityReport(supabase, session, {
+        surface: "beatbay",
         action: "attach_beat_asset",
         entityType: "beat",
         entityId: beatId,
