@@ -448,6 +448,20 @@ assert.match(
   studioManager,
   /action === "add_track"[\s\S]*?if \(!\["mp3", "wav"\]\.includes\(ext\)\)/,
 );
+assert.doesNotMatch(studioManager, /surface: "studio"/);
+assert.match(studioManager, /surface: input\.surface/);
+assert.match(
+  studioManager,
+  /surface: "release_station"[\s\S]*?action: "save_release_track"/,
+);
+assert.match(
+  studioManager,
+  /surface: "release_station"[\s\S]*?action: "attach_release_asset"/,
+);
+assert.match(
+  studioManager,
+  /surface: "beatbay"[\s\S]*?action: "attach_beat_asset"/,
+);
 
 const helpers = spawnSync(process.execPath, ["scripts/check-publish-helpers.mjs"], {
   encoding: "utf8",
