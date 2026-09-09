@@ -2,14 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="robots" content="noindex,nofollow">
-  <meta http-equiv="refresh" content="0; url=/studio/">
+  <meta name="theme-color" content="#080808">
   <title>Music Studio | Rosetta Crew</title>
-  <link rel="canonical" href="/studio/">
+  <style>
+    :root{--bg:#080808;--panel:#11100e;--gold:#d2ad56;--gold2:#f2d18a;--text:#f5f0e7;--muted:#9a948a;--line:#302b21}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at top,#d2ad5618,transparent 30rem),var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;padding:20px}
+    .card{width:min(520px,100%);padding:28px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
+    .brand{color:var(--gold);font-size:12px;font-weight:900;letter-spacing:.18em}.muted{color:var(--muted);line-height:1.55}h1{margin:10px 0 8px;font:800 clamp(1.8rem,5vw,2.4rem)/1 Georgia,serif}
+    .actions{display:grid;gap:12px;margin-top:22px}.btn,.ghost{display:block;text-align:center;text-decoration:none;min-height:46px;border-radius:11px;padding:12px 14px;font-weight:800}.btn{background:linear-gradient(135deg,var(--gold2),#b67d23);color:#110d06}.ghost{border:1px solid #584b34;background:#111;color:var(--text)}
+  </style>
 </head>
 <body>
-  <p>Music Studio partner access is at <a href="/studio/">/studio/</a>.</p>
-  <script>location.replace("/studio/");</script>
+  <main class="card">
+    <div class="brand">ROSETTA CREW</div>
+    <h1>Music Studio</h1>
+    <p class="muted">Approved music-team access only. Use the studio portal for assigned releases and BeatBay uploads. If this is your first sign-in, use the secure email link first, then create your normal password.</p>
+    <div class="actions">
+      <a class="btn" href="/studio/">Open Music Studio</a>
+      <a class="ghost" href="/studio/password.html">Set / Change Password</a>
+    </div>
+  </main>
 </body>
 </html>
