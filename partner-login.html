@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#080808" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Business Partner Portal | Rosetta Crew</title>
+    <style>
+      :root {
+        --bg: #080808;
+        --panel: #0f0f0f;
+        --primary: #6366f1;
+        --primary-light: #818cf8;
+        --text: #f5f0e7;
+        --muted: #9a948a;
+        --line: #2a2620;
+        --ok: #82d7a0;
+        --bad: #ff8c8c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, #6366f118, transparent 30rem), var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .login-box {
+        max-width: 480px;
+        width: 100%;
+        padding: 40px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+      .brand {
+        color: var(--primary);
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        font-size: 12px;
+        margin-bottom: 8px;
+      }
+      h1 {
+        margin: 12px 0 8px;
+        font: 800 2rem Georgia, serif;
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .intro-text {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 28px;
+      }
+      .form-group {
+        margin-bottom: 18px;
+      }
+      label {
+        display: block;
+        color: var(--primary-light);
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 7px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      input[type="email"],
+      input[type="password"],
+      input[type="text"] {
+        width: 100%;
+        padding: 13px 14px;
+        background: #050505;
+        color: #eee;
+        border: 1px solid #3a3430;
+        border-radius: 10px;
+        font-size: 15px;
+        transition: all 0.2s;
+      }
+      input[type="email"]:focus,
+      input[type="password"]:focus,
+      input[type="text"]:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+      .btn {
+        width: 100%;
+        padding: 13px;
+        margin-top: 8px;
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: white;
+        border: 0;
+        border-radius: 10px;
+        font-weight: 800;
+        font-size: 15px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .btn-secondary {
+        background: #1a1a1e;
+        color: var(--primary-light);
+        border: 1px solid #3a3a42;
+        margin-top: 10px;
+      }
+      .btn-secondary:hover:not(:disabled) {
+        border-color: var(--primary);
+        background: #222228;
+      }
+      .message {
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        line-height: 1.5;
+      }
+      .message.error {
+        background: #1a0f0f;
+        border: 1px solid #5d3030;
+        color: #ffb3b3;
+      }
+      .message.success {
+        background: #0f1a14;
+        border: 1px solid #3f7250;
+        color: #b8e6c7;
+      }
+      .divider {
+        height: 1px;
+        background: var(--line);
+        margin: 24px 0;
+      }
+      .link-section {
+        text-align: center;
+        font-size: 12px;
+      }
+      .link-section a {
+        color: var(--primary-light);
+        text-decoration: none;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .link-section a:hover {
+        text-decoration: underline;
+      }
+      .link-section p {
+        margin: 8px 0;
+        color: var(--muted);
+      }
+      .form-section {
+        display: none;
+      }
+      .form-section.active {
+        display: block;
+      }
+      .loading-spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-right: 8px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .password-strength {
+        margin-top: 8px;
+        font-size: 11px;
+        padding: 8px;
+        border-radius: 6px;
+        background: #1a1a1e;
+        border: 1px solid #3a3a42;
+      }
+      .strength-bar {
+        height: 4px;
+        background: #3a3a42;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 6px;
+      }
+      .strength-fill {
+        height: 100%;
+        background: #ff6b6b;
+        width: 33%;
+        transition: width 0.2s, background 0.2s;
+      }
+      .strength-fill.fair {
+        width: 66%;
+        background: #ffc107;
+      }
+      .strength-fill.good {
+        width: 100%;
+        background: #82d7a0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-container">
+      <div class="login-box">
+        <div class="brand">ROSETTA CREW</div>
+        <h1>Business Partner</h1>
+        <p class="intro-text">
+          Upload and manage your music, beats, and digital products with full control over metadata and pricing.
+        </p>
+
+        <!-- Login Form -->
+        <div id="loginForm" class="form-section active">
+          <div id="loginMsg" class="message hidden"></div>
+
+          <form id="signInForm" onsubmit="handleSignIn(event)">
+            <div class="form-group">
+              <label for="loginEmail">Business Email</label>
+              <input
+                id="loginEmail"
+                type="email"
+                placeholder="your.email@business.com"
+                autocomplete="username"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="loginPassword">Password</label>
+              <input
+                id="loginPassword"
+                type="password"
+                placeholder="Minimum 8 characters"
+                autocomplete="current-password"
+                required
+              />
+            </div>
+
+            <button id="signInBtn" class="btn" type="submit">
+              Sign In
+            </button>
+
+            <button id="sendOtpBtn" class="btn btn-secondary" type="button" onclick="handleSendOTP()">
+              Send sign-in link instead
+            </button>
+          </form>
+
+          <div class="divider"></div>
+
+          <div class="link-section">
+            <p>Forgot your password?</p>
+            <a onclick="showForm('resetForm')">Reset password</a>
+          </div>
+
+          <div style="margin-top: 16px; text-align: center;">
+            <p style="color: var(--muted); font-size: 12px;">
+              <a href="admin-dashboard.html" style="color: #666;">Back to Release Station</a>
+            </p>
+          </div>
+        </div>
+
+        <!-- Password Reset Form -->
+        <div id="resetForm" class="form-section">
+          <div id="resetMsg" class="message hidden"></div>
+
+          <form id="resetPasswordForm" onsubmit="handlePasswordReset(event)">
+            <p style="color: var(--muted); font-size: 13px; margin-bottom: 16px;">
+              Enter your email to receive a password reset link.
+            </p>
+
+            <div class="form-group">
+              <label for="resetEmail">Business Email</label>
+              <input
+                id="resetEmail"
+                type="email"
+                placeholder="your.email@business.com"
+                autocomplete="username"
+                required
+              />
+            </div>
+
+            <button id="resetBtn" class="btn" type="submit">
+              Send Reset Link
+            </button>
+          </form>
+
+          <div class="divider"></div>
+
+          <div class="link-section">
+            <a onclick="showForm('loginForm')">Back to sign in</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+      const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co";
+      const KEY = "sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju";
+
+      const sb = createClient(BASE, KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      });
+
+      window.showForm = function (formId) {
+        document.querySelectorAll(".form-section").forEach((el) => {
+          el.classList.remove("active");
+        });
+        document.getElementById(formId).classList.add("active");
+        document.querySelectorAll(".message").forEach((el) => {
+          el.classList.add("hidden");
+        });
+      };
+
+      function showMessage(elementId, text, type = "error") {
+        const el = document.getElementById(elementId);
+        el.textContent = text;
+        el.className = `message ${type}`;
+        el.classList.remove("hidden");
+      }
+
+      window.handleSignIn = async function (event) {
+        event.preventDefault();
+        const email = document.getElementById("loginEmail").value.trim();
+        const password = document.getElementById("loginPassword").value;
+        const btn = document.getElementById("signInBtn");
+
+        if (!email || !password) {
+          showMessage("loginMsg", "Email and password are required.");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span>Signing in...';
+
+        try {
+          const { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+          if (error) {
+            showMessage("loginMsg", formatAuthError(error), "error");
+            btn.disabled = false;
+            btn.innerHTML = "Sign In";
+            return;
+          }
+
+          if (!data.session?.access_token) {
+            showMessage("loginMsg", "Session setup failed. Try again.", "error");
+            btn.disabled = false;
+            btn.innerHTML = "Sign In";
+            return;
+          }
+
+          showMessage("loginMsg", "Signed in successfully. Redirecting...", "success");
+          setTimeout(() => {
+            window.location.href = "partner-dashboard.html";
+          }, 1500);
+        } catch (error) {
+          showMessage("loginMsg", "Sign-in failed. Please try again.", "error");
+          btn.disabled = false;
+          btn.innerHTML = "Sign In";
+        }
+      };
+
+      window.handleSendOTP = async function () {
+        const email = document.getElementById("loginEmail").value.trim();
+        const btn = document.getElementById("sendOtpBtn");
+
+        if (!email) {
+          showMessage("loginMsg", "Enter your email first.", "error");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span>Sending...';
+
+        try {
+          const { error } = await sb.auth.signInWithOtp({
+            email,
+            options: {
+              emailRedirectTo: location.href,
+              shouldCreateUser: false,
+            },
+          });
+
+          if (error) {
+            showMessage("loginMsg", formatAuthError(error), "error");
+          } else {
+            showMessage("loginMsg", "Sign-in link sent to your email. Check your inbox.", "success");
+          }
+        } catch (error) {
+          showMessage("loginMsg", "Could not send sign-in link.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = "Send sign-in link instead";
+        }
+      };
+
+      window.handlePasswordReset = async function (event) {
+        event.preventDefault();
+        const email = document.getElementById("resetEmail").value.trim();
+        const btn = document.getElementById("resetBtn");
+
+        if (!email) {
+          showMessage("resetMsg", "Email is required.", "error");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span>Sending...';
+
+        try {
+          const { error } = await sb.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.href + "?type=recovery",
+          });
+
+          if (error) {
+            showMessage("resetMsg", formatAuthError(error), "error");
+          } else {
+            showMessage("resetMsg", "Password reset link sent to your email. Check your inbox.", "success");
+            setTimeout(() => {
+              showForm("loginForm");
+            }, 2000);
+          }
+        } catch (error) {
+          showMessage("resetMsg", "Could not send reset link.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = "Send Reset Link";
+        }
+      };
+
+      function formatAuthError(error) {
+        const msg = String(error?.message || "").toLowerCase();
+        if (msg.includes("invalid login")) return "Incorrect email or password.";
+        if (msg.includes("invalid credentials")) return "Incorrect email or password.";
+        if (msg.includes("email not confirmed")) return "Please confirm your email first.";
+        if (msg.includes("user not found")) return "This email is not registered as a business partner.";
+        if (msg.includes("signup") && msg.includes("disabled")) return "Account creation is not available.";
+        if (msg.includes("rate limit")) return "Too many attempts. Wait a few minutes and try again.";
+        return error?.message || "Authentication failed.";
+      }
+
+      // Auto-boot if session exists
+      async function boot() {
+        const { data } = await sb.auth.getSession();
+        if (data.session?.access_token) {
+          window.location.href = "partner-dashboard.html";
+        }
+      }
+
+      sb.auth.onAuthStateChange((event, session) => {
+        if (event === "SIGNED_IN" && session?.access_token) {
+          window.location.href = "partner-dashboard.html";
+        }
+      });
+
+      boot();
+    </script>
+  </body>
+</html>
