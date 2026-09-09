@@ -466,6 +466,18 @@ assert.match(
   studioManager,
   /kind === "package"[\s\S]*?changes\.storage_bucket = "release-private"[\s\S]*?changes\.storage_object_path = path/,
 );
+assert.match(
+  studioManager,
+  /storageObjectExists[\s\S]*?\.storage\.from\(bucket\)\.exists\(path\)/,
+);
+assert.match(
+  studioManager,
+  /action === "add_track"[\s\S]*?object_path[\s\S]*?storageObjectExists\(supabase, "release-private", path\)[\s\S]*?from\("release_tracks"\)\.upsert/,
+);
+assert.match(
+  studio,
+  /action: "signed_upload"[\s\S]*?await fetch\(signed\.signed_url[\s\S]*?action: "add_track"[\s\S]*?object_path: signed\.path/,
+);
 
 const helpers = spawnSync(process.execPath, ["scripts/check-publish-helpers.mjs"], {
   encoding: "utf8",

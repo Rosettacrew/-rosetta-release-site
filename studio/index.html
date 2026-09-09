@@ -837,22 +837,15 @@
             const kind = q("uKind").value;
             if (!productId) throw Error("Choose a release and a file.");
             if (kind === "cover") await validateCoverFile(file);
-            let objectPath = null;
-            if (kind === "track") {
-              const title = q("trackTitle").value.trim();
-              if (!title) throw Error("Track title required");
-              const track = await api(API, {
-                method: "POST",
-                body: JSON.stringify({
-                  action: "add_track",
-                  product_id: productId,
-                  track_number: Number(q("trackNo").value),
-                  title,
-                  filename: file.name,
-                }),
-              });
-              objectPath = track.track.audio_object_path;
-            }
+            const pendingTrack =
+              kind === "track"
+                ? {
+                    trackNumber: Number(q("trackNo").value),
+                    title: q("trackTitle").value.trim(),
+                  }
+                : null;
+            if (pendingTrack && !pendingTrack.title)
+              throw Error("Track title required");
             const signed = await api(API, {
               method: "POST",
               body: JSON.stringify({
@@ -860,7 +853,6 @@
                 product_id: productId,
                 kind,
                 filename: file.name,
-                object_path: objectPath,
               }),
             });
             const uploaded = await fetch(signed.signed_url, {
@@ -871,7 +863,18 @@
               body: file,
             });
             if (!uploaded.ok) throw Error("Upload failed");
-            if (kind !== "track") {
+            if (pendingTrack) {
+              await api(API, {
+                method: "POST",
+                body: JSON.stringify({
+                  action: "add_track",
+                  product_id: productId,
+                  track_number: pendingTrack.trackNumber,
+                  title: pendingTrack.title,
+                  object_path: signed.path,
+                }),
+              });
+            } else {
               const coverInfo =
                 kind === "cover" ? await validateCoverFile(file) : null;
               await api(API, {
