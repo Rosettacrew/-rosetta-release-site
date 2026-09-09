@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#080808" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Partner Dashboard | Rosetta Crew</title>
+    <style>
+      :root {
+        --bg: #080808;
+        --panel: #0f0f0f;
+        --primary: #6366f1;
+        --primary-light: #818cf8;
+        --text: #f5f0e7;
+        --muted: #9a948a;
+        --line: #2a2620;
+        --ok: #82d7a0;
+        --bad: #ff8c8c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      }
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        min-height: 100vh;
+      }
+      .side {
+        background: #0a0a0a;
+        border-right: 1px solid var(--line);
+        padding: 24px 18px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+      }
+      .side-head {
+        margin-bottom: 32px;
+      }
+      .brand {
+        color: var(--primary);
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        font-size: 11px;
+        margin-bottom: 4px;
+      }
+      .subtitle {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .nav {
+        display: grid;
+        gap: 8px;
+      }
+      .nav-btn {
+        padding: 12px;
+        background: #121212;
+        color: #aaa;
+        border: 1px solid #2a2620;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .nav-btn:hover {
+        background: #1a1a1a;
+        color: var(--text);
+      }
+      .nav-btn.active {
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: white;
+        border-color: var(--primary);
+      }
+      .profile-card {
+        margin-top: 32px;
+        padding: 14px;
+        background: #121212;
+        border: 1px solid #2a2620;
+        border-radius: 10px;
+        font-size: 12px;
+      }
+      .profile-card label {
+        color: var(--muted);
+        display: block;
+        margin-bottom: 4px;
+      }
+      .profile-card b {
+        display: block;
+        color: var(--text);
+        margin-bottom: 12px;
+      }
+      .logout-btn {
+        width: 100%;
+        padding: 10px;
+        background: #1a0f0f;
+        color: #ffb3b3;
+        border: 1px solid #5d3030;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 12px;
+      }
+      .logout-btn:hover {
+        background: #220f0f;
+      }
+      .main {
+        padding: 32px;
+        min-width: 0;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 32px;
+        gap: 20px;
+      }
+      .top h1 {
+        margin: 0;
+        font: 800 2rem Georgia, serif;
+      }
+      .section {
+        display: none;
+      }
+      .section.active {
+        display: block;
+      }
+      .card {
+        background: rgba(15, 15, 15, 0.8);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      .card h2 {
+        margin: 0 0 16px;
+        font: 700 1.4rem Georgia, serif;
+        color: var(--text);
+      }
+      .card p {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+        margin: 0 0 16px;
+      }
+      .form {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+      }
+      .form.wide {
+        grid-template-columns: 1fr;
+      }
+      .form-group {
+        display: flex;
+        flex-direction: column;
+      }
+      label {
+        color: var(--primary-light);
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      input,
+      select,
+      textarea {
+        padding: 11px 12px;
+        background: #050505;
+        color: #eee;
+        border: 1px solid #3a3430;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.2s;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+      textarea {
+        resize: vertical;
+        min-height: 90px;
+      }
+      .btn {
+        padding: 12px 20px;
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        color: white;
+        border: 0;
+        border-radius: 8px;
+        font-weight: 800;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .btn-secondary {
+        background: #1a1a1e;
+        color: var(--primary-light);
+        border: 1px solid #3a3a42;
+      }
+      .btn-secondary:hover {
+        border-color: var(--primary);
+        background: #222228;
+      }
+      .list {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 14px;
+        background: #0a0a0a;
+        border: 1px solid #2a2620;
+        border-radius: 10px;
+      }
+      .row-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .row-title {
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 4px;
+      }
+      .row-meta {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .row-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        background: #1a1a1e;
+        border: 1px solid #3a3a42;
+        border-radius: 6px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .badge.ok {
+        background: #0f1a14;
+        border-color: #3f7250;
+        color: var(--ok);
+      }
+      .badge.pending {
+        background: #1a1810;
+        border-color: #6b6b2a;
+        color: #e2bd69;
+      }
+      .message {
+        padding: 14px;
+        border-radius: 10px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        line-height: 1.5;
+      }
+      .message.error {
+        background: #1a0f0f;
+        border: 1px solid #5d3030;
+        color: #ffb3b3;
+      }
+      .message.success {
+        background: #0f1a14;
+        border: 1px solid #3f7250;
+        color: #b8e6c7;
+      }
+      .upload-zone {
+        border: 2px dashed var(--line);
+        border-radius: 10px;
+        padding: 32px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: rgba(99, 102, 241, 0.02);
+      }
+      .upload-zone:hover {
+        border-color: var(--primary);
+        background: rgba(99, 102, 241, 0.05);
+      }
+      .upload-zone.active {
+        border-color: var(--primary);
+        background: rgba(99, 102, 241, 0.08);
+      }
+      .upload-zone p {
+        margin: 0 0 8px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .upload-zone small {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      #fileInput {
+        display: none;
+      }
+      .loading-spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-right: 8px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+      }
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .metric {
+        padding: 16px;
+        background: #0a0a0a;
+        border: 1px solid #2a2620;
+        border-radius: 10px;
+        text-align: center;
+      }
+      .metric-label {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 8px;
+      }
+      .metric-value {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--primary-light);
+      }
+      @media (max-width: 900px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        .side {
+          position: sticky;
+          top: 0;
+          z-index: 40;
+          height: auto;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .grid-2,
+        .grid-4 {
+          grid-template-columns: 1fr;
+        }
+        .form {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <!-- Sidebar -->
+      <aside class="side">
+        <div class="side-head">
+          <div class="brand">ROSETTA CREW</div>
+          <div class="subtitle">Business Partner</div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+            Dashboard
+          </button>
+          <button class="nav-btn" data-tab="upload" onclick="switchTab('upload')">
+            Upload Music
+          </button>
+          <button class="nav-btn" data-tab="library" onclick="switchTab('library')">
+            Your Library
+          </button>
+          <button class="nav-btn" data-tab="settings" onclick="switchTab('settings')">
+            Settings
+          </button>
+        </nav>
+
+        <div class="profile-card">
+          <label>Logged in as</label>
+          <b id="partnerEmail">partner@business.com</b>
+          <button class="logout-btn" onclick="handleLogout()">Sign Out</button>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main">
+        <div class="top">
+          <div>
+            <h1 id="pageTitle">Dashboard</h1>
+            <div id="pageSubtitle" style="color: var(--muted); font-size: 14px;"></div>
+          </div>
+        </div>
+
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section active">
+          <div class="card">
+            <h2>Overview</h2>
+            <div class="grid-4">
+              <div class="metric">
+                <div class="metric-label">Total Uploads</div>
+                <div class="metric-value" id="metricTotal">0</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Published</div>
+                <div class="metric-value" id="metricPublished">0</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Pending Review</div>
+                <div class="metric-value" id="metricPending">0</div>
+              </div>
+              <div class="metric">
+                <div class="metric-label">Total Downloads</div>
+                <div class="metric-value" id="metricDownloads">0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Recent Uploads</h2>
+            <div id="recentList" class="list">
+              <p style="color: var(--muted); text-align: center; margin: 24px 0;">
+                No uploads yet. <a href="#" onclick="switchTab('upload')" style="color: var(--primary-light);">Start uploading now</a>
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Upload Section -->
+        <section id="upload" class="section">
+          <div class="card">
+            <h2>Upload Music</h2>
+            <p>Upload your audio, cover art, and metadata. All fields are required for publication.</p>
+
+            <div id="uploadMsg" class="message hidden"></div>
+
+            <div class="form wide">
+              <!-- Audio File -->
+              <div class="form-group">
+                <label for="audioFile">Audio File (MP3/WAV) *</label>
+                <div class="upload-zone" id="audioZone" onclick="document.getElementById('audioFile').click()">
+                  <p>🎵 Click to upload or drag & drop</p>
+                  <small>MP3 or WAV • Max 100MB</small>
+                </div>
+                <input id="audioFile" type="file" accept=".mp3,.wav" onchange="handleFileSelect(event)" />
+                <small id="audioFileStatus" style="color: var(--muted); margin-top: 6px;"></small>
+              </div>
+
+              <!-- Cover Art -->
+              <div class="form-group">
+                <label for="coverFile">Cover Art (JPG/PNG) *</label>
+                <div class="upload-zone" id="coverZone" onclick="document.getElementById('coverFile').click()">
+                  <p>🖼️ Click to upload or drag & drop</p>
+                  <small>JPG or PNG • 3000×3000px • Max 5MB</small>
+                </div>
+                <input id="coverFile" type="file" accept=".jpg,.jpeg,.png" onchange="handleCoverSelect(event)" />
+                <small id="coverFileStatus" style="color: var(--muted); margin-top: 6px;"></small>
+              </div>
+
+              <!-- Basic Info -->
+              <div class="form-group">
+                <label for="title">Track/Beat Title *</label>
+                <input id="title" type="text" placeholder="e.g., Midnight Dream (Prod. by You)" required />
+              </div>
+
+              <div class="form-group">
+                <label for="artist">Artist Name *</label>
+                <input id="artist" type="text" placeholder="Your artist name" required />
+              </div>
+
+              <!-- Music Details -->
+              <div class="form-group">
+                <label for="genre">Genre *</label>
+                <select id="genre" required>
+                  <option value="">Select a genre</option>
+                  <option value="hip-hop">Hip-Hop / Rap</option>
+                  <option value="trap">Trap</option>
+                  <option value="rnb">R&B / Soul</option>
+                  <option value="electronic">Electronic / EDM</option>
+                  <option value="pop">Pop</option>
+                  <option value="rock">Rock</option>
+                  <option value="jazz">Jazz</option>
+                  <option value="afrobeat">Afrobeat</option>
+                  <option value="drill">Drill</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="style">Style/Mood *</label>
+                <input id="style" type="text" placeholder="e.g., Dark, Aggressive, Chill" required />
+              </div>
+
+              <div class="form-group">
+                <label for="bpm">BPM (Beats Per Minute) *</label>
+                <input id="bpm" type="number" min="40" max="200" placeholder="e.g., 92" required />
+              </div>
+
+              <div class="form-group">
+                <label for="key">Key *</label>
+                <select id="key" required>
+                  <option value="">Select key</option>
+                  <option value="C">C</option>
+                  <option value="C#">C#</option>
+                  <option value="D">D</option>
+                  <option value="D#">D#</option>
+                  <option value="E">E</option>
+                  <option value="F">F</option>
+                  <option value="F#">F#</option>
+                  <option value="G">G</option>
+                  <option value="G#">G#</option>
+                  <option value="A">A</option>
+                  <option value="A#">A#</option>
+                  <option value="B">B</option>
+                </select>
+              </div>
+
+              <!-- Tags -->
+              <div class="form-group" style="grid-column: 1/-1;">
+                <label for="tags">Tags (comma-separated) *</label>
+                <input id="tags" type="text" placeholder="e.g., boom-bap, lofi, soulful, summer" required />
+              </div>
+
+              <!-- Description -->
+              <div class="form-group" style="grid-column: 1/-1;">
+                <label for="description">Description</label>
+                <textarea id="description" placeholder="Add details about your track: production credits, inspiration, samples used, etc."></textarea>
+              </div>
+
+              <!-- Pricing & License -->
+              <div class="form-group">
+                <label for="price">License Price (USD) *</label>
+                <input id="price" type="number" min="0.99" step="0.01" placeholder="e.g., 19.99" required />
+              </div>
+
+              <div class="form-group">
+                <label for="licenseType">License Type *</label>
+                <select id="licenseType" required>
+                  <option value="">Select license type</option>
+                  <option value="exclusive">Exclusive (Full Rights)</option>
+                  <option value="non-exclusive">Non-Exclusive License</option>
+                  <option value="lease">Lease (1-Year)</option>
+                  <option value="free">Free / Promotional</option>
+                </select>
+              </div>
+
+              <!-- Submit -->
+              <div class="form-group" style="grid-column: 1/-1;">
+                <button id="uploadBtn" class="btn" onclick="handleUpload()" style="margin-top: 8px;">
+                  Upload Music
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Library Section -->
+        <section id="library" class="section">
+          <div class="card">
+            <h2>Your Uploads</h2>
+            <p>Manage and view all music you've uploaded. You can only edit content you personally uploaded.</p>
+
+            <div id="libraryMsg" class="message hidden"></div>
+            <div id="libraryList" class="list">
+              <p style="color: var(--muted); text-align: center; margin: 24px 0;">
+                No uploads yet.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings" class="section">
+          <div class="card">
+            <h2>Account Settings</h2>
+            <p>Manage your business partner account.</p>
+
+            <div id="settingsMsg" class="message hidden"></div>
+
+            <form class="form wide" onsubmit="handleUpdateSettings(event)">
+              <div class="form-group">
+                <label for="settingsEmail">Email Address</label>
+                <input id="settingsEmail" type="email" readonly />
+              </div>
+
+              <div class="form-group">
+                <label for="settingsName">Full Name</label>
+                <input id="settingsName" type="text" placeholder="Your name" required />
+              </div>
+
+              <div class="form-group">
+                <label for="settingsCompany">Company/Label</label>
+                <input id="settingsCompany" type="text" placeholder="Your company name" />
+              </div>
+
+              <div class="form-group">
+                <label for="settingsWebsite">Website/Portfolio</label>
+                <input id="settingsWebsite" type="url" placeholder="https://yoursite.com" />
+              </div>
+
+              <button class="btn" type="submit" style="width: 150px; margin-top: 8px;">
+                Save Changes
+              </button>
+            </form>
+
+            <div style="margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line);">
+              <h3 style="margin: 0 0 16px; color: #ff8c8c;">Danger Zone</h3>
+              <p style="color: var(--muted); font-size: 13px; margin-bottom: 16px;">
+                Delete your account and all associated data. This action cannot be undone.
+              </p>
+              <button class="btn btn-secondary" onclick="handleDeleteAccount()" style="border-color: #5d3030; color: #ffb3b3;">
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+      const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co";
+      const KEY = "sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju";
+      const API = BASE + "/functions/v1/partner-manager";
+
+      const sb = createClient(BASE, KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      });
+
+      let currentSession = null;
+      let selectedAudio = null;
+      let selectedCover = null;
+
+      window.switchTab = function (tab) {
+        document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
+        document.getElementById(tab).classList.add("active");
+        document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
+        document.querySelector(`[data-tab="${tab}"]`).classList.add("active");
+
+        const titles = {
+          dashboard: "Dashboard",
+          upload: "Upload Music",
+          library: "Your Library",
+          settings: "Account Settings",
+        };
+        document.getElementById("pageTitle").textContent = titles[tab];
+
+        if (tab === "library") loadLibrary();
+        if (tab === "settings") loadSettings();
+      };
+
+      async function boot() {
+        const { data } = await sb.auth.getSession();
+        if (!data.session?.access_token) {
+          window.location.href = "partner-login.html";
+          return;
+        }
+
+        currentSession = data.session;
+        document.getElementById("partnerEmail").textContent = data.session.user?.email || "Partner";
+
+        // Verify partner role at backend
+        try {
+          const response = await fetch(API + "?view=whoami", {
+            headers: {
+              Authorization: "Bearer " + data.session.access_token,
+              apikey: KEY,
+            },
+          });
+          const result = await response.json();
+
+          if (!response.ok || result.role !== "business_partner") {
+            console.error("Unauthorized role:", result.role);
+            await sb.auth.signOut();
+            window.location.href = "partner-login.html";
+            return;
+          }
+
+          loadDashboard();
+        } catch (error) {
+          console.error("Authorization error:", error);
+          await sb.auth.signOut();
+          window.location.href = "partner-login.html";
+        }
+      }
+
+      async function apiCall(method, body) {
+        if (!currentSession?.access_token) {
+          throw new Error("Not authenticated");
+        }
+
+        const response = await fetch(API, {
+          method,
+          headers: {
+            Authorization: "Bearer " + currentSession.access_token,
+            apikey: KEY,
+            "content-type": "application/json",
+          },
+          body: method === "GET" ? undefined : JSON.stringify(body),
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Request failed");
+        return result;
+      }
+
+      async function loadDashboard() {
+        try {
+          const data = await apiCall("GET", null);
+          document.getElementById("metricTotal").textContent = data.total_uploads || 0;
+          document.getElementById("metricPublished").textContent = data.published || 0;
+          document.getElementById("metricPending").textContent = data.pending || 0;
+          document.getElementById("metricDownloads").textContent = data.total_downloads || 0;
+
+          const recentList = document.getElementById("recentList");
+          if (data.recent && data.recent.length > 0) {
+            recentList.innerHTML = data.recent
+              .map(
+                (item) =>
+                  `<div class="row">
+                <div class="row-info">
+                  <div class="row-title">${escapeHtml(item.title)}</div>
+                  <div class="row-meta">${item.genre} • ${item.bpm} BPM • ${item.status}</div>
+                </div>
+                <div class="row-actions">
+                  <span class="badge ${item.status === 'published' ? 'ok' : 'pending'}">${item.status}</span>
+                </div>
+              </div>`,
+              )
+              .join("");
+          }
+        } catch (error) {
+          console.error("Dashboard load failed:", error);
+        }
+      }
+
+      async function loadLibrary() {
+        try {
+          const data = await apiCall("GET", null);
+          const libraryList = document.getElementById("libraryList");
+
+          if (!data.uploads || data.uploads.length === 0) {
+            libraryList.innerHTML = `<p style="color: var(--muted); text-align: center; margin: 24px 0;">No uploads yet.</p>`;
+            return;
+          }
+
+          libraryList.innerHTML = data.uploads
+            .map(
+              (item) =>
+                `<div class="row">
+              <div class="row-info">
+                <div class="row-title">${escapeHtml(item.title)}</div>
+                <div class="row-meta">
+                  ${escapeHtml(item.artist)} • ${item.genre} • ${item.bpm} BPM
+                  ${item.price ? ' • $' + item.price : ''}
+                </div>
+              </div>
+              <div class="row-actions">
+                <span class="badge ${item.status === 'published' ? 'ok' : 'pending'}">${item.status}</span>
+                <button class="btn btn-secondary" style="padding: 8px 12px; font-size: 12px;" onclick="editUpload('${item.id}')">Edit</button>
+              </div>
+            </div>`,
+            )
+            .join("");
+        } catch (error) {
+          console.error("Library load failed:", error);
+        }
+      }
+
+      async function loadSettings() {
+        try {
+          const data = await apiCall("GET", null);
+          document.getElementById("settingsEmail").value = data.email || "";
+          document.getElementById("settingsName").value = data.name || "";
+          document.getElementById("settingsCompany").value = data.company || "";
+          document.getElementById("settingsWebsite").value = data.website || "";
+        } catch (error) {
+          console.error("Settings load failed:", error);
+        }
+      }
+
+      window.handleFileSelect = function (event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!["audio/mpeg", "audio/wav"].includes(file.type)) {
+          showMessage("uploadMsg", "Audio must be MP3 or WAV format.", "error");
+          return;
+        }
+
+        if (file.size > 100 * 1024 * 1024) {
+          showMessage("uploadMsg", "Audio file must be under 100MB.", "error");
+          return;
+        }
+
+        selectedAudio = file;
+        document.getElementById("audioFileStatus").textContent = `✓ ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`;
+      };
+
+      window.handleCoverSelect = function (event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!["image/jpeg", "image/png"].includes(file.type)) {
+          showMessage("uploadMsg", "Cover must be JPG or PNG format.", "error");
+          return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+          showMessage("uploadMsg", "Cover image must be under 5MB.", "error");
+          return;
+        }
+
+        selectedCover = file;
+        document.getElementById("coverFileStatus").textContent = `✓ ${file.name}`;
+      };
+
+      window.handleUpload = async function () {
+        const title = document.getElementById("title").value.trim();
+        const artist = document.getElementById("artist").value.trim();
+        const genre = document.getElementById("genre").value;
+        const style = document.getElementById("style").value.trim();
+        const bpm = document.getElementById("bpm").value;
+        const key = document.getElementById("key").value;
+        const tags = document.getElementById("tags").value.trim();
+        const price = document.getElementById("price").value;
+        const licenseType = document.getElementById("licenseType").value;
+
+        if (!selectedAudio || !selectedCover || !title || !artist || !genre || !style || !bpm || !key || !tags || !price || !licenseType) {
+          showMessage("uploadMsg", "All required fields must be filled.", "error");
+          return;
+        }
+
+        const btn = document.getElementById("uploadBtn");
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span>Uploading...';
+
+        try {
+          const formData = new FormData();
+          formData.append("audio", selectedAudio);
+          formData.append("cover", selectedCover);
+          formData.append("title", title);
+          formData.append("artist", artist);
+          formData.append("genre", genre);
+          formData.append("style", style);
+          formData.append("bpm", bpm);
+          formData.append("key", key);
+          formData.append("tags", tags);
+          formData.append("description", document.getElementById("description").value);
+          formData.append("price", price);
+          formData.append("licenseType", licenseType);
+
+          const response = await fetch(API + "?action=upload", {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + currentSession.access_token,
+              apikey: KEY,
+            },
+            body: formData,
+          });
+
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error);
+
+          showMessage("uploadMsg", "Music uploaded successfully!", "success");
+          document.getElementById("title").value = "";
+          document.getElementById("artist").value = "";
+          document.getElementById("genre").value = "";
+          document.getElementById("style").value = "";
+          document.getElementById("bpm").value = "";
+          document.getElementById("key").value = "";
+          document.getElementById("tags").value = "";
+          document.getElementById("price").value = "";
+          document.getElementById("licenseType").value = "";
+          document.getElementById("description").value = "";
+          selectedAudio = null;
+          selectedCover = null;
+          document.getElementById("audioFileStatus").textContent = "";
+          document.getElementById("coverFileStatus").textContent = "";
+
+          setTimeout(() => {
+            switchTab("library");
+            loadLibrary();
+          }, 2000);
+        } catch (error) {
+          showMessage("uploadMsg", error.message || "Upload failed.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = "Upload Music";
+        }
+      };
+
+      window.handleUpdateSettings = async function (event) {
+        event.preventDefault();
+        const name = document.getElementById("settingsName").value.trim();
+        const company = document.getElementById("settingsCompany").value.trim();
+        const website = document.getElementById("settingsWebsite").value.trim();
+
+        try {
+          const response = await fetch(API, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + currentSession.access_token,
+              apikey: KEY,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "update_settings",
+              name,
+              company,
+              website,
+            }),
+          });
+
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error);
+
+          showMessage("settingsMsg", "Settings saved successfully!", "success");
+        } catch (error) {
+          showMessage("settingsMsg", error.message || "Failed to save settings.", "error");
+        }
+      };
+
+      window.handleLogout = async function () {
+        await sb.auth.signOut();
+        window.location.href = "partner-login.html";
+      };
+
+      window.handleDeleteAccount = async function () {
+        if (!confirm("Are you sure? This cannot be undone.")) return;
+        if (!confirm("Really delete your account and all data?")) return;
+
+        try {
+          const response = await fetch(API, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer " + currentSession.access_token,
+              apikey: KEY,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ action: "delete_account" }),
+          });
+
+          if (!response.ok) throw new Error("Deletion failed");
+          await sb.auth.signOut();
+          window.location.href = "partner-login.html";
+        } catch (error) {
+          alert(error.message);
+        }
+      };
+
+      window.editUpload = function (uploadId) {
+        alert("Edit feature coming soon for: " + uploadId);
+      };
+
+      function showMessage(elementId, text, type = "error") {
+        const el = document.getElementById(elementId);
+        el.textContent = text;
+        el.className = `message ${type}`;
+        el.classList.remove("hidden");
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      boot();
+    </script>
+  </body>
+</html>
