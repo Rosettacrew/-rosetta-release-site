@@ -462,6 +462,10 @@ assert.match(
   studioManager,
   /surface: "beatbay"[\s\S]*?action: "attach_beat_asset"/,
 );
+assert.match(
+  studioManager,
+  /kind === "package"[\s\S]*?changes\.storage_bucket = "release-private"[\s\S]*?changes\.storage_object_path = path/,
+);
 
 const helpers = spawnSync(process.execPath, ["scripts/check-publish-helpers.mjs"], {
   encoding: "utf8",
