@@ -8,7 +8,7 @@ const files = [
   "beatbay-admin.html",
   "beatbay/index.html",
   "studio/index.html",
-  "music-studio.html",
+  "studio/password.html",
   "password-login.html",
   "owner-recovery.html",
 ];
@@ -178,6 +178,10 @@ const artworkReadyHotfix = readFileSync(
   "supabase/migrations/20260906_artwork_ready_extension_like.sql",
   "utf8",
 );
+const functionSearchPathFix = readFileSync(
+  "supabase/migrations/20260910_fix_function_search_paths.sql",
+  "utf8",
+);
 assert.match(
   artworkGuard,
   /Publish blocked: artwork must pass validation before release/,
@@ -209,6 +213,14 @@ for (const [label, sql] of [
     `${label} must use LIKE suffixes, not POSIX regex (backslash/ARE false negatives)`,
   );
 }
+assert.match(
+  functionSearchPathFix,
+  /alter function public\.release_artwork_ready_for_storefront\(text, text\)[\s\S]*?set search_path = ''/,
+);
+assert.match(
+  functionSearchPathFix,
+  /alter function public\.release_products_artwork_publish_guard\(\)[\s\S]*?set search_path = ''/,
+);
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
 assert.match(
@@ -263,16 +275,34 @@ assert.doesNotMatch(studio, /release-admin-data/);
 assert.doesNotMatch(studio, /release-manager/);
 
 const musicStudio = readFileSync("music-studio.html", "utf8");
+const studioPassword = readFileSync("studio/password.html", "utf8");
 const beatbayManager = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
 const adminPreview = readFileSync("supabase/functions/release-admin-preview/index.ts", "utf8");
 const adminData = readFileSync("supabase/functions/release-admin-data/index.ts", "utf8");
 const socialManager = readFileSync("supabase/functions/release-social-manager/index.ts", "utf8");
-assert.match(musicStudio, /location\.replace\("\/studio\/"\)/);
-assert.match(musicStudio, /<meta http-equiv="refresh" content="0; url=\/studio\/">/);
+assert.match(musicStudio, /href="\/studio\/"/);
+assert.match(musicStudio, /href="\/studio\/password\.html"/);
+assert.doesNotMatch(musicStudio, /http-equiv="refresh"|location\.replace/);
 assert.doesNotMatch(musicStudio, /release-manager|beatbay-manager|release-admin-data/i);
 assert.doesNotMatch(musicStudio, /data-tab="analytics"|data-tab="orders"|STRIPE|checkout/i);
+assert.match(studio, /signInWithPassword/);
+assert.match(studio, /Send password setup \/ reset link/);
+assert.match(studio, /shouldCreateUser:\s*false/);
+assert.match(studio, /href="password\.html"/);
+assert.match(studio, /signOut\(\)/);
+assert.match(studioPassword, /minlength="12"/);
+assert.match(studioPassword, /updateUser\(\{password\}\)/);
+assert.match(studioPassword, /view=whoami/);
+assert.match(studioPassword, /data\.role==="music_uploader"/);
+assert.doesNotMatch(studioPassword, /release-manager|beatbay-manager|release-admin-data/i);
 assert.match(releaseManager, /view === "activity"/);
 assert.match(releaseManager, /hasOwnerAccess\(sessionAdmin, fallbackKey\)/);
+assert.match(releaseManager, /action === "deactivate_uploader"/);
+assert.match(
+  releaseManager,
+  /action === "deactivate_uploader"[\s\S]*?member\.role !== "music_uploader"[\s\S]*?is_active: false/,
+);
+assert.match(admin, /class="secondary deactivateUploader"/);
 assert.match(beatbayManager, /music_uploader is intentionally excluded/);
 assert.doesNotMatch(beatbayManager, /\["owner", "admin", "staff", "music_uploader"\]/);
 assert.match(beatbayManager, /action === "save_auction"/);

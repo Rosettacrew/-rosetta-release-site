@@ -1238,7 +1238,8 @@
               Invite a partner to
               <a href="studio/" style="color: var(--gold2)">/studio/</a>
               as role music_uploader. Then assign them to a release on Edit
-              Release.
+              Release. Disable an account here at any time without changing
+              owner or admin access.
             </p>
             <div class="form">
               <div class="wide">
@@ -1857,17 +1858,18 @@
         try {
           const j = await af(M + "?view=studio_uploaders");
           const uploaders = j.uploaders || [];
-          q("eUploader").innerHTML = uploaders
+          const activeUploaders = uploaders.filter((user) => user.is_active);
+          q("eUploader").innerHTML = activeUploaders
             .map(
               (user) =>
                 `<option value="${esc(user.user_id)}">${esc(user.email || user.user_id)}</option>`,
             )
-            .join("");
+            .join("") || '<option value="">No active uploaders</option>';
           q("studioUploaderList").innerHTML =
             uploaders
               .map(
                 (user) =>
-                  `<div class="row"><div><b>${esc(user.email || user.user_id)}</b><div class="muted">music_uploader</div></div></div>`,
+                  `<div class="row"><div><b>${esc(user.email || user.user_id)}</b><div class="muted">music_uploader · ${user.is_active ? "active" : "disabled"}${user.last_sign_in_at ? ` · last sign-in ${esc(dt(user.last_sign_in_at))}` : " · never signed in"}</div></div><div class="rowActions">${user.is_active ? `<button class="secondary deactivateUploader" data-user="${esc(user.user_id)}" type="button">Disable access</button>` : '<span class="status archived">Disabled</span>'}</div></div>`,
               )
               .join("") ||
             '<div class="muted">No Music Studio partners yet.</div>';
@@ -2374,6 +2376,27 @@
         }
       };
       document.addEventListener("click", async (e) => {
+        const deactivate = e.target.closest(".deactivateUploader");
+        if (deactivate) {
+          const button = deactivate;
+          try {
+            setBusy(button, true, "Disabling…");
+            await af(M, {
+              method: "POST",
+              body: JSON.stringify({
+                action: "deactivate_uploader",
+                user_id: button.dataset.user,
+              }),
+            });
+            toast("Music Studio access disabled.");
+            await loadStudioUploaders();
+          } catch (error) {
+            toast(error, "bad");
+          } finally {
+            setBusy(button, false);
+          }
+          return;
+        }
         const unassign = e.target.closest(".unassignUploader");
         if (unassign) {
           try {
