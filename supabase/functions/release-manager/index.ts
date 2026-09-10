@@ -313,12 +313,18 @@ Deno.serve(async (req: Request) => {
         const { data, error } = await supabase.from("release_admin_users")
           .select("user_id,role,is_active")
           .eq("role", "music_uploader")
-          .eq("is_active", true);
+          .order("created_at", { ascending: true });
         if (error) throw error;
         const uploaders = [];
         for (const row of data ?? []) {
           const { data: userData } = await supabase.auth.admin.getUserById(row.user_id);
-          uploaders.push({ user_id: row.user_id, email: userData.user?.email ?? null, role: row.role });
+          uploaders.push({
+            user_id: row.user_id,
+            email: userData.user?.email ?? null,
+            role: row.role,
+            is_active: !!row.is_active,
+            last_sign_in_at: userData.user?.last_sign_in_at ?? null,
+          });
         }
         return json({ uploaders });
       }
@@ -583,6 +589,33 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, user_id: user.id, email: user.email ?? email, role: "music_uploader" });
     }
 
+    if (action === "deactivate_uploader") {
+      if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
+      const userId = String(body.user_id ?? "");
+      if (!userId) return json({ error: "user_id is required" }, 400);
+      const { data: member, error: memberError } = await supabase.from("release_admin_users")
+        .select("user_id,role,is_active")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (memberError) throw memberError;
+      if (!member || member.role !== "music_uploader") {
+        return json({ error: "Account is not a music_uploader" }, 400);
+      }
+      const { error } = await supabase.from("release_admin_users")
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq("user_id", userId)
+        .eq("role", "music_uploader");
+      if (error) throw error;
+      if (sessionAdmin) await activityReport(supabase, sessionAdmin, {
+        action: "deactivate_uploader",
+        entityType: "account",
+        entityId: userId,
+        summary: "Disabled Music Studio access",
+        details: { user_id: userId },
+      });
+      return json({ ok: true, user_id: userId, is_active: false });
+    }
+
     if (action === "assign_uploader") {
       if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
       const productId = String(body.product_id ?? "");
@@ -624,4 +657,3 @@ Deno.serve(async (req: Request) => {
     return json({ error: formatErrorMessage(error) }, 500);
   }
 });
-

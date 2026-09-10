@@ -105,6 +105,11 @@
       .login .ghost {
         width: 100%;
       }
+      .passwordLink {
+        display: block;
+        text-align: center;
+        text-decoration: none;
+      }
       .login .alt {
         margin: 18px 0 8px;
       }
@@ -323,12 +328,12 @@
           <button id="signin" class="btn" type="submit">Sign in</button>
         </p>
         <p class="muted alt">
-          Optional if you can open the inbox. Password sign-in is the primary
-          method for studio partners.
+          First sign-in or forgot your password? Use a secure email link, then
+          choose Set / Change Password after the portal opens.
         </p>
         <p>
           <button id="send" class="ghost" type="button">
-            Send a sign-in link instead
+            Send password setup / reset link
           </button>
         </p>
         <div id="loginMsg" class="muted" aria-live="polite"></div>
@@ -363,6 +368,11 @@
           Orders, revenue, analytics, delivery, Stripe, and publishing stay
           with the owner.
         </div>
+        <p>
+          <a class="ghost passwordLink" href="password.html">
+            Set / Change Password
+          </a>
+        </p>
       </aside>
       <main class="main">
         <header class="top">
@@ -785,7 +795,7 @@
           setLoginMsg(
             error
               ? authMessage(error, "Could not send a sign-in link.")
-              : "Sign-in link sent. Check your email, or use your password instead.",
+              : "Secure link sent. Open it, then choose Set / Change Password in the portal.",
             error ? "bad" : "ok",
           );
         } catch (error) {
