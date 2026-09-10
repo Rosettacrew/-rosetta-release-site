@@ -9,6 +9,7 @@ Disallow: /owner-recovery.html
 Disallow: /admin.html
 Disallow: /admin-v2.html
 Disallow: /beatbay-admin.html
+Disallow: /analytics-hub.html
 Disallow: /music-studio.html
 Disallow: /manifest.webmanifest
 Disallow: /admin.webmanifest

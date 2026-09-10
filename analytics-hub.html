@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#080808" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Analytics Hub · Rosetta Crew</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+    />
+    <style>
+      :root {
+        --bg: #080808;
+        --panel: #111;
+        --gold: #d2ad56;
+        --gold2: #f2d18a;
+        --text: #f5f0e7;
+        --muted: #999;
+        --line: #302b21;
+        --ok: #82d7a0;
+        --bad: #ff8c8c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top, #d2ad5618, transparent 30rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        min-height: 100vh;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .brand {
+        color: var(--gold);
+        font-weight: 900;
+        letter-spacing: 0.12em;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .shell {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 22px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+      .top h1 {
+        margin: 4px 0 0;
+        font-size: 22px;
+        font-weight: 800;
+      }
+      a.back {
+        color: var(--gold2);
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        border: 1px solid var(--line);
+        background: #171717;
+        border-radius: 10px;
+        padding: 10px 14px;
+      }
+      a.back:hover {
+        border-color: var(--gold);
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin: 14px 0;
+      }
+      .card {
+        background: rgba(17, 17, 17, 0.94);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 16px;
+      }
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .metric b {
+        display: block;
+        margin-top: 6px;
+        font-size: 22px;
+        color: var(--gold2);
+      }
+      .mapWrap {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        background: #0b0b0b;
+        min-height: 480px;
+        height: min(62vh, 640px);
+      }
+      #map {
+        width: 100%;
+        height: 100%;
+        min-height: 480px;
+      }
+      .emptyState {
+        position: absolute;
+        z-index: 2;
+        left: 50%;
+        top: 18px;
+        transform: translateX(-50%);
+        max-width: min(92%, 480px);
+        text-align: center;
+        background: rgba(8, 8, 8, 0.88);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 16px;
+        color: var(--gold2);
+        font-size: 13px;
+        font-weight: 700;
+        pointer-events: none;
+      }
+      .status {
+        margin-top: 12px;
+        min-height: 1.2em;
+      }
+      .status.err {
+        color: var(--bad);
+      }
+      .status.ok {
+        color: var(--ok);
+      }
+      .boot {
+        max-width: 420px;
+        margin: 18vh auto;
+        padding: 24px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        text-align: center;
+      }
+      .maplibregl-popup-content {
+        background: #111 !important;
+        color: var(--text) !important;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 12px;
+        box-shadow: 0 8px 24px #000a;
+      }
+      .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+        border-top-color: #111 !important;
+      }
+      .maplibregl-ctrl-attrib a {
+        color: #888;
+      }
+      @media (max-width: 720px) {
+        .metrics {
+          grid-template-columns: 1fr;
+        }
+        .mapWrap,
+        #map {
+          min-height: 360px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot" class="boot">
+      <div class="brand">ROSETTA CREW</div>
+      <p class="muted" style="margin-top: 10px">Checking owner session…</p>
+      <p id="bootMsg" class="muted" aria-live="polite"></p>
+    </div>
+
+    <div id="app" class="shell hidden">
+      <div class="top">
+        <div>
+          <div class="brand">ROSETTA CREW</div>
+          <h1>Analytics Hub</h1>
+          <div class="muted">Owner-only · Global sales map (country grain)</div>
+        </div>
+        <a class="back" href="admin-dashboard.html">← Release Station</a>
+      </div>
+
+      <div class="metrics" aria-label="Sales KPIs">
+        <div class="card metric">
+          <span>Total orders</span><b id="kpiOrders">—</b>
+        </div>
+        <div class="card metric">
+          <span>Total revenue</span><b id="kpiRevenue">—</b>
+        </div>
+        <div class="card metric">
+          <span>Features</span><b id="kpiFeatures">—</b>
+        </div>
+      </div>
+
+      <div class="mapWrap">
+        <div
+          id="emptyState"
+          class="emptyState hidden"
+          role="status"
+        >
+          No geo sales data yet — map will fill after order_geo backfill
+        </div>
+        <div id="map" role="img" aria-label="Sales map by country"></div>
+      </div>
+      <div id="status" class="status muted" aria-live="polite"></div>
+    </div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+      // Same Supabase client constants as admin-dashboard.html
+      const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co",
+        KEY = "sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju",
+        MAP_FN = BASE + "/functions/v1/analytics-sales-map";
+
+      /**
+       * MAP_TILE_URL — swappable config (MapPort).
+       * Default: OSM raster tiles (no API key). Replace with any MapLibre-compatible
+       * raster tile template or point style.sources at a self-hosted / Protomaps URL later.
+       */
+      const MAP_TILE_URL =
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+      // Common ISO 3166-1 alpha-2 → approximate centroids [lng, lat]
+      const COUNTRY_CENTROIDS = {
+        US: [-98.35, 39.5],
+        CA: [-106.35, 56.13],
+        MX: [-102.55, 23.63],
+        GB: [-3.44, 55.38],
+        IE: [-8.24, 53.41],
+        FR: [2.21, 46.23],
+        DE: [10.45, 51.17],
+        NL: [5.29, 52.13],
+        BE: [4.47, 50.5],
+        ES: [-3.75, 40.46],
+        PT: [-8.22, 39.4],
+        IT: [12.57, 41.87],
+        CH: [8.23, 46.82],
+        AT: [14.55, 47.52],
+        SE: [18.64, 60.13],
+        NO: [8.47, 60.47],
+        DK: [9.5, 56.26],
+        FI: [25.75, 61.92],
+        PL: [19.15, 51.92],
+        CZ: [15.47, 49.82],
+        BR: [-51.93, -14.24],
+        AR: [-63.62, -38.42],
+        CL: [-71.54, -35.68],
+        CO: [-74.3, 4.57],
+        AU: [133.78, -25.27],
+        NZ: [174.89, -40.9],
+        JP: [138.25, 36.2],
+        KR: [127.77, 35.91],
+        CN: [104.2, 35.86],
+        HK: [114.17, 22.32],
+        TW: [120.96, 23.7],
+        IN: [78.96, 20.59],
+        SG: [103.82, 1.35],
+        MY: [101.98, 4.21],
+        ID: [113.92, -0.79],
+        TH: [100.99, 15.87],
+        PH: [121.77, 12.88],
+        VN: [108.28, 14.06],
+        ZA: [22.94, -30.56],
+        AE: [53.85, 23.42],
+        IL: [34.85, 31.05],
+      };
+
+      const sb = createClient(BASE, KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: false,
+        },
+      });
+
+      const q = (id) => document.getElementById(id);
+      const money = (c) =>
+        new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format((Number(c) || 0) / 100);
+
+      function isoDate(d) {
+        return d.toISOString().slice(0, 10);
+      }
+
+      function rangeLast30d() {
+        const to = new Date();
+        const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return { from: isoDate(from), to: isoDate(to) };
+      }
+
+      function redirectLogin() {
+        location.replace("admin-dashboard.html");
+      }
+
+      function setStatus(text, kind) {
+        const el = q("status");
+        el.textContent = text || "";
+        el.className = "status " + (kind || "muted");
+      }
+
+      function osmRasterStyle() {
+        return {
+          version: 8,
+          name: "osm-raster",
+          sources: {
+            osm: {
+              type: "raster",
+              tiles: [MAP_TILE_URL],
+              tileSize: 256,
+              attribution: "© OpenStreetMap contributors",
+              maxzoom: 19,
+            },
+          },
+          layers: [
+            {
+              id: "osm",
+              type: "raster",
+              source: "osm",
+            },
+          ],
+        };
+      }
+
+      function featuresToGeoJSON(features) {
+        const featuresOut = [];
+        for (const f of features || []) {
+          const code = String(f.id || "").toUpperCase();
+          const ll = COUNTRY_CENTROIDS[code];
+          if (!ll) continue; // skip unknown ISO2
+          featuresOut.push({
+            type: "Feature",
+            properties: {
+              id: code,
+              name: f.name || code,
+              orderCount: Number(f.orderCount) || 0,
+              revenueCents: Number(f.revenueCents) || 0,
+            },
+            geometry: { type: "Point", coordinates: ll },
+          });
+        }
+        return { type: "FeatureCollection", features: featuresOut };
+      }
+
+      function circleRadiusExpr() {
+        // Size circles by orderCount (Friday floor)
+        return [
+          "interpolate",
+          ["linear"],
+          ["get", "orderCount"],
+          1,
+          8,
+          5,
+          14,
+          20,
+          22,
+          100,
+          36,
+        ];
+      }
+
+      function mountMap(geojson) {
+        const map = new maplibregl.Map({
+          container: "map",
+          style: osmRasterStyle(),
+          center: [10, 20],
+          zoom: 1.35,
+          attributionControl: true,
+        });
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+        map.on("load", () => {
+          map.addSource("sales", { type: "geojson", data: geojson });
+          map.addLayer({
+            id: "sales-circles",
+            type: "circle",
+            source: "sales",
+            paint: {
+              "circle-radius": circleRadiusExpr(),
+              "circle-color": "#d2ad56",
+              "circle-opacity": 0.78,
+              "circle-stroke-width": 1.5,
+              "circle-stroke-color": "#f2d18a",
+            },
+          });
+
+          const popup = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+          });
+          map.on("mouseenter", "sales-circles", (e) => {
+            map.getCanvas().style.cursor = "pointer";
+            const p = e.features[0].properties;
+            popup
+              .setLngLat(e.features[0].geometry.coordinates)
+              .setHTML(
+                `<strong>${p.name}</strong><br/>Orders: ${p.orderCount}<br/>Revenue: ${money(p.revenueCents)}`,
+              )
+              .addTo(map);
+          });
+          map.on("mouseleave", "sales-circles", () => {
+            map.getCanvas().style.cursor = "";
+            popup.remove();
+          });
+        });
+
+        return map;
+      }
+
+      function applyKpis(features) {
+        const list = features || [];
+        const orders = list.reduce((a, x) => a + (Number(x.orderCount) || 0), 0);
+        const revenue = list.reduce(
+          (a, x) => a + (Number(x.revenueCents) || 0),
+          0,
+        );
+        q("kpiOrders").textContent = String(orders);
+        q("kpiRevenue").textContent = money(revenue);
+        q("kpiFeatures").textContent = String(list.length);
+      }
+
+      async function fetchSalesMap(accessToken) {
+        const { from, to } = rangeLast30d();
+        const url =
+          MAP_FN +
+          "?from=" +
+          encodeURIComponent(from) +
+          "&to=" +
+          encodeURIComponent(to) +
+          "&grain=country";
+        const r = await fetch(url, {
+          headers: {
+            Authorization: "Bearer " + accessToken,
+            apikey: KEY,
+          },
+        });
+        if (r.status === 401 || r.status === 403) {
+          redirectLogin();
+          throw new Error("Unauthorized");
+        }
+        const text = await r.text();
+        let j = {};
+        try {
+          j = text ? JSON.parse(text) : {};
+        } catch {
+          j = { error: text.slice(0, 180) || "Request failed" };
+        }
+        if (!r.ok) {
+          throw new Error(j.error || "analytics-sales-map failed (" + r.status + ")");
+        }
+        return j;
+      }
+
+      async function boot() {
+        const { data, error } = await sb.auth.getSession();
+        if (error || !data.session) {
+          redirectLogin();
+          return;
+        }
+        const sess = data.session;
+        q("boot").classList.add("hidden");
+        q("app").classList.remove("hidden");
+        setStatus("Loading sales map…");
+
+        try {
+          const result = await fetchSalesMap(sess.access_token);
+          const features = Array.isArray(result.features) ? result.features : [];
+          applyKpis(features);
+
+          const empty = features.length === 0;
+          q("emptyState").classList.toggle("hidden", !empty);
+
+          const geojson = featuresToGeoJSON(features);
+          mountMap(geojson);
+
+          if (empty) {
+            setStatus(
+              "Empty features · labeled empty state shown · map mounted",
+              "ok",
+            );
+          } else {
+            const plotted = geojson.features.length;
+            const skipped = features.length - plotted;
+            setStatus(
+              "Loaded " +
+                features.length +
+                " countr" +
+                (features.length === 1 ? "y" : "ies") +
+                (result.generatedAt
+                  ? " · generated " + new Date(result.generatedAt).toLocaleString()
+                  : "") +
+                (skipped > 0 ? " · skipped " + skipped + " unknown ISO2" : ""),
+              "ok",
+            );
+          }
+        } catch (e) {
+          if (String(e.message) === "Unauthorized") return;
+          applyKpis([]);
+          q("emptyState").classList.remove("hidden");
+          mountMap({ type: "FeatureCollection", features: [] });
+          setStatus(String(e.message || e), "err");
+        }
+      }
+
+      boot();
+    </script>
+  </body>
+</html>
