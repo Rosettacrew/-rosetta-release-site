@@ -461,6 +461,11 @@
         releases = [],
         beats = [],
         surface = "release";
+      // Only clear memory sess on real Sign out clicks — ignore spurious
+      // SIGNED_OUT from getSession/_removeSession during login/boot races.
+      let explicitSignOut = false;
+      let bootRunning = 0;
+      let passwordBootQueued = false;
       const q = (id) => document.getElementById(id);
       const esc = (s) =>
         String(s ?? "").replace(
@@ -488,19 +493,37 @@
         return sess?.access_token ? sess : data.session;
       }
       async function api(url, opt = {}) {
-        const session = await ensureSession();
+        // Memory-first: never wait on getSession when we already have a JWT.
+        const session = sess?.access_token ? sess : await ensureSession();
         if (!session?.access_token) throw Error("Not signed in");
+        // Snapshot token so a concurrent SIGNED_OUT cannot blank Authorization.
+        const token = session.access_token;
         const r = await fetch(url, {
           ...opt,
           headers: {
             ...(opt.headers || {}),
-            Authorization: "Bearer " + session.access_token,
+            Authorization: "Bearer " + token,
             apikey: KEY,
             "content-type": "application/json",
           },
         });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw Error(j.error || "Request failed");
+        if (!r.ok) {
+          const errMsg = j.error || "Request failed";
+          // Edge returns this 403 when the Authorization session is missing/
+          // rejected. If we still held a memory JWT, surface that clearly
+          // instead of looking like a signed-out / ACL UI state.
+          if (
+            r.status === 403 &&
+            errMsg === "Music Studio access required" &&
+            token
+          ) {
+            throw Error(
+              "Session rejected by Music Studio. Sign out and sign in again.",
+            );
+          }
+          throw Error(errMsg);
+        }
         return j;
       }
       function goto(tab) {
@@ -628,7 +651,9 @@
         q("libraryList").innerHTML = '<div class="muted">Loading…</div>';
         try {
           // Confirm the shared Music Studio session before each surface fetch.
-          const session = await ensureSession();
+          // Memory-first — do not call getSession when login/whoami already
+          // left a JWT in sess (avoids SIGNED_OUT races on mode switch).
+          const session = sess?.access_token ? sess : await ensureSession();
           if (!session?.access_token) throw Error("Not signed in");
           sess = session;
           if (forSurface === "release") {
@@ -683,39 +708,51 @@
       async function boot() {
         // Serialize boots so a newer run cannot strand Loading after whoami.
         const run = async () => {
-          const session = await ensureSession();
-          // Never assign a null/missing session over a newer in-memory login.
-          if (session?.access_token) sess = session;
-          if (!sess?.access_token) return;
-          q("login").classList.add("hidden");
-          let whoamiOk = false;
+          bootRunning++;
           try {
-            const me = await api(API + "?view=whoami");
-            if (me.role !== "music_uploader")
-              throw Error("Music Studio access required");
-            q("denied").classList.add("hidden");
-            q("app").classList.remove("hidden");
-            q("who").textContent =
-              (sess.user?.email || me.email || "Studio account") +
-              " · music_uploader";
-            whoamiOk = true;
-            await loadLibrary(surface);
-          } catch (error) {
-            // Access-denied race: another boot/sign-out may clear the session.
-            const still = await ensureSession();
-            if (whoamiOk) {
-              // App already shown — never silent-return leaving Loading.
-              q("libraryList").innerHTML =
-                `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;
-              if (still?.access_token) sess = still;
-              return;
+            // Prefer memory JWT; avoid getSession when login already set sess.
+            const session = sess?.access_token ? sess : await ensureSession();
+            // Never assign a null/missing session over a newer in-memory login.
+            if (session?.access_token) sess = session;
+            if (!sess?.access_token) return;
+            q("login").classList.add("hidden");
+            let whoamiOk = false;
+            try {
+              const me = await api(API + "?view=whoami");
+              if (me.role !== "music_uploader")
+                throw Error("Music Studio access required");
+              // Capture token after whoami so library uses the same JWT even
+              // if a later auth event races the in-memory sess reference.
+              const token = sess.access_token;
+              if (!token) throw Error("Not signed in");
+              q("denied").classList.add("hidden");
+              q("app").classList.remove("hidden");
+              q("who").textContent =
+                (sess.user?.email || me.email || "Studio account") +
+                " · music_uploader";
+              whoamiOk = true;
+              await loadLibrary(surface);
+            } catch (error) {
+              // Access-denied race: another boot/sign-out may clear the session.
+              // If memory sess still has a token, do not call getSession in
+              // catch — that path can emit spurious SIGNED_OUT.
+              const still = sess?.access_token ? sess : await ensureSession();
+              if (whoamiOk) {
+                // App already shown — never silent-return leaving Loading.
+                q("libraryList").innerHTML =
+                  `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;
+                if (still?.access_token) sess = still;
+                return;
+              }
+              if (!still?.access_token) return;
+              sess = still;
+              showDenied(
+                error.message ||
+                  "This portal is for approved Music Studio accounts only.",
+              );
             }
-            if (!still?.access_token) return;
-            sess = still;
-            showDenied(
-              error.message ||
-                "This portal is for approved Music Studio accounts only.",
-            );
+          } finally {
+            bootRunning--;
           }
         };
         const queued = bootQueue.then(run, run);
@@ -778,11 +815,10 @@
             );
             return;
           }
+          // Set memory sess BEFORE bootQueue runs. Do not await getSession()
+          // here — it can emit SIGNED_OUT while storage settles and wipe sess
+          // before whoami/library.
           sess = data.session;
-          if (!sess?.access_token) {
-            const refreshed = await sb.auth.getSession();
-            sess = refreshed.data.session;
-          }
           if (!sess?.access_token) {
             setLoginMsg(
               "Signed in, but the session was not ready. Refresh and try again.",
@@ -790,8 +826,14 @@
             );
             return;
           }
+          explicitSignOut = false;
+          passwordBootQueued = true;
           setLoginMsg("Signed in. Opening Music Studio…", "ok");
-          await boot();
+          try {
+            await boot();
+          } finally {
+            passwordBootQueued = false;
+          }
         } catch (error) {
           q("password").value = "";
           setLoginMsg(
@@ -837,6 +879,8 @@
         }
       };
       q("out").onclick = q("deniedOut").onclick = async () => {
+        explicitSignOut = true;
+        sess = null;
         await sb.auth.signOut();
         location.reload();
       };
@@ -978,10 +1022,23 @@
         }
       };
       sb.auth.onAuthStateChange((event, next) => {
-        if (next?.access_token) sess = next;
-        else if (event === "SIGNED_OUT") sess = null;
+        if (next?.access_token) {
+          sess = next;
+        } else if (event === "SIGNED_OUT") {
+          // Ignore spurious SIGNED_OUT during login/boot (storage races).
+          // Only clear when the user clicked Sign out.
+          if (explicitSignOut) sess = null;
+        }
         // Password sign-in calls boot() itself. Only auto-boot restored sessions.
-        if (event === "INITIAL_SESSION" && next?.access_token) boot();
+        // Skip INITIAL_SESSION while password login already queued/running boot.
+        if (
+          event === "INITIAL_SESSION" &&
+          next?.access_token &&
+          !passwordBootQueued &&
+          bootRunning === 0
+        ) {
+          boot();
+        }
       });
       boot();
     </script>
