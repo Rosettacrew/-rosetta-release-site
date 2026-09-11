@@ -677,10 +677,10 @@
             q("app").classList.remove("hidden");
             q("who").textContent =
               (sess.user?.email || me.email || "Studio account") +
-              " · music_uploader";
-            whoamiOk = true;             await loadLibrary();
+              " · music_uploader"; whoamiOk = true;
+            await loadLibrary();
           } catch (error) {
-            // Access-denied race: another boot/sign-out may clear the session.             const still = await ensureSession();             if (whoamiOk) {               // App already shown — never silent-return leaving Loading.               q("libraryList").innerHTML =                 `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;               if (still?.access_token) sess = still;               return;             }
+            const still = await ensureSession(); if (whoamiOk) { q("libraryList").innerHTML = `<div class="muted">${esc(error.message || "Could not load library.")}</div>`; if (still?.access_token) sess = still; return; }
             if (!still?.access_token) return;
             sess = still;
             showDenied(
@@ -817,7 +817,7 @@
           syncSurfaceUi();
           q("upMsg").textContent = "";
           try {
-            whoamiOk = true;             await loadLibrary();
+            await loadLibrary();
           } catch (error) {
             q("libraryList").innerHTML =
               `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;
