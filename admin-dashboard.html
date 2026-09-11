@@ -281,8 +281,20 @@
         color: var(--ok);
       }
       .draft,
-      .archived {
+      .archived,
+      .not_connected {
         color: #aaa;
+      }
+      .social .muted {
+        font-size: 11px;
+        margin: 8px 0 0;
+        line-height: 1.35;
+      }
+      .social .connectNext {
+        margin-top: 8px;
+        opacity: 0.55;
+        cursor: not-allowed;
+        pointer-events: none;
       }
       .form {
         display: grid;
@@ -1196,7 +1208,14 @@
           </div>
         </section>
         <section id="promote" class="section">
-          <div id="socials" class="socials"></div>
+          <div class="card" style="margin-bottom:12px">
+            <h2>Social accounts</h2>
+            <p class="muted">
+              Connection status for Publish &amp; Promote. OAuth Connect ships
+              next — drafts can still be saved for manual posting.
+            </p>
+            <div id="socials" class="socials"></div>
+          </div>
           <div class="card">
             <h2>Promotion Draft</h2>
             <div class="form">
@@ -1964,12 +1983,24 @@
       }
       async function social() {
         const j = await af(S);
-        q("socials").innerHTML = (j.accounts || [])
-          .map(
-            (s) =>
-              `<div class="social"><b>${esc(s.account_label || s.provider)}</b><p><span class="status ${esc(s.connection_status)}">${esc(String(s.connection_status).replaceAll("_", " "))}</span></p></div>`,
-          )
-          .join("");
+        const accounts = j.accounts || [];
+        if (!accounts.length) {
+          q("socials").innerHTML =
+            '<div class="muted" style="grid-column:1/-1">No social accounts yet. Connection status will appear here.</div>';
+        } else {
+          q("socials").innerHTML = accounts
+            .map((s) => {
+              const status = String(s.connection_status || "not_connected");
+              const label = esc(s.account_label || s.provider);
+              const statusLabel = esc(status.replaceAll("_", " "));
+              const notConnected = status === "not_connected";
+              const hint = notConnected
+                ? `<p class="muted">Connect via OAuth — coming next. Drafts can still be saved for manual posting.</p><button type="button" class="secondary connectNext" aria-disabled="true" disabled>Connect (next)</button>`
+                : "";
+              return `<div class="social"><b>${label}</b><p><span class="status ${esc(status)}">${statusLabel}</span></p>${hint}</div>`;
+            })
+            .join("");
+        }
         q("promoList").innerHTML =
           (j.posts || [])
             .map(
