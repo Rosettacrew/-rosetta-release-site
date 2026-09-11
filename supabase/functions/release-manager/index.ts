@@ -165,6 +165,39 @@ function artworkReadyForStorefront(product: any) {
 const ARTWORK_PUBLISH_BLOCKED =
   "Publish blocked: artwork must pass validation before release. Upload a 3000 × 3000 JPG, PNG, or WebP cover to release-public and save it so cover_art_path is set, then try Storefront On again.";
 
+/** Stripe live Payment Links look like buy.stripe.com/<id>; test mode uses /test_<id>. */
+function isStripeTestPaymentLink(url: unknown) {
+  const link = String(url ?? "").trim();
+  if (!link) return false;
+  if (/\/test_/i.test(link)) return true;
+  if (/buy\.stripe\.com\/test/i.test(link)) return true;
+  try {
+    const parsed = new URL(link);
+    if (/stripe\.com$/i.test(parsed.hostname) && /^\/test([_/]|$)/i.test(parsed.pathname)) return true;
+  } catch {
+    /* ignore invalid URLs */
+  }
+  return false;
+}
+
+function looksLikeSandboxProduct(title: unknown, slug: unknown) {
+  return /sandbox/i.test(String(title ?? "")) || /sandbox/i.test(String(slug ?? ""));
+}
+
+const TEST_PAYMENT_LINK_REJECTED =
+  "Stripe test Payment Links cannot be published to the public storefront. Use a live-mode Payment Link (buy.stripe.com/… without /test_).";
+const SANDBOX_STOREFRONT_REJECTED =
+  "Sandbox / test products cannot be enabled on the public storefront. Remove \"sandbox\" from the title and slug, or keep Storefront Off.";
+
+/** Returns a 400 error message when this product must not go public; otherwise null. */
+function publicStorefrontRejectReason(product: { title?: unknown; slug?: unknown; stripe_payment_link_url?: unknown }, opts?: { paymentLink?: unknown }) {
+  const link = opts?.paymentLink !== undefined ? opts.paymentLink : product?.stripe_payment_link_url;
+  if (isStripeTestPaymentLink(link)) return TEST_PAYMENT_LINK_REJECTED;
+  if (looksLikeSandboxProduct(product?.title, product?.slug)) return SANDBOX_STOREFRONT_REJECTED;
+  return null;
+}
+
+
 function productMetadata(product: any) {
   const metadata = product?.metadata;
   return metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {};
@@ -381,7 +414,15 @@ Deno.serve(async (req: Request) => {
       if (presale == null && regular == null) return json({ error: "A price is required" }, 400);
       const productType = normalizeProductType(body.product_type ?? "single");
       if (!productType) return json({ error: "product_type must be single, ep, album, beat, or digital_product" }, 400);
-      const payload = { slug: slugify(String(body.slug || `${artist}-${title}`)), artist_name: artist, title, product_type: productType, description: body.description ?? null, presale_price_cents: presale ?? regular, release_price_cents: regular, currency: String(body.currency ?? "usd").toLowerCase(), release_at: releaseAt.toISOString(), preorder_starts_at: body.preorder_starts_at ? new Date(body.preorder_starts_at).toISOString() : new Date().toISOString(), preorder_ends_at: body.preorder_ends_at ? new Date(body.preorder_ends_at).toISOString() : releaseAt.toISOString(), status: body.status ?? "draft", storefront_enabled: body.storefront_enabled !== false, cover_art_bucket: "release-public", storage_bucket: "release-private", artist_type: normalizeArtistType(body.artist_type), metadata: body.metadata ?? {} };
+      const slug = slugify(String(body.slug || `${artist}-${title}`));
+      const storefrontEnabled = body.storefront_enabled !== false;
+      const createStatus = String(body.status ?? "draft");
+      // Draft sandbox rows are allowed; only block when create would place them on the public storefront.
+      if (storefrontEnabled && ["live", "presale"].includes(createStatus)) {
+        const reject = publicStorefrontRejectReason({ title, slug });
+        if (reject) return json({ error: reject }, 400);
+      }
+      const payload = { slug, artist_name: artist, title, product_type: productType, description: body.description ?? null, presale_price_cents: presale ?? regular, release_price_cents: regular, currency: String(body.currency ?? "usd").toLowerCase(), release_at: releaseAt.toISOString(), preorder_starts_at: body.preorder_starts_at ? new Date(body.preorder_starts_at).toISOString() : new Date().toISOString(), preorder_ends_at: body.preorder_ends_at ? new Date(body.preorder_ends_at).toISOString() : releaseAt.toISOString(), status: body.status ?? "draft", storefront_enabled: storefrontEnabled, cover_art_bucket: "release-public", storage_bucket: "release-private", artist_type: normalizeArtistType(body.artist_type), metadata: body.metadata ?? {} };
       const { data, error } = await supabase.from("release_products").insert(payload).select("*").single();
       if (error) throw error;
       const artistContact = await syncArtistContact(supabase, data.id, data.artist_type, body.artist_contact);
@@ -399,6 +440,23 @@ Deno.serve(async (req: Request) => {
         changes.product_type = productType;
       }
       if (body.artist_type !== undefined) changes.artist_type = normalizeArtistType(body.artist_type);
+      const touchingPublicIdentity = changes.storefront_enabled === true || body.title !== undefined || body.slug !== undefined || body.status !== undefined || "storefront_enabled" in changes;
+      if (touchingPublicIdentity) {
+        const { data: current, error: currentError } = await supabase.from("release_products")
+          .select("title,slug,status,storefront_enabled,stripe_payment_link_url")
+          .eq("id", id)
+          .single();
+        if (currentError) throw currentError;
+        const nextTitle = body.title !== undefined ? body.title : current.title;
+        const nextSlug = body.slug !== undefined ? slugify(String(body.slug)) : current.slug;
+        const nextEnabled = changes.storefront_enabled !== undefined ? !!changes.storefront_enabled : !!current.storefront_enabled;
+        if (nextEnabled) {
+          const reject = publicStorefrontRejectReason(
+            { title: nextTitle, slug: nextSlug, stripe_payment_link_url: current.stripe_payment_link_url },
+          );
+          if (reject) return json({ error: reject }, 400);
+        }
+      }
       const { data, error } = await supabase.from("release_products").update(changes).eq("id", id).select("*").single();
       if (error) throw error;
       let artistContact = null;
@@ -524,11 +582,18 @@ Deno.serve(async (req: Request) => {
       if (activeCheckoutPrice(product) == null) {
         return json({ error: "Set a regular or pre-sale price greater than $0.00 before turning Storefront On." }, 400);
       }
+      {
+        const reject = publicStorefrontRejectReason(product);
+        if (reject) return json({ error: reject }, 400);
+      }
       let stripe = null;
       const now = new Date().toISOString();
       const status = nextStorefrontStatus(product);
       if (!product.stripe_payment_link_url || body.force_new_checkout === true) {
         stripe = await createCheckout(product);
+        if (isStripeTestPaymentLink(stripe?.link?.url)) {
+          return json({ error: TEST_PAYMENT_LINK_REJECTED + " release-manager STRIPE_SECRET_KEY appears to be a test-mode key (sk_test_…). Use the live secret key." }, 400);
+        }
         const published = {
           stripe_payment_link_id: stripe.link.id,
           stripe_payment_link_url: stripe.link.url,
