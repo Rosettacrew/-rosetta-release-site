@@ -21,7 +21,16 @@ Deno.serve(async(req:Request)=>{
       .limit(20);
     if(error)throw error;
     const base=Deno.env.get("SUPABASE_URL")!;
-    const releases=(data??[]).map((r:any)=>({
+    // Defense-in-depth: never expose sandbox releases or Stripe test links publicly,
+    // even if a bad row is accidentally marked storefront_enabled/live.
+    const publicData=(data??[]).filter((r:any)=>{
+      const link=String(r.stripe_payment_link_url??"");
+      const title=String(r.title??"");
+      const slug=String(r.slug??"");
+      // Stripe test Payment Links use /test_… on buy.stripe.com (also match buy.stripe.com/test).
+      return !/\/test_/i.test(link) && !/buy\.stripe\.com\/test/i.test(link) && !/sandbox/i.test(title) && !/sandbox/i.test(slug);
+    });
+    const releases=publicData.map((r:any)=>({
       id:r.id,slug:r.slug,artist_name:r.artist_name,artist_type:r.artist_type??null,title:r.title,product_type:r.product_type,description:r.description,
       price_cents:r.status==="presale"&&r.presale_price_cents!=null?r.presale_price_cents:(r.release_price_cents??r.presale_price_cents),
       release_price_cents:r.release_price_cents,presale_price_cents:r.presale_price_cents,currency:r.currency??"usd",release_at:r.release_at,status:r.status,published_at:r.published_at,is_featured:!!r.is_featured,featured_at:r.featured_at,
