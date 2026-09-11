@@ -476,6 +476,13 @@
         );
       let bootQueue = Promise.resolve();
       async function ensureSession() {
+        // Prefer the in-memory session from sign-in / onAuthStateChange.
+        // Always awaiting getSession() first re-reads localStorage and can:
+        // 1) return null when persistence lagged, and
+        // 2) emit SIGNED_OUT via _removeSession on invalid storage,
+        // which clears `sess` and makes BeatBay / Live Auction mode
+        // switches throw "Not signed in" even after Release library worked.
+        if (sess?.access_token) return sess;
         const { data } = await sb.auth.getSession();
         if (data.session?.access_token) sess = data.session;
         return sess?.access_token ? sess : data.session;
@@ -617,19 +624,30 @@
           .join("");
         if (beats.some((beat) => beat.id === previous)) q("uBeat").value = previous;
       }
-      async function loadLibrary() {         q("libraryList").innerHTML = '<div class="muted">Loading…</div>';         try {
-        if (surface === "release") {
-          const data = await api(API + "?view=library");
-          releases = data.releases || [];
-          beats = [];
-        } else {
-          const view =
-            surface === "auction" ? "auction_library" : "beatbay_library";
-          const data = await api(API + "?view=" + view);
-          beats = data.beats || [];
-          releases = [];
+      async function loadLibrary(forSurface = surface) {
+        q("libraryList").innerHTML = '<div class="muted">Loading…</div>';
+        try {
+          // Confirm the shared Music Studio session before each surface fetch.
+          const session = await ensureSession();
+          if (!session?.access_token) throw Error("Not signed in");
+          sess = session;
+          if (forSurface === "release") {
+            const data = await api(API + "?view=library");
+            releases = data.releases || [];
+            beats = [];
+          } else {
+            const view =
+              forSurface === "auction" ? "auction_library" : "beatbay_library";
+            const data = await api(API + "?view=" + view);
+            beats = data.beats || [];
+            releases = [];
+          }
+          // Empty catalogs must clear Loading via render()'s empty-state copy.
+          render();
+        } catch (error) {
+          q("libraryList").innerHTML =
+            `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;
         }
-          render();         } catch (error) {           q("libraryList").innerHTML =             `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;         }
       }
       async function validateCoverFile(file) {
         if (
@@ -666,9 +684,11 @@
         // Serialize boots so a newer run cannot strand Loading after whoami.
         const run = async () => {
           const session = await ensureSession();
-          sess = session;
+          // Never assign a null/missing session over a newer in-memory login.
+          if (session?.access_token) sess = session;
           if (!sess?.access_token) return;
-          q("login").classList.add("hidden");           let whoamiOk = false;
+          q("login").classList.add("hidden");
+          let whoamiOk = false;
           try {
             const me = await api(API + "?view=whoami");
             if (me.role !== "music_uploader")
@@ -677,10 +697,19 @@
             q("app").classList.remove("hidden");
             q("who").textContent =
               (sess.user?.email || me.email || "Studio account") +
-              " · music_uploader"; whoamiOk = true;
-            await loadLibrary();
+              " · music_uploader";
+            whoamiOk = true;
+            await loadLibrary(surface);
           } catch (error) {
-            const still = await ensureSession(); if (whoamiOk) { q("libraryList").innerHTML = `<div class="muted">${esc(error.message || "Could not load library.")}</div>`; if (still?.access_token) sess = still; return; }
+            // Access-denied race: another boot/sign-out may clear the session.
+            const still = await ensureSession();
+            if (whoamiOk) {
+              // App already shown — never silent-return leaving Loading.
+              q("libraryList").innerHTML =
+                `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;
+              if (still?.access_token) sess = still;
+              return;
+            }
             if (!still?.access_token) return;
             sess = still;
             showDenied(
@@ -813,11 +842,13 @@
       };
       document.querySelectorAll("[data-surface]").forEach((btn) => {
         btn.onclick = async () => {
-          surface = btn.dataset.surface;
+          const nextSurface = btn.dataset.surface;
+          surface = nextSurface;
           syncSurfaceUi();
           q("upMsg").textContent = "";
           try {
-            await loadLibrary();
+            // Reuse the same signed-in sess for every surface; do not re-login.
+            await loadLibrary(nextSurface);
           } catch (error) {
             q("libraryList").innerHTML =
               `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;
