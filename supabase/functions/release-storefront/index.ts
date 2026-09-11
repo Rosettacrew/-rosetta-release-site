@@ -10,7 +10,6 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=="GET")return json({error:"Method Not Allowed"},405);
   try{
     const supabase=adminClient();
-    const {data,error}=await supabase.from("release_products")
       .select("id,slug,artist_name,artist_type,title,product_type,description,presale_price_cents,release_price_cents,currency,release_at,status,published_at,cover_art_bucket,cover_art_path,stripe_payment_link_url,is_featured,featured_at")
       .eq("storefront_enabled",true)
       .in("status",["live","presale"])
@@ -35,9 +34,9 @@ Deno.serve(async(req:Request)=>{
       price_cents:r.status==="presale"&&r.presale_price_cents!=null?r.presale_price_cents:(r.release_price_cents??r.presale_price_cents),
       release_price_cents:r.release_price_cents,presale_price_cents:r.presale_price_cents,currency:r.currency??"usd",release_at:r.release_at,status:r.status,published_at:r.published_at,is_featured:!!r.is_featured,featured_at:r.featured_at,
       cover_url:r.cover_art_bucket==="release-public"&&r.cover_art_path?`${base}/storage/v1/object/public/release-public/${r.cover_art_path}`:null,
-      checkout_url:r.stripe_payment_link_url||null
+      checkout_url:r.stripe_payment_link_url||null,
+      support_enabled:true
     })).filter((r:any)=>r.cover_url&&r.checkout_url&&Number(r.price_cents)>0);
     return json({releases,featured:releases.find((r:any)=>r.is_featured)??releases[0]??null});
   }catch(e){console.error(e);return json({error:e instanceof Error?e.message:String(e)},500)}
 });
-
