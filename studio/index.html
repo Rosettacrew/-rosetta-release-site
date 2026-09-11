@@ -617,7 +617,7 @@
           .join("");
         if (beats.some((beat) => beat.id === previous)) q("uBeat").value = previous;
       }
-      async function loadLibrary() {
+      async function loadLibrary() {         q("libraryList").innerHTML = '<div class="muted">Loading…</div>';         try {
         if (surface === "release") {
           const data = await api(API + "?view=library");
           releases = data.releases || [];
@@ -629,7 +629,7 @@
           beats = data.beats || [];
           releases = [];
         }
-        render();
+          render();         } catch (error) {           q("libraryList").innerHTML =             `<div class="muted">${esc(error.message || "Could not load library.")}</div>`;         }
       }
       async function validateCoverFile(file) {
         if (
@@ -668,7 +668,7 @@
           const session = await ensureSession();
           sess = session;
           if (!sess?.access_token) return;
-          q("login").classList.add("hidden");
+          q("login").classList.add("hidden");           let whoamiOk = false;
           try {
             const me = await api(API + "?view=whoami");
             if (me.role !== "music_uploader")
@@ -677,10 +677,10 @@
             q("app").classList.remove("hidden");
             q("who").textContent =
               (sess.user?.email || me.email || "Studio account") +
-              " · music_uploader";
+              " · music_uploader"; whoamiOk = true;
             await loadLibrary();
           } catch (error) {
-            const still = await ensureSession();
+            const still = await ensureSession(); if (whoamiOk) { q("libraryList").innerHTML = `<div class="muted">${esc(error.message || "Could not load library.")}</div>`; if (still?.access_token) sess = still; return; }
             if (!still?.access_token) return;
             sess = still;
             showDenied(
