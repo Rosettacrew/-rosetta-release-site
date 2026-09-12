@@ -355,6 +355,121 @@
         cursor: default;
         opacity: 0.72;
       }
+      .support {
+        margin-top: 18px;
+        padding: 14px 14px 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: linear-gradient(160deg, #1a160f, #0e0c09);
+      }
+      .support-label {
+        color: var(--g2);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.18em;
+        margin-bottom: 10px;
+      }
+      .support-presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .support-preset {
+        border: 1px solid #796443;
+        background: #11100d;
+        color: var(--g2);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .support-preset:hover,
+      .support-preset:focus-visible,
+      .support-preset.active {
+        border-color: var(--g);
+        background: #1b1710;
+        outline: none;
+      }
+      .support-custom {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .support-custom label {
+        color: #9f978c;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+      }
+      .support-custom input {
+        width: 110px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #0a0908;
+        color: var(--t);
+        padding: 10px 12px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .support-go {
+        border: 0;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #cf9f43, #f3d894);
+        color: #17120a;
+        font-size: 13px;
+        font-weight: 900;
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      .support-go:disabled {
+        opacity: 0.65;
+        cursor: default;
+      }
+      .support-hint {
+        margin-top: 8px;
+        color: #8f887e;
+        font-size: 11px;
+      }
+      .support-error {
+        margin-top: 8px;
+        color: #e8a0a0;
+        font-size: 12px;
+      }
+      .checkout-toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        z-index: 40;
+        max-width: min(520px, calc(100vw - 24px));
+        padding: 14px 18px;
+        border: 1px solid var(--g);
+        border-radius: 14px;
+        background: #14110c;
+        color: var(--t);
+        box-shadow: 0 18px 50px #000a;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .checkout-toast strong {
+        color: var(--g2);
+        display: block;
+        margin-bottom: 4px;
+        letter-spacing: 0.08em;
+        font-size: 11px;
+      }
+      .checkout-toast button {
+        margin-top: 8px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--m);
+        border-radius: 999px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font-size: 11px;
+      }
       .trust {
         display: flex;
         gap: 10px;
@@ -468,6 +583,7 @@
           Swipe the cover or use the arrows to browse releases
         </p>
       </section>
+      <div id="checkout-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
     </main>
     <script>
       function initSiteIntro() {
@@ -521,10 +637,11 @@
 
       initSiteIntro();
 
-      const API =
-          "https://sktgkrcahsxvidzjjxxt.supabase.co/functions/v1/release-storefront",
-        AN =
-          "https://sktgkrcahsxvidzjjxxt.supabase.co/functions/v1/release-analytics";
+      const FN_BASE =
+          "https://sktgkrcahsxvidzjjxxt.supabase.co/functions/v1",
+        API = FN_BASE + "/release-storefront",
+        AN = FN_BASE + "/release-analytics",
+        SUPPORT_API = FN_BASE + "/release-support-checkout";
       const money = (c, cur = "usd") =>
         new Intl.NumberFormat("en-US", {
           style: "currency",
@@ -542,6 +659,26 @@
               "'": "&#39;",
             })[m],
         );
+
+      function supportPresets(floor) {
+        const f = Number(floor) || 0;
+        if (f === 499) return [499, 799, 999, 1499];
+        return [f, f + 300, f + 500, f + 1000].filter((n) => n > 0);
+      }
+      function supportBlock(release) {
+        if (previewOnly) return "";
+        const floor = Number(release.price_cents) || 0;
+        if (!(floor > 0)) return "";
+        const presets = supportPresets(floor);
+        const buttons = presets
+          .map(
+            (c, i) =>
+              `<button type="button" class="support-preset${i === 0 ? " active" : ""}" data-cents="${c}">${money(c, release.currency)}</button>`,
+          )
+          .join("");
+        return `<div class="support" data-support-product="${esc(release.id)}" data-floor="${floor}" data-currency="${esc(release.currency || "usd")}"><div class="support-label">SUPPORT THE ARTIST</div><div class="support-presets">${buttons}</div><div class="support-custom"><label>Custom $</label><input type="number" min="${(floor / 100).toFixed(2)}" step="0.01" inputmode="decimal" placeholder="${(floor / 100).toFixed(2)}" aria-label="Custom support amount in dollars" /><button type="button" class="support-go" data-support-go>Support</button></div><div class="support-hint">Minimum ${money(floor, release.currency)}. Same digital release — pay what you can.</div><div class="support-error hidden" data-support-error></div></div>`;
+      }
+
       function setMeta(attr, key, content) {
         let el = document.querySelector("meta[" + attr + '="' + key + '"]');
         if (!el) {
@@ -641,7 +778,7 @@
             ? `<span class="booking-banner" aria-disabled="true"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · preview link disabled</span></span>`
             : `<a class="booking-banner" href="tel:+16562424777"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · 656-242-4777</span></a>`
           : "";
-        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art"><div class="meta"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${booking}${action}<div class="trust">${trust}</div></div></div></article>`;
+        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art"><div class="meta"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${booking}${action}${supportBlock(release)}<div class="trust">${trust}</div></div></div></article>`;
       }
       async function load() {
         try {
@@ -763,7 +900,8 @@
           }
           document.getElementById("release-showcase").classList.remove("hidden");
           setActive(0);
-          if (!previewOnly)
+          if (!previewOnly) {
+            wireSupportUI(carousel);
             document.addEventListener(
               "click",
               (e) => {
@@ -775,11 +913,116 @@
               },
               { once: false },
             );
+          }
         } catch (e) {
           document.getElementById("loading").classList.add("hidden");
           document.getElementById("error").classList.remove("hidden");
         }
       }
+
+      async function startSupportCheckout(productId, amountCents, errorEl, goBtn) {
+        if (errorEl) {
+          errorEl.textContent = "";
+          errorEl.classList.add("hidden");
+        }
+        if (goBtn) goBtn.disabled = true;
+        try {
+          const r = await fetch(SUPPORT_API, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ product_id: productId, amount_cents: amountCents }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok || !data.url) {
+            throw new Error(data.error || "Checkout unavailable");
+          }
+          track(productId, "checkout_click", {
+            placement: "support_the_artist",
+            amount_cents: amountCents,
+          });
+          location.href = data.url;
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err instanceof Error ? err.message : String(err);
+            errorEl.classList.remove("hidden");
+          }
+          if (goBtn) goBtn.disabled = false;
+        }
+      }
+      function wireSupportUI(root) {
+        root.addEventListener("click", (e) => {
+          const preset = e.target.closest(".support-preset");
+          if (preset) {
+            const box = preset.closest(".support");
+            if (!box) return;
+            box.querySelectorAll(".support-preset").forEach((b) => b.classList.remove("active"));
+            preset.classList.add("active");
+            const input = box.querySelector("input");
+            if (input) input.value = (Number(preset.dataset.cents) / 100).toFixed(2);
+            return;
+          }
+          const go = e.target.closest("[data-support-go]");
+          if (!go) return;
+          const box = go.closest(".support");
+          if (!box) return;
+          const floor = Number(box.dataset.floor) || 0;
+          const productId = box.dataset.supportProduct;
+          const errorEl = box.querySelector("[data-support-error]");
+          const input = box.querySelector("input");
+          const active = box.querySelector(".support-preset.active");
+          let cents;
+          if (input && input.value.trim() !== "") {
+            const dollars = Number(input.value);
+            if (!Number.isFinite(dollars)) {
+              if (errorEl) {
+                errorEl.textContent = "Enter a valid amount";
+                errorEl.classList.remove("hidden");
+              }
+              return;
+            }
+            cents = Math.round(dollars * 100);
+          } else if (active) {
+            cents = Number(active.dataset.cents);
+          } else {
+            cents = floor;
+          }
+          if (!Number.isInteger(cents) || cents < floor) {
+            if (errorEl) {
+              errorEl.textContent = "Minimum is " + money(floor, box.dataset.currency);
+              errorEl.classList.remove("hidden");
+            }
+            return;
+          }
+          startSupportCheckout(productId, cents, errorEl, go);
+        });
+      }
+      function showCheckoutToast() {
+        const q = new URLSearchParams(location.search);
+        const flag = q.get("checkout");
+        if (flag !== "success" && flag !== "cancel") return;
+        const el = document.getElementById("checkout-toast");
+        if (!el) return;
+        if (flag === "success") {
+          el.innerHTML =
+            "<strong>PRE-ORDER / SUPPORT CONFIRMED</strong>Thanks — your order is recorded. Downloads unlock on release day. Check the email you used at checkout.";
+        } else {
+          el.innerHTML =
+            "<strong>CHECKOUT CANCELED</strong>No charge was made. You can support the artist anytime from this page.";
+        }
+        el.classList.remove("hidden");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Dismiss";
+        btn.addEventListener("click", () => {
+          el.classList.add("hidden");
+          const url = new URL(location.href);
+          url.searchParams.delete("checkout");
+          url.searchParams.delete("session_id");
+          history.replaceState({}, "", url.pathname + url.search + url.hash);
+        });
+        el.appendChild(btn);
+      }
+      showCheckoutToast();
       load();
     </script>
   </body>
