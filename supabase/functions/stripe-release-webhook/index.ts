@@ -135,14 +135,44 @@ Deno.serve(async (req: Request) => {
   });
 
   if (eventInsert.error) {
-    if ((eventInsert.error as any).code === "23505") {
+    if ((eventInsert.error as any).code !== "23505") {
+      console.error(eventInsert.error);
+      return new Response("Database error", { status: 500 });
+    }
+
+    const { data: existingEvent, error: existingEventError } = await supabase
+      .from("stripe_webhook_events")
+      .select("processing_status")
+      .eq("stripe_event_id", event.id)
+      .maybeSingle();
+    if (existingEventError) {
+      console.error(existingEventError);
+      return new Response("Database error", { status: 500 });
+    }
+    if (existingEvent?.processing_status !== "failed") {
       return new Response(JSON.stringify({ received: true, duplicate: true }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
     }
-    console.error(eventInsert.error);
-    return new Response("Database error", { status: 500 });
+
+    const { data: reclaimedEvent, error: reclaimError } = await supabase
+      .from("stripe_webhook_events")
+      .update({ processing_status: "received", processed_at: null, last_error: null })
+      .eq("stripe_event_id", event.id)
+      .eq("processing_status", "failed")
+      .select("stripe_event_id")
+      .maybeSingle();
+    if (reclaimError) {
+      console.error(reclaimError);
+      return new Response("Database error", { status: 500 });
+    }
+    if (!reclaimedEvent) {
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
   }
 
   const markEvent = async (status: "processed" | "ignored" | "failed", lastError: string | null = null) => {
@@ -169,12 +199,19 @@ Deno.serve(async (req: Request) => {
     const session = event.data?.object ?? {};
     const paymentLinkId = typeof session.payment_link === "string" ? session.payment_link : session.payment_link?.id;
 
-    let product: { id: string; release_at: string } | null = null;
+    let product: {
+      id: string;
+      release_at: string;
+      currency: string;
+      storefront_enabled: boolean;
+      published_at: string | null;
+      status: string;
+    } | null = null;
 
     if (paymentLinkId) {
       const { data, error: productError } = await supabase
         .from("release_products")
-        .select("id, release_at")
+        .select("id, release_at, currency, storefront_enabled, published_at, status")
         .eq("stripe_payment_link_id", paymentLinkId)
         .maybeSingle();
       if (productError) throw productError;
@@ -187,20 +224,28 @@ Deno.serve(async (req: Request) => {
         });
       }
     } else {
-      const productId =
-        session.metadata?.release_product_id ||
-        session.client_reference_id ||
-        null;
-      if (!productId) {
+      if (session.metadata?.checkout_source !== "support_the_artist") {
         await markEvent("ignored");
-        return new Response(JSON.stringify({ received: true, ignored: "no_product" }), {
+        return new Response(JSON.stringify({ received: true, ignored: "unexpected_checkout_source" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      const productId = session.metadata?.release_product_id ?? null;
+      if (
+        !productId ||
+        (session.client_reference_id && session.client_reference_id !== productId)
+      ) {
+        await markEvent("ignored");
+        return new Response(JSON.stringify({ received: true, ignored: "invalid_product_reference" }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
       }
       const { data, error: productError } = await supabase
         .from("release_products")
-        .select("id, release_at")
+        .select("id, release_at, currency, storefront_enabled, published_at, status")
         .eq("id", productId)
         .maybeSingle();
       if (productError) throw productError;
@@ -212,13 +257,36 @@ Deno.serve(async (req: Request) => {
           headers: { "content-type": "application/json" },
         });
       }
+
+      const expectedAmount = Number(session.metadata?.checkout_amount_cents);
+      const recordedFloor = Number(session.metadata?.checkout_floor_cents);
+      const actualAmount = Number(session.amount_total);
+      const actualCurrency = String(session.currency ?? "").toLowerCase();
+      const productCurrency = String(product.currency ?? "usd").toLowerCase();
+      if (
+        !product.storefront_enabled ||
+        !product.published_at ||
+        !["live", "presale"].includes(product.status) ||
+        !Number.isInteger(expectedAmount) ||
+        !Number.isInteger(recordedFloor) ||
+        !Number.isInteger(actualAmount) ||
+        expectedAmount < recordedFloor ||
+        actualAmount !== expectedAmount ||
+        actualCurrency !== productCurrency
+      ) {
+        await markEvent("ignored");
+        return new Response(JSON.stringify({ received: true, ignored: "invalid_support_session" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
     }
 
     const email = session.customer_details?.email ?? session.customer_email ?? null;
     if (!email) throw new Error("Checkout Session missing customer email");
 
     const eventFailed = event.type === "checkout.session.async_payment_failed";
-    const paid = !eventFailed && (session.payment_status === "paid" || session.payment_status === "no_payment_required" || event.type === "checkout.session.async_payment_succeeded");
+    const paid = !eventFailed && session.payment_status === "paid";
     const paymentStatus = eventFailed ? "failed" : paid ? "paid" : "processing";
 
     const orderPayload = {
