@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1a1e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Rosetta Crew Vision Board" />
+  <meta name="description" content="Goals, calendar, todos & vision board for Roger Hester / Rosetta Crew" />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>Rosetta Crew Vision Board</title>
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <h1><span>Rosetta Crew</span> Vision Board</h1>
+      <p class="sub">Roger Hester · Rosetta Crew</p>
+      <div class="header-actions">
+        <button type="button" class="btn btn-sm" id="btn-reminders" title="Enable reminders">Reminders</button>
+        <button type="button" class="btn btn-sm" id="btn-export">Export</button>
+        <button type="button" class="btn btn-sm" id="btn-import">Import</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden />
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-clear-sample">Clear samples</button>
+      </div>
+    </header>
+
+    <!-- TODAY -->
+    <main id="view-today" class="view active" data-view="today">
+      <div class="card">
+        <h2>Today</h2>
+        <div id="today-list"></div>
+      </div>
+      <div class="card">
+        <h2>Due soon</h2>
+        <div id="soon-list"></div>
+      </div>
+      <div class="card">
+        <h2>Goals needing attention</h2>
+        <div id="attention-goals"></div>
+      </div>
+    </main>
+
+    <!-- CALENDAR -->
+    <main id="view-calendar" class="view" data-view="calendar">
+      <div class="card">
+        <div class="cal-nav">
+          <button type="button" class="btn btn-icon btn-sm" id="cal-prev" aria-label="Previous month">‹</button>
+          <h2 id="cal-month-label"></h2>
+          <button type="button" class="btn btn-icon btn-sm" id="cal-next" aria-label="Next month">›</button>
+        </div>
+        <div class="cal-grid" id="cal-dows"></div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="list-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-add-cal-item">+ Add for selected date</button>
+        </div>
+        <div id="cal-day-items"></div>
+      </div>
+    </main>
+
+    <!-- GOALS -->
+    <main id="view-goals" class="view" data-view="goals">
+      <div class="list-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-add-goal">+ New goal</button>
+        <button type="button" class="btn btn-sm" id="btn-manage-cats">Categories</button>
+      </div>
+      <div id="goals-list"></div>
+    </main>
+
+    <!-- TODOS -->
+    <main id="view-todos" class="view" data-view="todos">
+      <div class="list-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-add-todo">+ New to-do</button>
+        <label class="muted" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="todos-hide-done" checked /> Hide done
+        </label>
+      </div>
+      <div id="todos-list"></div>
+    </main>
+
+    <!-- VISION -->
+    <main id="view-vision" class="view" data-view="vision">
+      <div class="list-actions">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-add-pin">+ Text pin</button>
+        <span class="muted">Drag pins · optional image URL</span>
+      </div>
+      <div class="vision-board" id="vision-board" aria-label="Vision board"></div>
+    </main>
+
+    <nav class="nav" role="tablist" aria-label="Main">
+      <button type="button" class="active" data-nav="today" aria-selected="true"><span class="ico">◎</span>Today</button>
+      <button type="button" data-nav="calendar" aria-selected="false"><span class="ico">▦</span>Calendar</button>
+      <button type="button" data-nav="goals" aria-selected="false"><span class="ico">◆</span>Goals</button>
+      <button type="button" data-nav="todos" aria-selected="false"><span class="ico">☑</span>Todos</button>
+      <button type="button" data-nav="vision" aria-selected="false"><span class="ico">✦</span>Vision</button>
+    </nav>
+  </div>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal" id="modal-body"></div>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="js/db.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/reminders.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
