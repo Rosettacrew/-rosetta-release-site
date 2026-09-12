@@ -10,6 +10,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=="GET")return json({error:"Method Not Allowed"},405);
   try{
     const supabase=adminClient();
+    const {data,error}=await supabase.from("release_products")
       .select("id,slug,artist_name,artist_type,title,product_type,description,presale_price_cents,release_price_cents,currency,release_at,status,published_at,cover_art_bucket,cover_art_path,stripe_payment_link_url,is_featured,featured_at")
       .eq("storefront_enabled",true)
       .in("status",["live","presale"])
