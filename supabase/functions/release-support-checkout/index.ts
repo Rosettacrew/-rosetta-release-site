@@ -10,7 +10,7 @@ const cors = {
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...cors, "content-type": "application/json" },
+    headers: { ...cors, "content-type": "application/json", "cache-control": "no-store" },
   });
 }
 
@@ -126,6 +126,8 @@ Deno.serve(async (req: Request) => {
     params.set("line_items[0][quantity]", "1");
     params.set("metadata[release_product_id]", product.id);
     params.set("metadata[checkout_source]", "support_the_artist");
+    params.set("metadata[checkout_floor_cents]", String(floor));
+    params.set("metadata[checkout_amount_cents]", String(amountCents));
     params.set("client_reference_id", product.id);
     params.set("customer_creation", "always");
     params.set(
@@ -139,7 +141,7 @@ Deno.serve(async (req: Request) => {
 
     return json({ url: session.url });
   } catch (e) {
-    console.error(e);
-    return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    console.error("release-support-checkout", e instanceof Error ? e.message : String(e));
+    return json({ error: "Checkout unavailable" }, 500);
   }
 });
