@@ -98,6 +98,132 @@ async function resolveOrderGeo(
   return null;
 }
 
+
+const DOWNLOAD_TOKEN_BYTES = 32;
+const DOWNLOAD_MAX = 5;
+const DOWNLOAD_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days from max(release_at, now)
+
+function randomTokenHex(byteLength = DOWNLOAD_TOKEN_BYTES) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return hex(bytes.buffer);
+}
+
+async function sha256Hex(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+  return hex(digest);
+}
+
+function downloadExpiresAt(releaseAtIso: string) {
+  const releaseMs = new Date(releaseAtIso).getTime();
+  const base = Number.isFinite(releaseMs) ? Math.max(releaseMs, Date.now()) : Date.now();
+  return new Date(base + DOWNLOAD_TTL_MS).toISOString();
+}
+
+/**
+ * Idempotent mint of release_download_tokens + soft-fail Resend email.
+ * Never logs raw token. Never mutates release_products.release_at.
+ */
+async function mintDownloadTokenAndEmail(opts: {
+  supabase: ReturnType<typeof createClient>;
+  entitlementId: string;
+  customerEmail: string;
+  releaseAt: string;
+  productTitle?: string | null;
+}) {
+  const { supabase, entitlementId, customerEmail, releaseAt, productTitle } = opts;
+
+  const { data: existing, error: existingError } = await supabase
+    .from("release_download_tokens")
+    .select("id")
+    .eq("entitlement_id", entitlementId)
+    .is("revoked_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing?.id) {
+    console.log("download_token: skip mint, active token exists", { token_id: existing.id, entitlement_id: entitlementId });
+    return { tokenId: existing.id as string, minted: false };
+  }
+
+  const rawToken = randomTokenHex();
+  const tokenHash = await sha256Hex(rawToken);
+  const expiresAt = downloadExpiresAt(releaseAt);
+
+  const { data: tokenRow, error: insertError } = await supabase
+    .from("release_download_tokens")
+    .insert({
+      token_hash: tokenHash,
+      entitlement_id: entitlementId,
+      expires_at: expiresAt,
+      max_downloads: DOWNLOAD_MAX,
+      download_count: 0,
+    })
+    .select("id")
+    .single();
+  if (insertError) throw insertError;
+  if (!tokenRow?.id) throw new Error("download_token insert returned no id");
+
+  const tokenId = tokenRow.id as string;
+  console.log("download_token: minted", { token_id: tokenId, entitlement_id: entitlementId, expires_at: expiresAt });
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "") ?? "";
+  const downloadUrl = `${supabaseUrl}/functions/v1/release-download?token=${rawToken}`;
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  const from =
+    Deno.env.get("RELEASE_DOWNLOAD_EMAIL_FROM")?.trim() ||
+    Deno.env.get("ACTIVITY_EMAIL_FROM")?.trim() ||
+    "";
+
+  if (!apiKey || !from) {
+    console.log("download_token: email soft-fail not_configured", { token_id: tokenId });
+    return { tokenId, minted: true };
+  }
+
+  try {
+    const title = productTitle?.trim() || "your release";
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [customerEmail],
+        subject: `Your Rosetta Crew download link — ${title}`,
+        text: [
+          `Thanks for supporting the artist.`,
+          ``,
+          `Use this secure link to download when the release unlocks:`,
+          downloadUrl,
+          ``,
+          `This link is personal, expires on ${expiresAt}, and allows up to ${DOWNLOAD_MAX} downloads.`,
+          `If the release is not unlocked yet, the link will respond with release_locked until the unlock time.`,
+          ``,
+          `— Rosetta Crew`,
+        ].join("\n"),
+      }),
+    });
+    if (!response.ok) {
+      const body = (await response.text()).slice(0, 300);
+      console.error("download_token: email soft-fail", { token_id: tokenId, status: response.status, body });
+    } else {
+      console.log("download_token: email sent", { token_id: tokenId });
+    }
+  } catch (emailErr) {
+    console.error(
+      "download_token: email soft-fail",
+      { token_id: tokenId },
+      emailErr instanceof Error ? emailErr.message : String(emailErr),
+    );
+  }
+
+  return { tokenId, minted: true };
+}
+
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -314,7 +440,7 @@ Deno.serve(async (req: Request) => {
       const availableAt = new Date(product.release_at).getTime();
       const entitlementStatus = now >= availableAt ? "available" : "locked";
 
-      const { error: entitlementError } = await supabase
+      const { data: entitlement, error: entitlementError } = await supabase
         .from("release_entitlements")
         .upsert({
           product_id: product.id,
@@ -323,9 +449,21 @@ Deno.serve(async (req: Request) => {
           status: entitlementStatus,
           available_at: product.release_at,
           updated_at: new Date().toISOString(),
-        }, { onConflict: "order_id" });
+        }, { onConflict: "order_id" })
+        .select("id")
+        .single();
 
       if (entitlementError) throw entitlementError;
+      if (!entitlement?.id) throw new Error("entitlement upsert returned no id");
+
+      // Mint opaque download token + soft-fail Resend (both payment_link and STA Session).
+      // Idempotent: skip if active non-revoked non-expired token exists for entitlement.
+      await mintDownloadTokenAndEmail({
+        supabase,
+        entitlementId: entitlement.id,
+        customerEmail: email.toLowerCase(),
+        releaseAt: product.release_at,
+      });
 
       // Soft-fail order_geo: never fail webhook / entitlement if geo write fails.
       // Retention: geo rows cascade with parent order (ON DELETE CASCADE); keep ≤24 months or match order retention.
