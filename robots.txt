@@ -11,6 +11,8 @@ Disallow: /admin-v2.html
 Disallow: /beatbay-admin.html
 Disallow: /analytics-hub.html
 Disallow: /music-studio.html
+Disallow: /vision-board/
+Disallow: /vision-board/index.html
 Disallow: /manifest.webmanifest
 Disallow: /admin.webmanifest
 Disallow: /admin-sw.js
