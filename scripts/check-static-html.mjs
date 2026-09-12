@@ -85,7 +85,7 @@ assert.match(
 assert.match(storefront, /if \(previewOnly \|\| !product_id\) return/);
 assert.match(
   storefront,
-  /if \(!previewOnly\)\s*document\.addEventListener\(/,
+  /if \(!previewOnly\)\s*\{[\s\S]*?document\.addEventListener\(/,
 );
 assert.doesNotMatch(
   storefront,
@@ -135,6 +135,18 @@ const releaseManager = readFileSync(
 );
 const releaseStorefront = readFileSync(
   "supabase/functions/release-storefront/index.ts",
+  "utf8",
+);
+const releaseSupportCheckout = readFileSync(
+  "supabase/functions/release-support-checkout/index.ts",
+  "utf8",
+);
+const stripeReleaseWebhook = readFileSync(
+  "supabase/functions/stripe-release-webhook/index.ts",
+  "utf8",
+);
+const releaseDownload = readFileSync(
+  "supabase/functions/release-download/index.ts",
   "utf8",
 );
 const studioManager = readFileSync(
@@ -222,7 +234,22 @@ assert.match(
   /alter function public\.release_products_artwork_publish_guard\(\)[\s\S]*?set search_path = ''/,
 );
 assert.match(releaseStorefront, /artist_type:r\.artist_type\?\?null/);
+assert.match(releaseStorefront, /const \{data,error\}=await supabase\.from\("release_products"\)/);
 assert.doesNotMatch(releaseStorefront, /contact_(name|email|phone)/);
+assert.match(releaseSupportCheckout, /amount_cents must be at least/);
+assert.match(releaseSupportCheckout, /metadata\[checkout_source\].*support_the_artist/);
+assert.match(releaseSupportCheckout, /metadata\[checkout_floor_cents\]/);
+assert.match(releaseSupportCheckout, /metadata\[checkout_amount_cents\]/);
+assert.match(stripeReleaseWebhook, /checkout_source !== "support_the_artist"/);
+assert.match(stripeReleaseWebhook, /actualAmount !== expectedAmount/);
+assert.match(stripeReleaseWebhook, /session\.payment_status === "paid"/);
+assert.match(stripeReleaseWebhook, /processing_status !== "failed"/);
+assert.doesNotMatch(stripeReleaseWebhook, /no_payment_required/);
+assert.match(releaseDownload, /release_download_tokens/);
+assert.match(releaseDownload, /revoked_at/);
+assert.match(releaseDownload, /download_count >= tokenRow\.max_downloads/);
+assert.match(releaseDownload, /entitlement\.status !== "available"/);
+assert.doesNotMatch(releaseDownload, /customer_email|stripe_checkout_session_id/);
 assert.match(
   releaseManager,
   /music_uploader is intentionally excluded/,
