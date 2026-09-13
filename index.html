@@ -95,10 +95,27 @@
         visibility: hidden;
         pointer-events: none;
       }
-      .site-intro video {
+      .site-intro img {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
+        object-position: center;
+        background: #030303;
+      }
+      @media (max-width: 819px) {
+        .site-intro {
+          padding:
+            max(10px, env(safe-area-inset-top))
+            max(10px, env(safe-area-inset-right))
+            max(10px, env(safe-area-inset-bottom))
+            max(10px, env(safe-area-inset-left));
+        }
+        .site-intro img {
+          width: 100%;
+          height: auto;
+          max-height: 100%;
+          object-fit: contain;
+        }
       }
       .intro-skip {
         position: absolute;
@@ -522,16 +539,14 @@
       aria-label="Rosetta Crew Music Group introduction"
       hidden
     >
-      <video
-        id="intro-video"
-        muted
-        playsinline
-        preload="auto"
-        poster="assets/rosetta-intro-poster.jpg"
+      <img
+        id="intro-image"
+        src="assets/rosetta-intro-poster.jpg"
+        alt=""
+        decoding="async"
+        fetchpriority="high"
         aria-hidden="true"
-      >
-        <source src="assets/rosetta-intro.mp4" type="video/mp4" />
-      </video>
+      />
       <button id="intro-skip" class="intro-skip" type="button">
         SKIP
       </button>
@@ -588,7 +603,7 @@
     <script>
       function initSiteIntro() {
         const intro = document.getElementById("site-intro");
-        const video = document.getElementById("intro-video");
+        const image = document.getElementById("intro-image");
         const skip = document.getElementById("intro-skip");
         const main = document.getElementById("main-content");
         const sessionKey = "rc_home_intro_seen";
@@ -617,7 +632,6 @@
         function closeIntro() {
           if (intro.classList.contains("is-closing")) return;
           clearTimeout(closeTimer);
-          video.pause();
           intro.classList.add("is-closing");
           document.body.classList.remove("intro-active");
           main.inert = false;
@@ -627,12 +641,8 @@
         }
 
         skip.addEventListener("click", closeIntro);
-        video.addEventListener("ended", closeIntro, { once: true });
-        video.addEventListener("error", closeIntro, { once: true });
-        closeTimer = setTimeout(closeIntro, 6000);
-
-        const playback = video.play();
-        if (playback) playback.catch(closeIntro);
+        image.addEventListener("error", closeIntro, { once: true });
+        closeTimer = setTimeout(closeIntro, 4500);
       }
 
       initSiteIntro();
