@@ -105,16 +105,18 @@
       @media (max-width: 819px) {
         .site-intro {
           padding:
-            max(10px, env(safe-area-inset-top))
-            max(10px, env(safe-area-inset-right))
-            max(10px, env(safe-area-inset-bottom))
-            max(10px, env(safe-area-inset-left));
+            max(28px, env(safe-area-inset-top))
+            max(22px, env(safe-area-inset-right))
+            max(28px, env(safe-area-inset-bottom))
+            max(22px, env(safe-area-inset-left));
         }
         .site-intro img {
-          width: 100%;
+          width: auto;
           height: auto;
-          max-height: 100%;
+          max-width: 90vw;
+          max-height: 84svh;
           object-fit: contain;
+          object-position: center;
         }
       }
       .intro-skip {
