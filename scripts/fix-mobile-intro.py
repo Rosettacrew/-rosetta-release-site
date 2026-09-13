@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Mobile intro safe-area tuning. Kept idempotent so reruns do not disturb checkout or release logic.
 path = Path("index.html")
 s = path.read_text()
 
