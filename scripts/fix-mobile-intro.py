@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# One-time patch retained as documentation of the verified mobile intro migration.
 path = Path("index.html")
 s = path.read_text()
 
