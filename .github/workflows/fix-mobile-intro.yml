@@ -1,0 +1,108 @@
+name: Fix mobile intro quality
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/fix-mobile-intro.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix-intro:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Switch homepage intro to responsive still image
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("index.html")
+          s = path.read_text()
+
+          old_css = '''      .site-intro video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }'''
+          new_css = '''      .site-intro img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        object-position: center;
+        background: #030303;
+      }
+      @media (max-width: 819px) {
+        .site-intro {
+          padding:
+            max(10px, env(safe-area-inset-top))
+            max(10px, env(safe-area-inset-right))
+            max(10px, env(safe-area-inset-bottom))
+            max(10px, env(safe-area-inset-left));
+        }
+        .site-intro img {
+          width: 100%;
+          height: auto;
+          max-height: 100%;
+          object-fit: contain;
+        }
+      }'''
+
+          old_html = '''      <video
+        id="intro-video"
+        muted
+        playsinline
+        preload="auto"
+        poster="assets/rosetta-intro-poster.jpg"
+        aria-hidden="true"
+      >
+        <source src="assets/rosetta-intro.mp4" type="video/mp4" />
+      </video>'''
+          new_html = '''      <img
+        id="intro-image"
+        src="assets/rosetta-intro-poster.jpg"
+        alt=""
+        decoding="async"
+        fetchpriority="high"
+        aria-hidden="true"
+      />'''
+
+          s = s.replace(old_css, new_css)
+          s = s.replace(old_html, new_html)
+          s = s.replace('const video = document.getElementById("intro-video");', 'const image = document.getElementById("intro-image");')
+          s = s.replace('          video.pause();\n', '')
+          s = s.replace('        video.addEventListener("ended", closeIntro, { once: true });\n        video.addEventListener("error", closeIntro, { once: true });\n        closeTimer = setTimeout(closeIntro, 6000);\n\n        const playback = video.play();\n        if (playback) playback.catch(closeIntro);', '        image.addEventListener("error", closeIntro, { once: true });\n        closeTimer = setTimeout(closeIntro, 4500);')
+
+          if 'id="intro-video"' in s or '.site-intro video' in s:
+              raise SystemExit("Intro video replacement did not fully apply")
+          if 'id="intro-image"' not in s:
+              raise SystemExit("Responsive intro image was not added")
+
+          path.write_text(s)
+          PY
+
+      - name: Verify intro markup
+        shell: bash
+        run: |
+          grep -q 'id="intro-image"' index.html
+          grep -q 'object-fit: contain' index.html
+          grep -q 'fetchpriority="high"' index.html
+          ! grep -q 'id="intro-video"' index.html
+
+      - name: Commit intro fix
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "Rosetta Crew Dev Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html
+          git commit -m "Fix homepage intro quality and mobile framing"
+          git push
