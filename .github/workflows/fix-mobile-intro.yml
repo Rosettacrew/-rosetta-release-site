@@ -106,3 +106,5 @@ jobs:
           git add index.html
           git commit -m "Fix homepage intro quality and mobile framing"
           git push
+
+# trigger: 2026-09-13 mobile intro pass
