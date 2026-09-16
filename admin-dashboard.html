@@ -1144,14 +1144,15 @@
             </div>
             <div class="card">
               <button id="previewAudio" class="secondary">
-                Play Selected Preview</button
+                Play Release Promo Preview</button
               ><audio
                 id="audio"
                 controls
                 preload="none"
                 style="width: 100%; margin-top: 10px"
               ></audio>
-              <div id="audioMsg" class="muted"></div>
+              <div id="audioMsg" class="muted" role="status" aria-live="polite"></div>
+              <p class="muted">Use Play beside a song to check its full audio privately. The release promo preview is a separate upload.</p>
             </div>
           </div>
         </section>
@@ -2520,10 +2521,45 @@
         }
       });
       let trackDraft = [], trackExpected = [], trackRelease = "", trackDirty = false, trackSaving = false;
-      let draggedTrack = null;
+      let draggedTrack = null, trackAudioUrl = null, trackPlayRequest = 0;
+      function stopTrackPlayback() {
+        trackPlayRequest++;
+        q("audio").pause(); q("audio").removeAttribute("src"); q("audio").load();
+        if (trackAudioUrl) URL.revokeObjectURL(trackAudioUrl);
+        trackAudioUrl = null;
+      }
+      async function playAlbumTrack(index) {
+        const track = trackDraft[index];
+        if (!track) return;
+        stopTrackPlayback();
+        const request = trackPlayRequest;
+        q("audioMsg").textContent = `Loading: ${track.title}`;
+        try {
+          let url;
+          if (track.id) {
+            const result = await af(M, {method: "POST", body: JSON.stringify({action: "preview_track", track_id: track.id})});
+            url = result.preview_url;
+          } else {
+            trackAudioUrl = URL.createObjectURL(track.file); url = trackAudioUrl;
+          }
+          if (request !== trackPlayRequest) return;
+          q("audio").src = url; q("audio").load();
+          q("audioMsg").textContent = `Private playback: ${track.title}`;
+          q("audio").scrollIntoView({block: "nearest", behavior: "smooth"});
+          try { await q("audio").play(); }
+          catch (e) {
+            if (request !== trackPlayRequest) return;
+            q("audioMsg").textContent = e.name === "NotAllowedError"
+              ? `Ready: ${track.title}. Tap play on the audio player.`
+              : `Unable to play ${track.title}. Try Play again; this device may not support this audio format.`;
+          }
+        } catch(e) { if (request === trackPlayRequest) q("audioMsg").textContent = `Cannot preview ${track.title}: ${e.message}`; }
+      }
+      q("audio").onerror = () => { q("audioMsg").textContent = "Audio could not play. Tap the song's Play button to refresh its private link. If it still fails, check the audio file format."; };
       const trackSnapshot = (tracks) => tracks.map(({id, title, track_number}) => ({id, title, track_number}));
       function syncTrackEditor(force = false) {
         if (!force && (trackDirty || trackSaving) && trackRelease === q("uRelease").value) return;
+        if (trackRelease !== q("uRelease").value) { stopTrackPlayback(); q("audioMsg").textContent = ""; }
         trackRelease = q("uRelease").value;
         const release = rels.find(r => r.id === trackRelease);
         trackDraft = [...(release?.tracks || [])].sort((a,b) => a.track_number - b.track_number).map(t => ({...t}));
@@ -2541,7 +2577,7 @@
         q("albumTracks").innerHTML = trackDraft.map((t,i) => `<div class="row" data-track-index="${i}" style="gap:12px;flex-wrap:wrap">
           <button type="button" class="secondary" draggable="${!trackSaving}" data-drag="${i}" aria-label="Drag track ${i+1}" ${trackSaving ? "disabled" : ""}>↕ ${i+1}</button>
           <div style="flex:1;min-width:160px"><label for="album-title-${i}">Track ${i+1}</label><input id="album-title-${i}" data-title="${i}" value="${esc(t.title)}" ${trackSaving ? "disabled" : ""} /><div class="muted">${t.id ? "Saved track" : "Ready to upload · " + esc(t.file.name)}</div></div>
-          <div class="rowActions"><button type="button" class="secondary" data-move="${i}" data-offset="-1" ${i === 0 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} up">Move up</button><button type="button" class="secondary" data-move="${i}" data-offset="1" ${i === trackDraft.length-1 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} down">Move down</button>${!t.id ? `<button type="button" class="secondary" data-remove="${i}" ${trackSaving ? "disabled" : ""}>Remove</button>` : ""}</div></div>`).join("") || '<p class="muted">No songs yet. Select WAV or MP3 files above to begin.</p>';
+          <div class="rowActions"><button type="button" class="secondary" data-play="${i}" ${trackSaving ? "disabled" : ""} aria-label="Play track ${i+1}">Play</button><button type="button" class="secondary" data-move="${i}" data-offset="-1" ${i === 0 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} up">Move up</button><button type="button" class="secondary" data-move="${i}" data-offset="1" ${i === trackDraft.length-1 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} down">Move down</button><button type="button" class="secondary" data-remove="${i}" ${trackSaving ? "disabled" : ""}>${t.id ? "Delete" : "Remove"}</button></div></div>`).join("") || '<p class="muted">No songs yet. Select WAV or MP3 files above to begin.</p>';
         q("saveTracks").disabled = trackSaving || !trackDirty || !trackDraft.length;
       }
       function markTracksDirty() {
@@ -2560,11 +2596,29 @@
         trackDraft[Number(e.target.dataset.title)].title = e.target.value;
         markTracksDirty();
       };
-      q("albumTracks").onclick = e => {
+      q("albumTracks").onclick = async e => {
         const button = e.target.closest("button");
         if (!button || trackSaving) return;
+        if (button.dataset.play !== undefined) { await playAlbumTrack(Number(button.dataset.play)); return; }
         if (button.dataset.move !== undefined) moveAlbumTrack(Number(button.dataset.move), Number(button.dataset.move) + Number(button.dataset.offset));
-        if (button.dataset.remove !== undefined) { trackDraft.splice(Number(button.dataset.remove),1); markTracksDirty(); renderTrackEditor(); }
+        if (button.dataset.remove !== undefined) {
+          const index = Number(button.dataset.remove), track = trackDraft[index];
+          if (!track.id) { stopTrackPlayback(); trackDraft.splice(index,1); markTracksDirty(); renderTrackEditor(); return; }
+          if (!confirm(`Delete "${track.title}" from this album? This removes the saved track entry. The private master file and any previously uploaded ZIP are kept.`)) return;
+          const controls = ["uRelease", "uKind", "file", "upload", "reloadTracks"];
+          try {
+            trackSaving = true; controls.forEach(id => q(id).disabled = true); renderTrackEditor();
+            const saved = trackExpected.find(t => t.id === track.id);
+            await af(M, {method:"POST",body:JSON.stringify({action:"delete_track", product_id:trackRelease, track_id:track.id, expected_title:saved?.title})});
+            stopTrackPlayback(); q("audioMsg").textContent = "";
+            trackDraft.splice(index,1); trackExpected = trackExpected.filter(t => t.id !== track.id);
+            const release = rels.find(r => r.id === trackRelease);
+            if (release) release.tracks = (release.tracks || []).filter(t => t.id !== track.id);
+            trackDirty = trackDraft.length > 0;
+            q("trackMsg").textContent = trackDirty ? "Track deleted from the album. Save the track list to update numbering and any other edits." : "Track deleted. This album has no tracks.";
+          } catch(e) { q("trackMsg").textContent = `Could not delete track: ${e.message}`; }
+          finally { trackSaving = false; controls.forEach(id => q(id).disabled = false); renderTrackEditor(); }
+        }
       };
       q("albumTracks").ondragstart = e => {
         const handle = e.target.closest("[data-drag]");
@@ -2645,12 +2699,15 @@
         finally { trackSaving = false; controls.forEach(id => q(id).disabled = false); renderTrackEditor(); }
       };
       q("previewAudio").onclick = async () => {
+        stopTrackPlayback();
+        const request = trackPlayRequest;
         try {
           const id = q("uRelease").value;
           if (!id) throw Error("Choose a release");
           q("audioMsg").textContent = "Loading preview…";
           const j = await af(P + "?product_id=" + encodeURIComponent(id)),
             a = q("audio");
+          if (request !== trackPlayRequest) return;
           a.src = j.preview_url;
           a.load();
           q("audioMsg").textContent =

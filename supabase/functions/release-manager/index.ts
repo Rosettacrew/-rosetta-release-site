@@ -550,7 +550,18 @@ Deno.serve(async (req: Request) => {
       return json({ bucket, path, token: data.token, signed_url: data.signedUrl, public_url: bucket === "release-public" ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${bucket}/${path}` : null });
     }
 
-    if (action === "download_track") {
+    if (action === "delete_track") {
+      const productId = String(body.product_id ?? ""), trackId = String(body.track_id ?? "");
+      if (!productId || !trackId || typeof body.expected_title !== "string") return json({ error: "Release, track and saved title required" }, 400);
+      const { data, error } = await supabase.from("release_tracks").delete()
+        .eq("id", trackId).eq("product_id", productId).eq("title", body.expected_title).select("id");
+      if (error) throw error;
+      if (!data?.length) return json({ error: "This track changed or was already removed. Reload saved tracks." }, 409);
+      // Keep the private storage object: album removal must not destroy master audio.
+      return json({ ok: true, deleted_track_id: trackId });
+    }
+
+    if (action === "download_track" || action === "preview_track") {
       const trackId = String(body.track_id ?? "");
       if (!trackId) return json({ error: "Track is required" }, 400);
       const { data: track, error } = await supabase.from("release_tracks")
@@ -558,8 +569,12 @@ Deno.serve(async (req: Request) => {
         .eq("id", trackId)
         .single();
       if (error) throw error;
-      const { data: signed, error: signedError } = await supabase.storage.from(track.audio_bucket).createSignedUrl(track.audio_object_path, 300, { download: true });
+      const preview = action === "preview_track";
+      const { data: signed, error: signedError } = await supabase.storage.from(track.audio_bucket).createSignedUrl(track.audio_object_path, preview ? 3600 : 300, { download: !preview });
       if (signedError) throw signedError;
+      if (preview) return new Response(JSON.stringify({ preview_url: signed.signedUrl, title: track.title, expires_in: 3600 }), {
+        headers: { ...cors, "content-type": "application/json", "cache-control": "no-store" },
+      });
       if (sessionAdmin) await activityReport(supabase, sessionAdmin, { action: "download_release_track", entityType: "track", entityId: track.id, summary: `Downloaded release track: ${(track.release as any)?.artist_name ?? ""} — ${track.title}` });
       return json({ download_url: signed.signedUrl, expires_in: 300 });
     }
