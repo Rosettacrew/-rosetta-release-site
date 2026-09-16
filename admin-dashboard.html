@@ -1101,7 +1101,8 @@
         </section>
         <section id="uploads" class="section">
           <div class="card">
-            <h2>Secure Upload</h2>
+            <h2>Album tracks &amp; artwork</h2>
+            <p class="muted">Choose your release, add songs, then arrange and save your track list. One album cover is shared by every song.</p>
             <div class="form">
               <div>
                 <label>Release</label
@@ -1110,9 +1111,9 @@
               <div>
                 <label>Asset type</label
                 ><select id="uKind">
-                  <option value="cover">Cover art</option>
+                  <option value="track">WAV/MP3 tracks</option>
+                  <option value="cover">Shared album cover</option>
                   <option value="package">Final ZIP package</option>
-                  <option value="track">WAV/MP3 track</option>
                   <option value="preview">Audio preview</option>
                 </select>
               </div>
@@ -1123,11 +1124,23 @@
               <div id="tt" class="hidden">
                 <label>Track title</label><input id="trackTitle" />
               </div>
-              <div class="wide"><input id="file" type="file" /></div>
+              <div class="wide"><label for="file">Choose files</label><input id="file" type="file" multiple accept=".mp3,.wav,audio/mpeg,audio/wav" /></div>
               <div class="wide">
-                <button id="upload" class="btn">Upload Securely</button>
+                <button id="upload" class="btn">Add selected songs to list</button>
                 <div id="upMsg" class="hint"></div>
               </div>
+            </div>
+            <div class="card" id="trackEditor">
+              <div class="coverEdit"><img id="albumTrackCover" class="coverThumb hidden" alt="Shared album cover" /><p id="albumCoverHint" class="muted"></p></div>
+              <h3 id="trackCount">Track list</h3>
+              <p class="muted">Drag songs or use Move up / Move down. Edit any title below. Numbers update automatically.</p>
+              <div id="albumTracks"></div>
+              <div class="rowActions" style="margin-top:16px">
+                <button id="saveTracks" class="btn" type="button" disabled>Upload &amp; save track list</button>
+                <button id="reloadTracks" class="secondary" type="button">Reload saved tracks</button>
+              </div>
+              <p id="trackMsg" class="hint" role="status" aria-live="polite"></p>
+              <p class="muted">The final ZIP is uploaded separately. If you change this order, make sure the songs inside your ZIP match it.</p>
             </div>
             <div class="card">
               <button id="previewAudio" class="secondary">
@@ -1868,6 +1881,7 @@
         q("releaseList").innerHTML = h;
         q("overviewList").innerHTML = h;
         options();
+        syncTrackEditor();
       }
       async function loadR() {
         const j = await af(M);
@@ -2505,43 +2519,130 @@
           setBusy(t, false);
         }
       });
+      let trackDraft = [], trackExpected = [], trackRelease = "", trackDirty = false, trackSaving = false;
+      let draggedTrack = null;
+      const trackSnapshot = (tracks) => tracks.map(({id, title, track_number}) => ({id, title, track_number}));
+      function syncTrackEditor(force = false) {
+        if (!force && (trackDirty || trackSaving) && trackRelease === q("uRelease").value) return;
+        trackRelease = q("uRelease").value;
+        const release = rels.find(r => r.id === trackRelease);
+        trackDraft = [...(release?.tracks || [])].sort((a,b) => a.track_number - b.track_number).map(t => ({...t}));
+        trackExpected = trackSnapshot(trackDraft);
+        trackDirty = false;
+        const url = coverUrl(release);
+        q("albumTrackCover").classList.toggle("hidden", !url);
+        if (url) q("albumTrackCover").src = url;
+        else q("albumTrackCover").removeAttribute("src");
+        q("albumCoverHint").textContent = url ? "This album cover applies to every song." : "No album cover yet. Choose Shared album cover above to upload it once for all songs.";
+        renderTrackEditor();
+      }
+      function renderTrackEditor() {
+        q("trackCount").textContent = `Track list · ${trackDraft.length} song${trackDraft.length === 1 ? "" : "s"}`;
+        q("albumTracks").innerHTML = trackDraft.map((t,i) => `<div class="row" data-track-index="${i}" style="gap:12px;flex-wrap:wrap">
+          <button type="button" class="secondary" draggable="${!trackSaving}" data-drag="${i}" aria-label="Drag track ${i+1}" ${trackSaving ? "disabled" : ""}>↕ ${i+1}</button>
+          <div style="flex:1;min-width:160px"><label for="album-title-${i}">Track ${i+1}</label><input id="album-title-${i}" data-title="${i}" value="${esc(t.title)}" ${trackSaving ? "disabled" : ""} /><div class="muted">${t.id ? "Saved track" : "Ready to upload · " + esc(t.file.name)}</div></div>
+          <div class="rowActions"><button type="button" class="secondary" data-move="${i}" data-offset="-1" ${i === 0 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} up">Move up</button><button type="button" class="secondary" data-move="${i}" data-offset="1" ${i === trackDraft.length-1 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} down">Move down</button>${!t.id ? `<button type="button" class="secondary" data-remove="${i}" ${trackSaving ? "disabled" : ""}>Remove</button>` : ""}</div></div>`).join("") || '<p class="muted">No songs yet. Select WAV or MP3 files above to begin.</p>';
+        q("saveTracks").disabled = trackSaving || !trackDirty || !trackDraft.length;
+      }
+      function markTracksDirty() {
+        trackDirty = true;
+        q("trackMsg").textContent = "Unsaved changes — upload and save the track list when ready.";
+        q("saveTracks").disabled = trackSaving || !trackDraft.length;
+      }
+      function moveAlbumTrack(from, to) {
+        if (trackSaving || from === to || from < 0 || to < 0 || from >= trackDraft.length || to >= trackDraft.length) return;
+        trackDraft.splice(to, 0, trackDraft.splice(from, 1)[0]);
+        markTracksDirty(); renderTrackEditor();
+        q("albumTracks").querySelector(`[data-drag="${to}"]`)?.focus();
+      }
+      q("albumTracks").oninput = e => {
+        if (e.target.dataset.title === undefined || trackSaving) return;
+        trackDraft[Number(e.target.dataset.title)].title = e.target.value;
+        markTracksDirty();
+      };
+      q("albumTracks").onclick = e => {
+        const button = e.target.closest("button");
+        if (!button || trackSaving) return;
+        if (button.dataset.move !== undefined) moveAlbumTrack(Number(button.dataset.move), Number(button.dataset.move) + Number(button.dataset.offset));
+        if (button.dataset.remove !== undefined) { trackDraft.splice(Number(button.dataset.remove),1); markTracksDirty(); renderTrackEditor(); }
+      };
+      q("albumTracks").ondragstart = e => {
+        const handle = e.target.closest("[data-drag]");
+        if (!handle || trackSaving) { e.preventDefault(); return; }
+        draggedTrack = Number(handle.dataset.drag); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(draggedTrack));
+      };
+      q("albumTracks").ondragover = e => { if (draggedTrack !== null && !trackSaving) e.preventDefault(); };
+      q("albumTracks").ondrop = e => {
+        e.preventDefault(); const row = e.target.closest("[data-track-index]");
+        if (row && draggedTrack !== null) moveAlbumTrack(draggedTrack, Number(row.dataset.trackIndex));
+        draggedTrack = null;
+      };
+      q("albumTracks").ondragend = () => { draggedTrack = null; };
+      q("uRelease").onchange = () => {
+        if (trackDirty && !confirm("Discard unsaved track changes and switch releases?")) { q("uRelease").value = trackRelease; return; }
+        q("file").value = ""; q("trackMsg").textContent = ""; syncTrackEditor(true);
+      };
+      q("reloadTracks").onclick = async () => {
+        if (trackSaving || (trackDirty && !confirm("Discard unsaved changes and reload saved tracks?"))) return;
+        try { await loadR(); syncTrackEditor(true); q("trackMsg").textContent = "Saved tracks loaded."; }
+        catch(e) { q("trackMsg").textContent = e.message; }
+      };
+      window.addEventListener("beforeunload", e => { if (trackDirty || trackSaving) { e.preventDefault(); e.returnValue = ""; } });
       q("uKind").onchange = () => {
         const t = q("uKind").value === "track";
-        q("tn").classList.toggle("hidden", !t);
-        q("tt").classList.toggle("hidden", !t);
+        q("tn").classList.add("hidden"); q("tt").classList.add("hidden");
+        q("file").multiple = t;
+        q("file").accept = t ? ".mp3,.wav,audio/mpeg,audio/wav" : q("uKind").value === "cover" ? "image/jpeg,image/png,image/webp" : q("uKind").value === "package" ? ".zip" : ".mp3,.wav";
+        q("file").value = "";
+        q("upload").textContent = t ? "Add selected songs to list" : "Upload Securely";
       };
       q("upload").onclick = async () => {
         const b = q("upload");
         try {
-          setBusy(b, true, "Uploading…");
-          const f = q("file").files[0];
-          if (!f) throw Error("Choose a file");
-          const product_id = q("uRelease").value,
-            kind = q("uKind").value;
-          let op = null;
+          const files = Array.from(q("file").files), product_id = q("uRelease").value, kind = q("uKind").value;
+          if (!product_id) throw Error("Choose a release");
+          if (!files.length) throw Error("Choose a file");
           if (kind === "track") {
-            const title = q("trackTitle").value.trim();
-            if (!title) throw Error("Track title required");
-            const tr = await af(M, {
-              method: "POST",
-              body: JSON.stringify({
-                action: "add_track",
-                product_id,
-                track_number: Number(q("trackNo").value),
-                title,
-                filename: f.name,
-              }),
-            });
-            op = tr.track.audio_object_path;
+            if (files.some(f => !/\.(mp3|wav)$/i.test(f.name))) throw Error("Choose WAV or MP3 songs only.");
+            for (const file of files) {
+              if (trackDraft.some(t => t.file && t.file.name === file.name && t.file.size === file.size && t.file.lastModified === file.lastModified)) continue;
+              trackDraft.push({file, title: file.name.replace(/\.[^.]+$/, "")});
+            }
+            markTracksDirty(); renderTrackEditor(); q("file").value = "";
+            q("upMsg").textContent = "Songs added below. Check the titles and order, then upload and save."; return;
           }
-          await uploadAsset(product_id, kind, f, op);
-          q("upMsg").textContent = "Upload complete.";
+          setBusy(b, true, "Uploading…");
+          await uploadAsset(product_id, kind, files[0]);
+          q("upMsg").textContent = "Upload complete."; q("file").value = "";
           await loadR();
-        } catch (e) {
-          q("upMsg").textContent = e.message;
-        } finally {
-          setBusy(b, false);
-        }
+          const release = rels.find(r => r.id === product_id), url = coverUrl(release);
+          if (url) { q("albumTrackCover").src = url; q("albumTrackCover").classList.remove("hidden"); q("albumCoverHint").textContent = "This album cover applies to every song."; }
+        } catch(e) { q("upMsg").textContent = e.message; }
+        finally { setBusy(b, false); }
+      };
+      q("saveTracks").onclick = async () => {
+        if (trackSaving || !trackDirty) return;
+        const controls = ["uRelease", "uKind", "file", "upload", "reloadTracks"];
+        try {
+          if (trackDraft.some(t => !t.title.trim())) throw Error("Every song needs a title.");
+          trackSaving = true; controls.forEach(id => q(id).disabled = true); renderTrackEditor();
+          let next = Math.max(0, ...trackExpected.map(t => t.track_number)) + 1;
+          for (let i = 0; i < trackDraft.length; i++) {
+            const t = trackDraft[i];
+            if (t.id) continue;
+            q("trackMsg").textContent = `Uploading song ${i+1} of ${trackDraft.length}: ${t.title}`;
+            if (!t.uploadedPath) t.uploadedPath = (await uploadAsset(trackRelease, "track", t.file)).path;
+            const result = await af(M, {method:"POST", body:JSON.stringify({action:"attach_uploaded_track", product_id:trackRelease, title:t.title.trim(), track_number:next, path:t.uploadedPath})});
+            Object.assign(t, result.track); next = Math.max(next, t.track_number) + 1;
+            trackExpected.push(...trackSnapshot([t])); renderTrackEditor();
+          }
+          q("trackMsg").textContent = "Saving track order…";
+          await af(M, {method:"POST", body:JSON.stringify({action:"save_track_order", product_id:trackRelease, tracks:trackDraft.map(t => ({id:t.id,title:t.title.trim()})), expected:trackExpected})});
+          trackDirty = false; trackSaving = false;
+          await loadR(); syncTrackEditor(true);
+          q("trackMsg").textContent = "All songs uploaded. Track titles and order saved.";
+        } catch(e) { q("trackMsg").textContent = `Not finished: ${e.message} Completed uploads are kept. You can retry, or reload saved tracks if another session changed them.`; }
+        finally { trackSaving = false; controls.forEach(id => q(id).disabled = false); renderTrackEditor(); }
       };
       q("previewAudio").onclick = async () => {
         try {
