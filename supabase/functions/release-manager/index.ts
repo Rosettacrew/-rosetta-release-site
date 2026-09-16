@@ -499,6 +499,32 @@ Deno.serve(async (req: Request) => {
       return json({ release: data });
     }
 
+    if (action === "save_track_order") {
+      if (!body.product_id || !Array.isArray(body.tracks) || !Array.isArray(body.expected)) return json({ error: "Release and track list required" }, 400);
+      const { error } = await supabase.rpc("save_release_track_order", {
+        p_product_id: body.product_id, p_tracks: body.tracks, p_expected: body.expected,
+      });
+      if (error) return json({ error: error.message }, 409);
+      return json({ ok: true });
+    }
+
+    if (action === "attach_uploaded_track") {
+      const productId = String(body.product_id ?? ""), title = String(body.title ?? "").trim();
+      const path = String(body.path ?? ""), trackNumber = Number(body.track_number);
+      if (!productId || !title || !Number.isInteger(trackNumber) || trackNumber < 1 ||
+          !path.startsWith(`${productId}/tracks/`) || path.includes("..") || !/\.(mp3|wav)$/i.test(path))
+        return json({ error: "Valid release, title, track number and uploaded audio required" }, 400);
+      const { data: files, error: storageError } = await supabase.storage.from("release-private").list(`${productId}/tracks`, { search: path.split("/").pop() });
+      if (storageError || !files?.some((file) => file.name === path.split("/").pop()))
+        return json({ error: "Audio upload is not complete. Try again." }, 400);
+      // A retry after a lost response must not register the same file twice.
+      const { data: existing } = await supabase.from("release_tracks").select("*").eq("product_id", productId).eq("audio_object_path", path).maybeSingle();
+      if (existing) return json({ track: existing });
+      const { data, error } = await supabase.from("release_tracks").insert({ product_id: productId, title, track_number: trackNumber, audio_bucket: "release-private", audio_object_path: path, is_downloadable: true }).select("*").single();
+      if (error) return json({ error: "Track number is already used or could not be saved. Reload tracks and try again." }, 409);
+      return json({ track: data });
+    }
+
     if (action === "add_track") {
       const productId = String(body.product_id ?? ""), title = String(body.title ?? "").trim(), trackNumber = Number(body.track_number);
       if (!productId || !title || !Number.isInteger(trackNumber) || trackNumber < 1) return json({ error: "product_id, title and track_number are required" }, 400);
