@@ -95,29 +95,10 @@
         visibility: hidden;
         pointer-events: none;
       }
-      .site-intro img {
+      .site-intro video {
         width: 100%;
         height: 100%;
-        object-fit: contain;
-        object-position: center;
-        background: #030303;
-      }
-      @media (max-width: 819px) {
-        .site-intro {
-          padding:
-            max(28px, env(safe-area-inset-top))
-            max(22px, env(safe-area-inset-right))
-            max(28px, env(safe-area-inset-bottom))
-            max(22px, env(safe-area-inset-left));
-        }
-        .site-intro img {
-          width: auto;
-          height: auto;
-          max-width: 90vw;
-          max-height: 84svh;
-          object-fit: contain;
-          object-position: center;
-        }
+        object-fit: cover;
       }
       .intro-skip {
         position: absolute;
@@ -281,12 +262,59 @@
         background: var(--g2);
       }
       .swipe-hint {
-        margin: 12px 0 0;
+        margin: 14px 0 0;
         text-align: center;
-        color: #8f887e;
-        font-size: 12px;
-        letter-spacing: 0.06em;
+        color: #e2bd69;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
       }
+      .swipe-hint.pulse {
+        animation: swipePulse 2.4s ease-in-out infinite;
+      }
+      @keyframes swipePulse {
+        0%, 100% { opacity: 0.75; transform: translateX(0); }
+        50% { opacity: 1; transform: translateX(4px); }
+      }
+      .more-cue {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 10px 0 0;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(226, 189, 105, 0.45);
+        background: rgba(226, 189, 105, 0.08);
+        color: #e2bd69;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 800;
+      }
+      .tracklist {
+        margin: 14px 0 4px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255,255,255,0.02);
+      }
+      .tracklist-label {
+        color: #e2bd69;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+      .tracklist ol {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: #d7d0c5;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .tracklist li + li { margin-top: 4px; }
       .cover {
         width: min(82vw, 430px);
         aspect-ratio: 1/1;
@@ -541,14 +569,16 @@
       aria-label="Rosetta Crew Music Group introduction"
       hidden
     >
-      <img
-        id="intro-image"
-        src="assets/rosetta-intro-poster.jpg"
-        alt=""
-        decoding="async"
-        fetchpriority="high"
+      <video
+        id="intro-video"
+        muted
+        playsinline
+        preload="auto"
+        poster="assets/rosetta-intro-poster.jpg"
         aria-hidden="true"
-      />
+      >
+        <source src="assets/rosetta-intro.mp4" type="video/mp4" />
+      </video>
       <button id="intro-skip" class="intro-skip" type="button">
         SKIP
       </button>
@@ -596,8 +626,8 @@
             ›
           </button>
         </div>
-        <p id="swipe-hint" class="swipe-hint">
-          Swipe the cover or use the arrows to browse releases
+        <p id="swipe-hint" class="swipe-hint pulse">
+          More music this way — swipe the cover or tap the arrows
         </p>
       </section>
       <div id="checkout-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
@@ -605,7 +635,7 @@
     <script>
       function initSiteIntro() {
         const intro = document.getElementById("site-intro");
-        const image = document.getElementById("intro-image");
+        const video = document.getElementById("intro-video");
         const skip = document.getElementById("intro-skip");
         const main = document.getElementById("main-content");
         const sessionKey = "rc_home_intro_seen";
@@ -634,6 +664,7 @@
         function closeIntro() {
           if (intro.classList.contains("is-closing")) return;
           clearTimeout(closeTimer);
+          video.pause();
           intro.classList.add("is-closing");
           document.body.classList.remove("intro-active");
           main.inert = false;
@@ -643,8 +674,12 @@
         }
 
         skip.addEventListener("click", closeIntro);
-        image.addEventListener("error", closeIntro, { once: true });
-        closeTimer = setTimeout(closeIntro, 4500);
+        video.addEventListener("ended", closeIntro, { once: true });
+        video.addEventListener("error", closeIntro, { once: true });
+        closeTimer = setTimeout(closeIntro, 6000);
+
+        const playback = video.play();
+        if (playback) playback.catch(closeIntro);
       }
 
       initSiteIntro();
@@ -790,7 +825,16 @@
             ? `<span class="booking-banner" aria-disabled="true"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · preview link disabled</span></span>`
             : `<a class="booking-banner" href="tel:+16562424777"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · 656-242-4777</span></a>`
           : "";
-        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art"><div class="meta"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${booking}${action}${supportBlock(release)}<div class="trust">${trust}</div></div></div></article>`;
+        const tracks = Array.isArray(release.tracks) ? release.tracks : [];
+        const showTracks = release.show_tracklist !== false && tracks.length > 0;
+        const tracklist = showTracks
+          ? `<div class="tracklist"><div class="tracklist-label">${tracks.length > 1 ? `${tracks.length} songs on this release` : "Track on this release"}</div><ol>${tracks.map((t) => `<li>${esc(String(t.title || "").trim() || `Track ${t.track_number}`)}</li>`).join("")}</ol></div>`
+          : "";
+        const moreCue =
+          total > 1 && release.show_swipe_cue !== false
+            ? `<div class="more-cue" aria-hidden="true">${index + 1} of ${total} · Swipe for more →</div>`
+            : "";
+        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art">${moreCue}<div class="meta"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${tracklist}${booking}${action}${supportBlock(release)}<div class="trust">${trust}</div></div></div></article>`;
       }
       async function load() {
         try {
