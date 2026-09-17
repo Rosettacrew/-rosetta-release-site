@@ -11,7 +11,7 @@ Deno.serve(async(req:Request)=>{
   try{
     const supabase=adminClient();
     const {data,error}=await supabase.from("release_products")
-      .select("id,slug,artist_name,artist_type,title,product_type,description,presale_price_cents,release_price_cents,currency,release_at,status,published_at,cover_art_bucket,cover_art_path,stripe_payment_link_url,is_featured,featured_at")
+      .select("id,slug,artist_name,artist_type,title,product_type,description,presale_price_cents,release_price_cents,currency,release_at,status,published_at,cover_art_bucket,cover_art_path,stripe_payment_link_url,is_featured,featured_at,metadata,tracks:release_tracks(track_number,title)")
       .eq("storefront_enabled",true)
       .in("status",["live","presale"])
       .not("published_at","is",null)
@@ -30,14 +30,26 @@ Deno.serve(async(req:Request)=>{
       // Stripe test Payment Links use /test_… on buy.stripe.com (also match buy.stripe.com/test).
       return !/\/test_/i.test(link) && !/buy\.stripe\.com\/test/i.test(link) && !/sandbox/i.test(title) && !/sandbox/i.test(slug);
     });
-    const releases=publicData.map((r:any)=>({
+    const releases=publicData.map((r:any)=>{
+      const meta=r.metadata&&typeof r.metadata==="object"?r.metadata:{};
+      const showTracklist=meta.show_tracklist!==false; // default on; Owner can turn off in admin
+      const showSwipeCue=meta.show_swipe_cue!==false;
+      const tracks=Array.isArray(r.tracks)?[...r.tracks]
+        .filter((t:any)=>t&&t.title!=null&&Number.isFinite(Number(t.track_number)))
+        .map((t:any)=>({track_number:Number(t.track_number),title:String(t.title)}))
+        .sort((a:any,b:any)=>a.track_number-b.track_number)
+        .slice(0,30):[];
+      return {
       id:r.id,slug:r.slug,artist_name:r.artist_name,artist_type:r.artist_type??null,title:r.title,product_type:r.product_type,description:r.description,
       price_cents:r.status==="presale"&&r.presale_price_cents!=null?r.presale_price_cents:(r.release_price_cents??r.presale_price_cents),
       release_price_cents:r.release_price_cents,presale_price_cents:r.presale_price_cents,currency:r.currency??"usd",release_at:r.release_at,status:r.status,published_at:r.published_at,is_featured:!!r.is_featured,featured_at:r.featured_at,
       cover_url:r.cover_art_bucket==="release-public"&&r.cover_art_path?`${base}/storage/v1/object/public/release-public/${r.cover_art_path}`:null,
       checkout_url:r.stripe_payment_link_url||null,
-      support_enabled:true
-    })).filter((r:any)=>r.cover_url&&r.checkout_url&&Number(r.price_cents)>0);
+      support_enabled:true,
+      show_tracklist:showTracklist,
+      show_swipe_cue:showSwipeCue,
+      tracks:showTracklist?tracks:[]
+    }}).filter((r:any)=>r.cover_url&&r.checkout_url&&Number(r.price_cents)>0);
     return json({releases,featured:releases.find((r:any)=>r.is_featured)??releases[0]??null});
   }catch(e){console.error(e);return json({error:e instanceof Error?e.message:String(e)},500)}
 });
