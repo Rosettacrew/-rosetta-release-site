@@ -373,6 +373,49 @@
         background: #120f09;
         border-radius: 9px;
       }
+
+      .productTypeToggle {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .productTypeToggle label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border: 1px solid rgba(212, 175, 55, 0.35);
+        border-radius: 999px;
+        cursor: pointer;
+        background: rgba(0, 0, 0, 0.35);
+        color: #f5e6b8;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      .productTypeToggle input {
+        accent-color: #d4af37;
+      }
+      .productTypeToggle label:has(input:checked) {
+        border-color: #d4af37;
+        box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.45);
+        background: rgba(212, 175, 55, 0.12);
+      }
+      .addReleaseAssets {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(212, 175, 55, 0.2);
+      }
+      .addReleaseAssets.hidden { display: none; }
+      .releasesHead {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+
       .bookingFields .form {
         margin-top: 10px;
       }
@@ -848,7 +891,7 @@
           <button class="on" data-tab="overview">Overview</button
           ><a class="muted" href="analytics-hub.html" style="margin-right:12px">Sales Map</a>
           <button data-tab="releases">Releases</button
-          ><button data-tab="presale">Pre-Sale Builder</button
+          ><button data-tab="presale">Add Release</button
           ><button data-tab="edit">Edit Release</button
           ><button data-tab="uploads">Uploads</button
           ><button data-tab="analytics">Analytics</button
@@ -904,20 +947,29 @@
         </section>
         <section id="releases" class="section">
           <div class="card">
-            <h2>All Releases</h2>
-            <p class="muted">
-              Edit each release here. Use the Storefront toggle to publish or
-              remove it without digging through extra screens.
-            </p>
+            <div class="releasesHead">
+              <div>
+                <h2>All Releases</h2>
+                <p class="muted">
+                  Edit each release here. Use the Storefront toggle to publish or
+                  remove it without digging through extra screens.
+                </p>
+              </div>
+              <button id="gotoAddRelease" class="btn" type="button">Add Release</button>
+            </div>
             <div id="releaseList" class="list"></div>
           </div>
         </section>
         <section id="presale" class="section">
           <div class="card">
-            <h2>Create a Pre-Sale</h2>
+            <h2>Add a New Release</h2>
+            <p class="muted">
+              Create a Single, EP, or Album, then drop cover art and audio below.
+              Storefront stays off until you turn it on from Releases.
+            </p>
             <div class="form">
               <div><label>Artist</label><input id="psArtist" /></div>
-              <div><label>Release / EP title</label><input id="psTitle" /></div>
+              <div><label>Release title</label><input id="psTitle" /></div>
               <fieldset class="artistKind">
                 <legend>Artist identity</legend>
                 <div class="artistKindOptions">
@@ -934,10 +986,17 @@
                   <div class="wide"><label>Contact email</label><input id="psContactEmail" type="email" autocomplete="off" /></div>
                 </div>
               </div>
-              <div>
-                <label>Type</label
-                ><select id="psType">
-                  <option value="single">Single</option>
+              <div class="wide">
+                <label>Release type</label>
+                <div class="productTypeToggle" role="radiogroup" aria-label="Release type">
+                  <label><input type="radio" name="psTypeToggle" value="single" checked /> Single</label>
+                  <label><input type="radio" name="psTypeToggle" value="ep" /> EP</label>
+                  <label><input type="radio" name="psTypeToggle" value="album" /> Album</label>
+                  <label><input type="radio" name="psTypeToggle" value="beat" /> Beat</label>
+                  <label><input type="radio" name="psTypeToggle" value="digital_product" /> Digital Product</label>
+                </div>
+                <select id="psType" class="hidden" aria-hidden="true">
+                  <option value="single" selected>Single</option>
                   <option value="ep">EP</option>
                   <option value="album">Album</option>
                   <option value="beat">Beat</option>
@@ -964,8 +1023,40 @@
                 <label>Description</label><textarea id="psDesc"></textarea>
               </div>
               <div class="wide">
-                <button id="createPresale" class="btn">Save Pre-Sale</button>
+                <button id="createPresale" class="btn">Save Release</button>
                 <div id="psMsg" class="hint"></div>
+              </div>
+            </div>
+            <div id="addReleaseAssets" class="addReleaseAssets hidden">
+              <h3>Drop assets for this release</h3>
+              <p class="muted">
+                Cover must be exactly 3000×3000 JPG/PNG/WebP. For customer download on unlock day, also upload a Final ZIP package (or WAV/MP3 tracks first).
+              </p>
+              <div class="form">
+                <div class="wide">
+                  <label>Cover art</label>
+                  <input id="psCoverFile" type="file" accept="image/jpeg,image/png,image/webp" />
+                </div>
+                <div class="wide">
+                  <label>Audio (WAV/MP3 track)</label>
+                  <input id="psTrackFile" type="file" accept="audio/*,.wav,.mp3,.flac,.aiff" />
+                </div>
+                <div>
+                  <label>Track #</label>
+                  <input id="psTrackNo" type="number" min="1" value="1" />
+                </div>
+                <div>
+                  <label>Track title</label>
+                  <input id="psTrackTitle" placeholder="Optional" />
+                </div>
+                <div class="wide">
+                  <label>Final ZIP package (download fulfillment)</label>
+                  <input id="psPackageFile" type="file" accept=".zip,application/zip" />
+                </div>
+                <div class="wide">
+                  <button id="psUploadAssets" class="btn" type="button">Upload selected assets</button>
+                  <div id="psAssetMsg" class="hint"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -1101,8 +1192,7 @@
         </section>
         <section id="uploads" class="section">
           <div class="card">
-            <h2>Album tracks &amp; artwork</h2>
-            <p class="muted">Choose your release, add songs, then arrange and save your track list. One album cover is shared by every song.</p>
+            <h2>Secure Upload</h2>
             <div class="form">
               <div>
                 <label>Release</label
@@ -1111,9 +1201,9 @@
               <div>
                 <label>Asset type</label
                 ><select id="uKind">
-                  <option value="track">WAV/MP3 tracks</option>
-                  <option value="cover">Shared album cover</option>
+                  <option value="cover">Cover art</option>
                   <option value="package">Final ZIP package</option>
+                  <option value="track">WAV/MP3 track</option>
                   <option value="preview">Audio preview</option>
                 </select>
               </div>
@@ -1124,35 +1214,22 @@
               <div id="tt" class="hidden">
                 <label>Track title</label><input id="trackTitle" />
               </div>
-              <div class="wide"><label for="file">Choose files</label><input id="file" type="file" multiple accept=".mp3,.wav,audio/mpeg,audio/wav" /></div>
+              <div class="wide"><input id="file" type="file" /></div>
               <div class="wide">
-                <button id="upload" class="btn">Add selected songs to list</button>
+                <button id="upload" class="btn">Upload Securely</button>
                 <div id="upMsg" class="hint"></div>
               </div>
             </div>
-            <div class="card" id="trackEditor">
-              <div class="coverEdit"><img id="albumTrackCover" class="coverThumb hidden" alt="Shared album cover" /><p id="albumCoverHint" class="muted"></p></div>
-              <h3 id="trackCount">Track list</h3>
-              <p class="muted">Drag songs or use Move up / Move down. Edit any title below. Numbers update automatically.</p>
-              <div id="albumTracks"></div>
-              <div class="rowActions" style="margin-top:16px">
-                <button id="saveTracks" class="btn" type="button" disabled>Upload &amp; save track list</button>
-                <button id="reloadTracks" class="secondary" type="button">Reload saved tracks</button>
-              </div>
-              <p id="trackMsg" class="hint" role="status" aria-live="polite"></p>
-              <p class="muted">The final ZIP is uploaded separately. If you change this order, make sure the songs inside your ZIP match it.</p>
-            </div>
             <div class="card">
               <button id="previewAudio" class="secondary">
-                Play Release Promo Preview</button
+                Play Selected Preview</button
               ><audio
                 id="audio"
                 controls
                 preload="none"
                 style="width: 100%; margin-top: 10px"
               ></audio>
-              <div id="audioMsg" class="muted" role="status" aria-live="polite"></div>
-              <p class="muted">Use Play beside a song to check its full audio privately. The release promo preview is a separate upload.</p>
+              <div id="audioMsg" class="muted"></div>
             </div>
           </div>
         </section>
@@ -1882,7 +1959,6 @@
         q("releaseList").innerHTML = h;
         q("overviewList").innerHTML = h;
         options();
-        syncTrackEditor();
       }
       async function loadR() {
         const j = await af(M);
@@ -2246,9 +2322,73 @@
         q(id).onchange = () => syncArtistContact("e");
       });
       syncArtistContact("ps");
+
+      function syncPsTypeToggle() {
+        const picked = document.querySelector('input[name="psTypeToggle"]:checked');
+        if (picked) q("psType").value = picked.value;
+      }
+      document.querySelectorAll('input[name="psTypeToggle"]').forEach((el) => {
+        el.onchange = syncPsTypeToggle;
+      });
+      syncPsTypeToggle();
+      let lastCreatedReleaseId = null;
+      function showAddReleaseAssets(releaseId) {
+        lastCreatedReleaseId = releaseId;
+        const box = q("addReleaseAssets");
+        if (box) box.classList.remove("hidden");
+        if (q("uRelease")) q("uRelease").value = releaseId;
+      }
+      q("gotoAddRelease").onclick = () => goto("presale");
+
+      q("psUploadAssets").onclick = async () => {
+        const b = q("psUploadAssets");
+        const releaseId = lastCreatedReleaseId || q("eRelease").value || q("uRelease").value;
+        const msg = q("psAssetMsg");
+        try {
+          if (!releaseId) throw Error("Save the release first.");
+          const cover = q("psCoverFile").files[0];
+          const track = q("psTrackFile").files[0];
+          const pack = q("psPackageFile").files[0];
+          if (!cover && !track && !pack) throw Error("Choose a cover, track, and/or ZIP package.");
+          setBusy(b, true, "Uploading…");
+          const notes = [];
+          if (cover) {
+            await uploadAsset(releaseId, "cover", cover);
+            notes.push("cover");
+          }
+          if (track) {
+            const trackNo = Number(q("psTrackNo").value) || 1;
+            const trackTitle = (q("psTrackTitle").value.trim() || track.name.replace(/\.[^.]+$/, ""));
+            const tr = await af(M, {
+              method: "POST",
+              body: JSON.stringify({
+                action: "add_track",
+                product_id: releaseId,
+                track_number: trackNo,
+                title: trackTitle,
+                filename: track.name,
+              }),
+            });
+            await uploadAsset(releaseId, "track", track, tr.track.audio_object_path);
+            notes.push(`track #${trackNo}`);
+          }
+          if (pack) {
+            await uploadAsset(releaseId, "package", pack);
+            notes.push("ZIP package");
+          }
+          msg.textContent = `Uploaded: ${notes.join(", ")}. Review on Uploads / Edit, then Storefront On when ready.`;
+          await loadR();
+        } catch (e) {
+          msg.textContent = e.message;
+        } finally {
+          setBusy(b, false);
+        }
+      };
+
       q("createPresale").onclick = async () => {
         const b = q("createPresale");
         try {
+          syncPsTypeToggle();
           setBusy(b, true, "Saving…");
           const artist = q("psArtist").value.trim(),
             title = q("psTitle").value.trim(),
@@ -2293,9 +2433,11 @@
             }),
           });
           q("psMsg").textContent =
-            "Pre-sale saved. Upload cover art, review it, then switch Storefront On.";
+            "Release saved. Drop cover art and audio below, then turn Storefront On from Releases when ready.";
           await loadR();
           fillEdit(j.release.id);
+          showAddReleaseAssets(j.release.id);
+          syncPsTypeToggle();
         } catch (e) {
           q("psMsg").textContent = e.message;
         } finally {
@@ -2520,194 +2662,51 @@
           setBusy(t, false);
         }
       });
-      let trackDraft = [], trackExpected = [], trackRelease = "", trackDirty = false, trackSaving = false;
-      let draggedTrack = null, trackAudioUrl = null, trackPlayRequest = 0;
-      function stopTrackPlayback() {
-        trackPlayRequest++;
-        q("audio").pause(); q("audio").removeAttribute("src"); q("audio").load();
-        if (trackAudioUrl) URL.revokeObjectURL(trackAudioUrl);
-        trackAudioUrl = null;
-      }
-      async function playAlbumTrack(index) {
-        const track = trackDraft[index];
-        if (!track) return;
-        stopTrackPlayback();
-        const request = trackPlayRequest;
-        q("audioMsg").textContent = `Loading: ${track.title}`;
-        try {
-          let url;
-          if (track.id) {
-            const result = await af(M, {method: "POST", body: JSON.stringify({action: "preview_track", track_id: track.id})});
-            url = result.preview_url;
-          } else {
-            trackAudioUrl = URL.createObjectURL(track.file); url = trackAudioUrl;
-          }
-          if (request !== trackPlayRequest) return;
-          q("audio").src = url; q("audio").load();
-          q("audioMsg").textContent = `Private playback: ${track.title}`;
-          q("audio").scrollIntoView({block: "nearest", behavior: "smooth"});
-          try { await q("audio").play(); }
-          catch (e) {
-            if (request !== trackPlayRequest) return;
-            q("audioMsg").textContent = e.name === "NotAllowedError"
-              ? `Ready: ${track.title}. Tap play on the audio player.`
-              : `Unable to play ${track.title}. Try Play again; this device may not support this audio format.`;
-          }
-        } catch(e) { if (request === trackPlayRequest) q("audioMsg").textContent = `Cannot preview ${track.title}: ${e.message}`; }
-      }
-      q("audio").onerror = () => { q("audioMsg").textContent = "Audio could not play. Tap the song's Play button to refresh its private link. If it still fails, check the audio file format."; };
-      const trackSnapshot = (tracks) => tracks.map(({id, title, track_number}) => ({id, title, track_number}));
-      function syncTrackEditor(force = false) {
-        if (!force && (trackDirty || trackSaving) && trackRelease === q("uRelease").value) return;
-        if (trackRelease !== q("uRelease").value) { stopTrackPlayback(); q("audioMsg").textContent = ""; }
-        trackRelease = q("uRelease").value;
-        const release = rels.find(r => r.id === trackRelease);
-        trackDraft = [...(release?.tracks || [])].sort((a,b) => a.track_number - b.track_number).map(t => ({...t}));
-        trackExpected = trackSnapshot(trackDraft);
-        trackDirty = false;
-        const url = coverUrl(release);
-        q("albumTrackCover").classList.toggle("hidden", !url);
-        if (url) q("albumTrackCover").src = url;
-        else q("albumTrackCover").removeAttribute("src");
-        q("albumCoverHint").textContent = url ? "This album cover applies to every song." : "No album cover yet. Choose Shared album cover above to upload it once for all songs.";
-        renderTrackEditor();
-      }
-      function renderTrackEditor() {
-        q("trackCount").textContent = `Track list · ${trackDraft.length} song${trackDraft.length === 1 ? "" : "s"}`;
-        q("albumTracks").innerHTML = trackDraft.map((t,i) => `<div class="row" data-track-index="${i}" style="gap:12px;flex-wrap:wrap">
-          <button type="button" class="secondary" draggable="${!trackSaving}" data-drag="${i}" aria-label="Drag track ${i+1}" ${trackSaving ? "disabled" : ""}>↕ ${i+1}</button>
-          <div style="flex:1;min-width:160px"><label for="album-title-${i}">Track ${i+1}</label><input id="album-title-${i}" data-title="${i}" value="${esc(t.title)}" ${trackSaving ? "disabled" : ""} /><div class="muted">${t.id ? "Saved track" : "Ready to upload · " + esc(t.file.name)}</div></div>
-          <div class="rowActions"><button type="button" class="secondary" data-play="${i}" ${trackSaving ? "disabled" : ""} aria-label="Play track ${i+1}">Play</button><button type="button" class="secondary" data-move="${i}" data-offset="-1" ${i === 0 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} up">Move up</button><button type="button" class="secondary" data-move="${i}" data-offset="1" ${i === trackDraft.length-1 || trackSaving ? "disabled" : ""} aria-label="Move track ${i+1} down">Move down</button><button type="button" class="secondary" data-remove="${i}" ${trackSaving ? "disabled" : ""}>${t.id ? "Delete" : "Remove"}</button></div></div>`).join("") || '<p class="muted">No songs yet. Select WAV or MP3 files above to begin.</p>';
-        q("saveTracks").disabled = trackSaving || !trackDirty || !trackDraft.length;
-      }
-      function markTracksDirty() {
-        trackDirty = true;
-        q("trackMsg").textContent = "Unsaved changes — upload and save the track list when ready.";
-        q("saveTracks").disabled = trackSaving || !trackDraft.length;
-      }
-      function moveAlbumTrack(from, to) {
-        if (trackSaving || from === to || from < 0 || to < 0 || from >= trackDraft.length || to >= trackDraft.length) return;
-        trackDraft.splice(to, 0, trackDraft.splice(from, 1)[0]);
-        markTracksDirty(); renderTrackEditor();
-        q("albumTracks").querySelector(`[data-drag="${to}"]`)?.focus();
-      }
-      q("albumTracks").oninput = e => {
-        if (e.target.dataset.title === undefined || trackSaving) return;
-        trackDraft[Number(e.target.dataset.title)].title = e.target.value;
-        markTracksDirty();
-      };
-      q("albumTracks").onclick = async e => {
-        const button = e.target.closest("button");
-        if (!button || trackSaving) return;
-        if (button.dataset.play !== undefined) { await playAlbumTrack(Number(button.dataset.play)); return; }
-        if (button.dataset.move !== undefined) moveAlbumTrack(Number(button.dataset.move), Number(button.dataset.move) + Number(button.dataset.offset));
-        if (button.dataset.remove !== undefined) {
-          const index = Number(button.dataset.remove), track = trackDraft[index];
-          if (!track.id) { stopTrackPlayback(); trackDraft.splice(index,1); markTracksDirty(); renderTrackEditor(); return; }
-          if (!confirm(`Delete "${track.title}" from this album? This removes the saved track entry. The private master file and any previously uploaded ZIP are kept.`)) return;
-          const controls = ["uRelease", "uKind", "file", "upload", "reloadTracks"];
-          try {
-            trackSaving = true; controls.forEach(id => q(id).disabled = true); renderTrackEditor();
-            const saved = trackExpected.find(t => t.id === track.id);
-            await af(M, {method:"POST",body:JSON.stringify({action:"delete_track", product_id:trackRelease, track_id:track.id, expected_title:saved?.title})});
-            stopTrackPlayback(); q("audioMsg").textContent = "";
-            trackDraft.splice(index,1); trackExpected = trackExpected.filter(t => t.id !== track.id);
-            const release = rels.find(r => r.id === trackRelease);
-            if (release) release.tracks = (release.tracks || []).filter(t => t.id !== track.id);
-            trackDirty = trackDraft.length > 0;
-            q("trackMsg").textContent = trackDirty ? "Track deleted from the album. Save the track list to update numbering and any other edits." : "Track deleted. This album has no tracks.";
-          } catch(e) { q("trackMsg").textContent = `Could not delete track: ${e.message}`; }
-          finally { trackSaving = false; controls.forEach(id => q(id).disabled = false); renderTrackEditor(); }
-        }
-      };
-      q("albumTracks").ondragstart = e => {
-        const handle = e.target.closest("[data-drag]");
-        if (!handle || trackSaving) { e.preventDefault(); return; }
-        draggedTrack = Number(handle.dataset.drag); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(draggedTrack));
-      };
-      q("albumTracks").ondragover = e => { if (draggedTrack !== null && !trackSaving) e.preventDefault(); };
-      q("albumTracks").ondrop = e => {
-        e.preventDefault(); const row = e.target.closest("[data-track-index]");
-        if (row && draggedTrack !== null) moveAlbumTrack(draggedTrack, Number(row.dataset.trackIndex));
-        draggedTrack = null;
-      };
-      q("albumTracks").ondragend = () => { draggedTrack = null; };
-      q("uRelease").onchange = () => {
-        if (trackDirty && !confirm("Discard unsaved track changes and switch releases?")) { q("uRelease").value = trackRelease; return; }
-        q("file").value = ""; q("trackMsg").textContent = ""; syncTrackEditor(true);
-      };
-      q("reloadTracks").onclick = async () => {
-        if (trackSaving || (trackDirty && !confirm("Discard unsaved changes and reload saved tracks?"))) return;
-        try { await loadR(); syncTrackEditor(true); q("trackMsg").textContent = "Saved tracks loaded."; }
-        catch(e) { q("trackMsg").textContent = e.message; }
-      };
-      window.addEventListener("beforeunload", e => { if (trackDirty || trackSaving) { e.preventDefault(); e.returnValue = ""; } });
       q("uKind").onchange = () => {
         const t = q("uKind").value === "track";
-        q("tn").classList.add("hidden"); q("tt").classList.add("hidden");
-        q("file").multiple = t;
-        q("file").accept = t ? ".mp3,.wav,audio/mpeg,audio/wav" : q("uKind").value === "cover" ? "image/jpeg,image/png,image/webp" : q("uKind").value === "package" ? ".zip" : ".mp3,.wav";
-        q("file").value = "";
-        q("upload").textContent = t ? "Add selected songs to list" : "Upload Securely";
+        q("tn").classList.toggle("hidden", !t);
+        q("tt").classList.toggle("hidden", !t);
       };
       q("upload").onclick = async () => {
         const b = q("upload");
         try {
-          const files = Array.from(q("file").files), product_id = q("uRelease").value, kind = q("uKind").value;
-          if (!product_id) throw Error("Choose a release");
-          if (!files.length) throw Error("Choose a file");
-          if (kind === "track") {
-            if (files.some(f => !/\.(mp3|wav)$/i.test(f.name))) throw Error("Choose WAV or MP3 songs only.");
-            for (const file of files) {
-              if (trackDraft.some(t => t.file && t.file.name === file.name && t.file.size === file.size && t.file.lastModified === file.lastModified)) continue;
-              trackDraft.push({file, title: file.name.replace(/\.[^.]+$/, "")});
-            }
-            markTracksDirty(); renderTrackEditor(); q("file").value = "";
-            q("upMsg").textContent = "Songs added below. Check the titles and order, then upload and save."; return;
-          }
           setBusy(b, true, "Uploading…");
-          await uploadAsset(product_id, kind, files[0]);
-          q("upMsg").textContent = "Upload complete."; q("file").value = "";
-          await loadR();
-          const release = rels.find(r => r.id === product_id), url = coverUrl(release);
-          if (url) { q("albumTrackCover").src = url; q("albumTrackCover").classList.remove("hidden"); q("albumCoverHint").textContent = "This album cover applies to every song."; }
-        } catch(e) { q("upMsg").textContent = e.message; }
-        finally { setBusy(b, false); }
-      };
-      q("saveTracks").onclick = async () => {
-        if (trackSaving || !trackDirty) return;
-        const controls = ["uRelease", "uKind", "file", "upload", "reloadTracks"];
-        try {
-          if (trackDraft.some(t => !t.title.trim())) throw Error("Every song needs a title.");
-          trackSaving = true; controls.forEach(id => q(id).disabled = true); renderTrackEditor();
-          let next = Math.max(0, ...trackExpected.map(t => t.track_number)) + 1;
-          for (let i = 0; i < trackDraft.length; i++) {
-            const t = trackDraft[i];
-            if (t.id) continue;
-            q("trackMsg").textContent = `Uploading song ${i+1} of ${trackDraft.length}: ${t.title}`;
-            if (!t.uploadedPath) t.uploadedPath = (await uploadAsset(trackRelease, "track", t.file)).path;
-            const result = await af(M, {method:"POST", body:JSON.stringify({action:"attach_uploaded_track", product_id:trackRelease, title:t.title.trim(), track_number:next, path:t.uploadedPath})});
-            Object.assign(t, result.track); next = Math.max(next, t.track_number) + 1;
-            trackExpected.push(...trackSnapshot([t])); renderTrackEditor();
+          const f = q("file").files[0];
+          if (!f) throw Error("Choose a file");
+          const product_id = q("uRelease").value,
+            kind = q("uKind").value;
+          let op = null;
+          if (kind === "track") {
+            const title = q("trackTitle").value.trim();
+            if (!title) throw Error("Track title required");
+            const tr = await af(M, {
+              method: "POST",
+              body: JSON.stringify({
+                action: "add_track",
+                product_id,
+                track_number: Number(q("trackNo").value),
+                title,
+                filename: f.name,
+              }),
+            });
+            op = tr.track.audio_object_path;
           }
-          q("trackMsg").textContent = "Saving track order…";
-          await af(M, {method:"POST", body:JSON.stringify({action:"save_track_order", product_id:trackRelease, tracks:trackDraft.map(t => ({id:t.id,title:t.title.trim()})), expected:trackExpected})});
-          trackDirty = false; trackSaving = false;
-          await loadR(); syncTrackEditor(true);
-          q("trackMsg").textContent = "All songs uploaded. Track titles and order saved.";
-        } catch(e) { q("trackMsg").textContent = `Not finished: ${e.message} Completed uploads are kept. You can retry, or reload saved tracks if another session changed them.`; }
-        finally { trackSaving = false; controls.forEach(id => q(id).disabled = false); renderTrackEditor(); }
+          await uploadAsset(product_id, kind, f, op);
+          q("upMsg").textContent = "Upload complete.";
+          await loadR();
+        } catch (e) {
+          q("upMsg").textContent = e.message;
+        } finally {
+          setBusy(b, false);
+        }
       };
       q("previewAudio").onclick = async () => {
-        stopTrackPlayback();
-        const request = trackPlayRequest;
         try {
           const id = q("uRelease").value;
           if (!id) throw Error("Choose a release");
           q("audioMsg").textContent = "Loading preview…";
           const j = await af(P + "?product_id=" + encodeURIComponent(id)),
             a = q("audio");
-          if (request !== trackPlayRequest) return;
           a.src = j.preview_url;
           a.load();
           q("audioMsg").textContent =
