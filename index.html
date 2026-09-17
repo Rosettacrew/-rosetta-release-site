@@ -277,52 +277,97 @@
         0%, 100% { opacity: 0.75; transform: translateX(0); }
         50% { opacity: 1; transform: translateX(4px); }
       }
+      .cover-wrap {
+        position: relative;
+        width: min(82vw, 430px);
+        margin: auto;
+      }
       .more-cue {
+        position: absolute;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        z-index: 2;
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        margin: 10px 0 0;
+        max-width: calc(100% - 24px);
+        margin: 0;
         padding: 8px 12px;
         border-radius: 999px;
-        border: 1px solid rgba(226, 189, 105, 0.45);
-        background: rgba(226, 189, 105, 0.08);
+        border: 1px solid rgba(226, 189, 105, 0.55);
+        background: rgba(10, 10, 10, 0.82);
+        backdrop-filter: blur(6px);
         color: #e2bd69;
         font-size: 11px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         font-weight: 800;
+        white-space: nowrap;
+        pointer-events: none;
       }
       .tracklist {
-        margin: 14px 0 4px;
-        padding: 12px 14px;
-        border: 1px solid var(--line);
+        margin: 16px 0 8px;
+        padding: 14px 16px;
+        border: 1px solid rgba(226, 189, 105, 0.22);
         border-radius: 16px;
-        background: rgba(255,255,255,0.02);
+        background: linear-gradient(180deg, rgba(226,189,105,0.06), rgba(255,255,255,0.02));
+        max-height: min(42vh, 320px);
+        overflow: auto;
       }
       .tracklist-label {
         color: #e2bd69;
         font-size: 11px;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
         font-weight: 800;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
       }
       .tracklist ol {
+        list-style: none;
         margin: 0;
-        padding-left: 1.1rem;
-        color: #d7d0c5;
+        padding: 0;
+        color: #ece6da;
         font-size: 14px;
-        line-height: 1.55;
+        line-height: 1.35;
       }
-      .tracklist li + li { margin-top: 4px; }
+      .tracklist li {
+        display: grid;
+        grid-template-columns: 2rem 1fr;
+        gap: 10px;
+        align-items: baseline;
+        padding: 8px 0;
+        border-top: 1px solid rgba(255,255,255,0.06);
+      }
+      .tracklist li:first-child { border-top: 0; padding-top: 0; }
+      .tracklist .num {
+        color: #9a9082;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+      }
+      .tracklist .name {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .meta .title {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        max-width: 100%;
+      }
+      .meta.has-tracks .title {
+        font-size: clamp(34px, 8vw, 58px);
+        line-height: 0.95;
+      }
       .cover {
-        width: min(82vw, 430px);
+        display: block;
+        width: 100%;
         aspect-ratio: 1/1;
         object-fit: contain;
         border-radius: 26px;
         border: 1px solid var(--line);
         box-shadow: 0 30px 90px #000a;
-        margin: auto;
+        margin: 0;
         background: #111;
       }
       .meta small {
@@ -803,6 +848,20 @@
           ? "PRE-ORDER"
           : `PRE-ORDER · RELEASES ${releaseDate.toLocaleDateString()}`;
       }
+
+      function cleanTrackTitle(raw, trackNumber) {
+        let t = String(raw || "").trim();
+        if (!t) return `Track ${trackNumber}`;
+        // Strip common upload junk: leading indexes, artist prefixes, trailing version " 2"
+        t = t.replace(/^\d{1,2}\s*[-.)]\s*/g, "");
+        t = t.replace(/^Rosetta Crew Music\s*-\s*/i, "");
+        t = t.replace(/^\d{1,2}\s*[.）)]\s*/g, "");
+        t = t.replace(/\s+\d+$/g, ""); // trailing lone version number like " 2"
+        t = t.replace(/^\d{1,2}\s*-\s*/g, "").trim();
+        // If still starts with "N. Title"
+        t = t.replace(/^\d{1,2}\.\s*/g, "").trim();
+        return t || `Track ${trackNumber}`;
+      }
       function releaseSlide(release, index, total) {
         const artist = String(release.artist_name || "").trim();
         const title = String(release.title || "Release").trim();
@@ -828,13 +887,14 @@
         const tracks = Array.isArray(release.tracks) ? release.tracks : [];
         const showTracks = release.show_tracklist !== false && tracks.length > 0;
         const tracklist = showTracks
-          ? `<div class="tracklist"><div class="tracklist-label">${tracks.length > 1 ? `${tracks.length} songs on this release` : "Track on this release"}</div><ol>${tracks.map((t) => `<li>${esc(String(t.title || "").trim() || `Track ${t.track_number}`)}</li>`).join("")}</ol></div>`
+          ? `<div class="tracklist"><div class="tracklist-label">${tracks.length > 1 ? `${tracks.length} songs on this release` : "Track on this release"}</div><ol>${tracks.map((t) => `<li><span class="num">${String(t.track_number).padStart(2,"0")}</span><span class="name">${esc(cleanTrackTitle(t.title, t.track_number))}</span></li>`).join("")}</ol></div>`
           : "";
         const moreCue =
           total > 1 && release.show_swipe_cue !== false
             ? `<div class="more-cue" aria-hidden="true">${index + 1} of ${total} · Swipe for more →</div>`
             : "";
-        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art">${moreCue}<div class="meta"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${tracklist}${booking}${action}${supportBlock(release)}<div class="trust">${trust}</div></div></div></article>`;
+        const metaClass = showTracks ? "meta has-tracks" : "meta";
+        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><div class="cover-wrap"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art">${moreCue}</div><div class="${metaClass}"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${tracklist}${booking}${action}${supportBlock(release)}<div class="trust">${trust}</div></div></div></article>`;
       }
       async function load() {
         try {
