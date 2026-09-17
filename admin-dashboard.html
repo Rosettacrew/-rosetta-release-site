@@ -1133,6 +1133,18 @@
                 <label>Description</label><textarea id="eDesc"></textarea>
               </div>
               <div class="wide">
+                <b>Fan page cues</b>
+                <div class="hint">Help customers see there is more than one song / release.</div>
+                <label style="display:flex;gap:8px;align-items:center;margin-top:8px">
+                  <input id="eShowTracklist" type="checkbox" checked />
+                  Show track list on storefront (EP/Album songs)
+                </label>
+                <label style="display:flex;gap:8px;align-items:center;margin-top:8px">
+                  <input id="eShowSwipeCue" type="checkbox" checked />
+                  Show “swipe for more” cue when multiple releases are live
+                </label>
+              </div>
+              <div class="wide">
                 <label>Cover art</label>
                 <div class="coverEdit">
                   <img
@@ -1900,6 +1912,9 @@
         q("eStart").value = local(r.preorder_starts_at);
         q("eReleaseDate").value = local(r.release_at);
         q("eDesc").value = r.description || "";
+        const meta = r.metadata && typeof r.metadata === "object" ? r.metadata : {};
+        q("eShowTracklist").checked = meta.show_tracklist !== false;
+        q("eShowSwipeCue").checked = meta.show_swipe_cue !== false;
         pendingCover = null;
         q("eCover").value = "";
         const image = q("eCoverPreview"),
@@ -2451,6 +2466,11 @@
           const id = q("eRelease").value,
             r = rels.find((x) => x.id === id);
           if (!r) throw Error("Choose a release.");
+          const nextMeta = {
+            ...(r.metadata && typeof r.metadata === "object" ? r.metadata : {}),
+            show_tracklist: !!q("eShowTracklist").checked,
+            show_swipe_cue: !!q("eShowSwipeCue").checked,
+          };
           const pre =
               q("ePrePrice").value === ""
                 ? null
@@ -2499,6 +2519,7 @@
               preorder_ends_at: new Date(release).toISOString(),
               release_at: new Date(release).toISOString(),
               description: q("eDesc").value,
+              metadata: nextMeta,
               storefront_enabled: q("eVisible").checked,
             }),
           });
