@@ -333,9 +333,9 @@
       }
       .tracklist li {
         display: grid;
-        grid-template-columns: 2rem 1fr;
+        grid-template-columns: 2rem minmax(0, 1fr) auto;
         gap: 10px;
-        align-items: baseline;
+        align-items: center;
         padding: 8px 0;
         border-top: 1px solid rgba(255,255,255,0.06);
       }
@@ -349,6 +349,29 @@
       .tracklist .name {
         overflow-wrap: anywhere;
         word-break: break-word;
+      }
+      .tracklist .play {
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 26px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--g);
+        border-radius: 999px;
+        background: var(--g);
+        color: #080705;
+        font: 700 13px/1 Arial, sans-serif;
+        cursor: pointer;
+        transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+      }
+      .tracklist .play:hover,
+      .tracklist .play:focus-visible,
+      .tracklist .play[aria-pressed="true"] {
+        border-color: var(--g2);
+        background: #080705;
+        color: var(--g2);
+        outline: none;
       }
       .meta .title {
         overflow-wrap: anywhere;
@@ -886,8 +909,11 @@
           : "";
         const tracks = Array.isArray(release.tracks) ? release.tracks : [];
         const showTracks = release.show_tracklist !== false && tracks.length > 0;
+        const sampleBase = release.id
+          ? `https://sktgkrcahsxvidzjjxxt.supabase.co/storage/v1/object/public/release-public/${release.id}/samples`
+          : "";
         const tracklist = showTracks
-          ? `<div class="tracklist"><div class="tracklist-label">${tracks.length > 1 ? `${tracks.length} songs on this release` : "Track on this release"}</div><ol>${tracks.map((t) => `<li><span class="num">${String(t.track_number).padStart(2,"0")}</span><span class="name">${esc(cleanTrackTitle(t.title, t.track_number))}</span></li>`).join("")}</ol></div>`
+          ? `<div class="tracklist"><div class="tracklist-label">${tracks.length > 1 ? `${tracks.length} songs on this release · tap ▶ to preview` : "Track on this release"}</div><ol>${tracks.map((t) => { const trackTitle = cleanTrackTitle(t.title, t.track_number); const nn = String(t.track_number).padStart(2,"0"); const sampleUrl = t.sample_url || (sampleBase ? `${sampleBase}/${nn}-sample.mp3` : ""); const play = sampleUrl ? `<button class="play" type="button" data-sample-url="${esc(sampleUrl)}" aria-label="Play sample: ${esc(trackTitle)}" aria-pressed="false">▶</button>` : ""; return `<li><span class="num">${nn}</span><span class="name">${esc(trackTitle)}</span>${play}</li>`; }).join("")}</ol></div>`
           : "";
         const moreCue =
           total > 1 && release.show_swipe_cue !== false
@@ -949,6 +975,54 @@
                 `<button class="carousel-dot${index === 0 ? " active" : ""}" type="button" data-slide="${index}" aria-label="Show ${esc(release.artist_name)} — ${esc(release.title)}" aria-current="${index === 0 ? "true" : "false"}"></button>`,
             )
             .join("");
+
+          const sampleAudio = new Audio();
+          sampleAudio.preload = "none";
+          let playingButton = null;
+          function resetSampleButton(button) {
+            if (!button) return;
+            button.textContent = "▶";
+            button.setAttribute("aria-pressed", "false");
+            button.setAttribute("aria-label", button.getAttribute("aria-label")?.replace(/^Pause sample:/, "Play sample:") || "Play sample");
+          }
+          function stopSample(button = playingButton) {
+            sampleAudio.pause();
+            sampleAudio.removeAttribute("src");
+            sampleAudio.load();
+            resetSampleButton(button);
+            if (button === playingButton) playingButton = null;
+          }
+          sampleAudio.addEventListener("ended", () => stopSample());
+          sampleAudio.addEventListener("error", () => {
+            if (playingButton) playingButton.hidden = true;
+            stopSample();
+          });
+          carousel.addEventListener("click", (event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const button = target?.closest("button.play[data-sample-url]");
+            if (!button || !carousel.contains(button)) return;
+            if (button === playingButton && !sampleAudio.paused) {
+              sampleAudio.pause();
+              button.textContent = "▶";
+              button.setAttribute("aria-pressed", "false");
+              button.setAttribute("aria-label", button.getAttribute("aria-label")?.replace(/^Pause sample:/, "Play sample:") || "Play sample");
+              return;
+            }
+            if (playingButton && playingButton !== button) resetSampleButton(playingButton);
+            sampleAudio.pause();
+            sampleAudio.src = button.dataset.sampleUrl;
+            sampleAudio.currentTime = 0;
+            playingButton = button;
+            button.textContent = "❚❚";
+            button.setAttribute("aria-pressed", "true");
+            button.setAttribute("aria-label", button.getAttribute("aria-label")?.replace(/^Play sample:/, "Pause sample:") || "Pause sample");
+            sampleAudio.play().catch(() => {
+              if (playingButton === button) {
+                button.hidden = true;
+                stopSample(button);
+              }
+            });
+          });
 
           function setActive(index) {
             const nextIndex = Math.max(0, Math.min(index, releases.length - 1));
