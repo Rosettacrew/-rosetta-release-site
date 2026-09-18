@@ -148,12 +148,16 @@ Deno.serve(async (req: Request) => {
         status: String(body.status || "draft"),
         nonexclusive_enabled: body.nonexclusive_enabled !== false,
         nonexclusive_price_cents: dollars(body.nonexclusive_price),
+        nonexclusive_terms_version: String(body.nonexclusive_terms_version ?? "").trim() || null,
+        nonexclusive_terms_url: String(body.nonexclusive_terms_url ?? "").trim() || null,
         exclusive_enabled: body.exclusive_enabled !== false,
         exclusive_price_cents: dollars(body.exclusive_price),
         ownership_enabled: body.ownership_enabled !== false,
         ownership_price_cents: dollars(body.ownership_price),
       } : {};
       if (ownerAccess && ownerChanges.nonexclusive_enabled && ownerChanges.nonexclusive_price_cents === null) return json({ error: "Non-exclusive price is required" }, 400);
+      if (ownerAccess && ownerChanges.nonexclusive_terms_version && ownerChanges.nonexclusive_terms_version.length > 80) return json({ error: "Terms version must be 80 characters or less" }, 400);
+      if (ownerAccess && ownerChanges.nonexclusive_terms_url && !/^https:\/\/[^\s]+$/.test(ownerChanges.nonexclusive_terms_url)) return json({ error: "Terms URL must use HTTPS" }, 400);
       let result;
       if (id && !ownerAccess) {
         const { data: current, error } = await supabase.from("beatbay_beats").select("status,storefront_enabled").eq("id", id).single();

@@ -122,7 +122,9 @@ assert.match(
 );
 assert.match(beatbay, /function commerceMarkup\(b\)/);
 assert.match(beatbay, /hasAuction\(b\).*Place bid/s);
-assert.match(beatbay, /hasAuction\(b\).*License beat/s);
+assert.match(beatbay, /data-checkout/);
+assert.match(beatbay, /Buy license/);
+assert.doesNotMatch(beatbay, /href="tel:[^"]+" aria-label="License/);
 assert.doesNotMatch(
   storefront,
   /www\.RosettaCrew\.com\/BeatBay/,
@@ -147,6 +149,26 @@ const stripeReleaseWebhook = readFileSync(
 );
 const releaseDownload = readFileSync(
   "supabase/functions/release-download/index.ts",
+  "utf8",
+);
+const beatbayCheckout = readFileSync(
+  "supabase/functions/beatbay-checkout/index.ts",
+  "utf8",
+);
+const beatbayStorefront = readFileSync(
+  "supabase/functions/beatbay-storefront/index.ts",
+  "utf8",
+);
+const stripeBeatbayWebhook = readFileSync(
+  "supabase/functions/stripe-beatbay-webhook/index.ts",
+  "utf8",
+);
+const beatbayDownload = readFileSync(
+  "supabase/functions/beatbay-download/index.ts",
+  "utf8",
+);
+const beatbayCommerceMigration = readFileSync(
+  "supabase/migrations/20260914_beatbay_nonexclusive_checkout.sql",
   "utf8",
 );
 const studioManager = readFileSync(
@@ -250,6 +272,40 @@ assert.match(releaseDownload, /revoked_at/);
 assert.match(releaseDownload, /download_count >= tokenRow\.max_downloads/);
 assert.match(releaseDownload, /entitlement\.status !== "available"/);
 assert.doesNotMatch(releaseDownload, /customer_email|stripe_checkout_session_id/);
+assert.match(beatbayCheckout, /licenseType !== "nonexclusive"/);
+assert.match(beatbayCheckout, /nonexclusive_price_cents/);
+assert.match(beatbayCheckout, /BEATBAY_STRIPE_RESTRICTED_KEY/);
+assert.match(beatbayCheckout, /rk_\(test\|live\)_/);
+assert.match(beatbayCheckout, /"idempotency-key": `beatbay-nonexclusive-/);
+assert.match(beatbayCheckout, /"stripe-version": "2026-07-29\.dahlia"/);
+assert.match(beatbayCheckout, /integration_identifier/);
+assert.match(beatbayCheckout, /metadata\[checkout_source\].*beatbay_nonexclusive/);
+assert.match(beatbayCheckout, /full_audio_path/);
+assert.match(beatbayCheckout, /nonexclusive_terms_version/);
+assert.match(beatbayCheckout, /body_too_large/);
+assert.doesNotMatch(beatbayCheckout, /payment_method_types/);
+assert.match(beatbayStorefront, /checkout_ready: checkoutReady/);
+assert.doesNotMatch(beatbayStorefront, /\.\.\.publicBeat[\s\S]*?full_audio_(bucket|path)/);
+assert.match(stripeBeatbayWebhook, /verifyStripeSignature\(rawBody/);
+assert.match(stripeBeatbayWebhook, /MAX_WEBHOOK_BYTES/);
+assert.match(stripeBeatbayWebhook, /Webhook body too large/);
+assert.match(stripeBeatbayWebhook, /\^evt_/);
+assert.match(stripeBeatbayWebhook, /beatbay_stripe_webhook_events/);
+assert.match(stripeBeatbayWebhook, /Event is already processing/);
+assert.match(stripeBeatbayWebhook, /\.lt\("created_at", staleBefore\)/);
+assert.match(stripeBeatbayWebhook, /session\.metadata\?\.checkout_source !== "beatbay_nonexclusive"/);
+assert.match(stripeBeatbayWebhook, /attempt\.stripe_checkout_session_id !== session\.id/);
+assert.match(stripeBeatbayWebhook, /actualAmount !== attempt\.amount_cents/);
+assert.match(stripeBeatbayWebhook, /license_type: "nonexclusive"/);
+assert.doesNotMatch(stripeBeatbayWebhook, /license_type: "exclusive"/);
+assert.match(stripeBeatbayWebhook, /Keep this email as your license receipt/);
+assert.match(beatbayDownload, /consume_beatbay_download_token/);
+assert.match(beatbayDownload, /license\.status !== "active"/);
+assert.match(beatbayDownload, /createSignedUrl\(license\.delivery_path, 60/);
+assert.match(beatbayCommerceMigration, /alter table public\.beatbay_checkout_attempts enable row level security/);
+assert.match(beatbayCommerceMigration, /revoke all on table public\.beatbay_checkout_attempts/);
+assert.match(beatbayCommerceMigration, /check \(license_type = 'nonexclusive'\)/);
+assert.match(beatbayCommerceMigration, /set search_path = ''/);
 assert.match(
   releaseManager,
   /music_uploader is intentionally excluded/,
