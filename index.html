@@ -470,6 +470,27 @@
         cursor: default;
         opacity: 0.72;
       }
+      .share-release {
+        display: block;
+        width: 100%;
+        margin-top: 10px;
+        padding: 12px 16px;
+        border: 1px solid var(--g);
+        border-radius: 14px;
+        background: transparent;
+        color: var(--g2);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 900;
+        cursor: pointer;
+        transition: background 0.2s ease, color 0.2s ease;
+      }
+      .share-release:hover,
+      .share-release:focus-visible {
+        background: var(--g);
+        color: #17120a;
+        outline: none;
+      }
       .support {
         margin-top: 18px;
         padding: 14px 14px 12px;
@@ -699,6 +720,7 @@
         </p>
       </section>
       <div id="checkout-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
+      <div id="share-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
     </main>
     <script>
       function initSiteIntro() {
@@ -803,6 +825,63 @@
         }
         el.setAttribute("content", content);
       }
+      let shareToastTimer;
+      function showShareToast(message) {
+        const toast = document.getElementById("share-toast");
+        if (!toast) return;
+        clearTimeout(shareToastTimer);
+        toast.textContent = message;
+        toast.classList.remove("hidden");
+        shareToastTimer = setTimeout(() => toast.classList.add("hidden"), 2600);
+      }
+      async function copyShareUrl(url) {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(url);
+          return;
+        }
+        const input = document.createElement("textarea");
+        input.value = url;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand("copy");
+        input.remove();
+        if (!copied) throw new Error("copy failed");
+      }
+      async function shareRelease(release) {
+        const slug = String(release.slug || "").trim();
+        const id = String(release.id || "").trim();
+        const campaign = slug || id;
+        const url = new URL(slug ? location.origin + location.pathname : location.href);
+        if (slug) url.searchParams.set("release", slug);
+        url.searchParams.set("utm_source", "share");
+        url.searchParams.set("utm_medium", "web");
+        url.searchParams.set("utm_campaign", campaign);
+        const title = String(release.title || "Release").trim();
+        const artist = String(release.artist_name || "").trim();
+        const shareData = {
+          title,
+          text: `${artist} — Support the artist`,
+          url: url.toString(),
+        };
+        if (navigator.share) {
+          try {
+            await navigator.share(shareData);
+          } catch (error) {
+            if (error?.name !== "AbortError") showShareToast("Unable to share this link");
+          }
+          return;
+        }
+        try {
+          await copyShareUrl(shareData.url);
+          showShareToast("Link copied");
+        } catch (_) {
+          showShareToast("Could not copy the link");
+        }
+      }
+
       function applyShare(f) {
         const price = money(f.price_cents, f.currency),
           name = String(f.artist_name || "").trim(),
@@ -920,7 +999,8 @@
             ? `<div class="more-cue" aria-hidden="true">${index + 1} of ${total} · Swipe for more →</div>`
             : "";
         const metaClass = showTracks ? "meta has-tracks" : "meta";
-        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><div class="cover-wrap"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art">${moreCue}</div><div class="${metaClass}"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${tracklist}${booking}${action}${supportBlock(release)}<div class="trust">${trust}</div></div></div></article>`;
+        const shareButton = `<button class="share-release" type="button" data-release-index="${index}" aria-label="Share ${esc(artist)} — ${esc(title)}">Share</button>`;
+        return `<article class="release-slide" data-index="${index}" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${total}: ${esc(artist)} — ${esc(title)}"><div class="grid"><div class="cover-wrap"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art">${moreCue}</div><div class="${metaClass}"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><div class="title">${esc(title)}</div><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div><div class="desc">${esc(description)}</div>${tracklist}${booking}${action}${shareButton}${supportBlock(release)}<div class="trust">${trust}</div></div></div></article>`;
       }
       async function load() {
         try {
@@ -993,12 +1073,21 @@
             if (button === playingButton) playingButton = null;
           }
           sampleAudio.addEventListener("ended", () => stopSample());
+          sampleAudio.addEventListener("timeupdate", () => {
+            if (sampleAudio.currentTime >= 45) stopSample();
+          });
           sampleAudio.addEventListener("error", () => {
             if (playingButton) playingButton.hidden = true;
             stopSample();
           });
           carousel.addEventListener("click", (event) => {
             const target = event.target instanceof Element ? event.target : null;
+            const shareButton = target?.closest("button.share-release[data-release-index]");
+            if (shareButton && carousel.contains(shareButton)) {
+              const release = releases[Number(shareButton.dataset.releaseIndex)];
+              if (release) shareRelease(release);
+              return;
+            }
             const button = target?.closest("button.play[data-sample-url]");
             if (!button || !carousel.contains(button)) return;
             if (button === playingButton && !sampleAudio.paused) {
