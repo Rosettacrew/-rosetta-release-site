@@ -972,10 +972,10 @@
           release.description ||
           "Own the official digital release and support the artist directly through Rosetta Crew Music Group.";
         const action = previewOnly
-          ? `<span class="buy disabled" aria-disabled="true">PREVIEW ONLY — ${price}</span>`
+          ? `<span class="buy disabled" aria-disabled="true">${release.status === "presale" ? "PRE-ORDER" : "BUY NOW"} — ${price}</span>`
           : `<a class="buy" href="${esc(release.checkout_url)}" data-product="${esc(release.id)}" rel="noopener">${release.status === "presale" ? "PRE-ORDER" : "BUY NOW"} — ${price}</a>`;
         const trust = previewOnly
-          ? "<span>✓ Private admin preview</span><span>✓ Checkout disabled</span>"
+          ? "<span>✓ Admin view</span><span>✓ Checkout disabled in admin view</span>"
           : "<span>✓ Secure Stripe checkout</span><span>✓ Direct-to-fan</span><span>✓ Digital delivery</span>";
         const artistType = release.artist_type === "ai" ? "ai" : release.artist_type === "actual" ? "actual" : null;
         const identity = artistType
@@ -983,7 +983,7 @@
           : "";
         const booking = artistType === "actual"
           ? previewOnly
-            ? `<span class="booking-banner" aria-disabled="true"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · preview link disabled</span></span>`
+            ? `<span class="booking-banner" aria-disabled="true"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · booking link disabled in admin view</span></span>`
             : `<a class="booking-banner" href="tel:+16562424777"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · 656-242-4777</span></a>`
           : "";
         const tracks = Array.isArray(release.tracks) ? release.tracks : [];
