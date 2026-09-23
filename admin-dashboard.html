@@ -1232,6 +1232,15 @@
                 <div id="upMsg" class="hint"></div>
               </div>
             </div>
+            <div class="card" id="trackOrderCard">
+              <h3>Track Order &amp; Customer Package</h3>
+              <p class="muted">Upload tracks, put them in the exact order you want, then save. This order controls the storefront track list and the automatic buyer ZIP.</p>
+              <div id="trackOrderList" class="list"></div>
+              <div class="rowActions" style="margin-top:14px">
+                <button id="saveTrackOrder" class="btn" type="button">Save Track Order</button>
+              </div>
+              <div id="trackOrderMsg" class="hint"></div>
+            </div>
             <div class="card">
               <button id="previewAudio" class="secondary">
                 Play Selected Preview</button
@@ -2683,44 +2692,163 @@
           setBusy(t, false);
         }
       });
+      let trackOrderDraft = [];
+      let trackOrderExpected = [];
+
+      function currentUploadRelease() {
+        return rels.find((r) => r.id === q("uRelease").value) || null;
+      }
+
+      function snapshotTrackOrder(tracks) {
+        return tracks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          track_number: Number(t.track_number),
+        }));
+      }
+
+      function syncTrackOrderEditor() {
+        const release = currentUploadRelease();
+        trackOrderDraft = [...(release?.tracks || [])]
+          .sort((a, b) => Number(a.track_number) - Number(b.track_number))
+          .map((t) => ({ ...t }));
+        trackOrderExpected = snapshotTrackOrder(trackOrderDraft);
+        renderTrackOrder();
+      }
+
+      function renderTrackOrder() {
+        const list = q("trackOrderList");
+        if (!trackOrderDraft.length) {
+          list.innerHTML = '<p class="muted">No tracks uploaded yet. Choose WAV/MP3 track above to begin.</p>';
+          q("saveTrackOrder").disabled = true;
+          return;
+        }
+        q("saveTrackOrder").disabled = false;
+        list.innerHTML = trackOrderDraft.map((t, i) => `
+          <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="min-width:38px;font-weight:800;color:#d4af37">${String(i + 1).padStart(2, "0")}</div>
+            <input data-order-title="${i}" value="${esc(t.title)}" aria-label="Track ${i + 1} title" style="flex:1;min-width:180px" />
+            <div class="rowActions">
+              <button type="button" class="secondary" data-order-move="${i}" data-dir="-1" ${i === 0 ? "disabled" : ""}>Move up</button>
+              <button type="button" class="secondary" data-order-move="${i}" data-dir="1" ${i === trackOrderDraft.length - 1 ? "disabled" : ""}>Move down</button>
+            </div>
+          </div>`).join("");
+      }
+
+      q("trackOrderList").oninput = (e) => {
+        const i = e.target?.dataset?.orderTitle;
+        if (i === undefined) return;
+        trackOrderDraft[Number(i)].title = e.target.value;
+      };
+
+      q("trackOrderList").onclick = (e) => {
+        const button = e.target.closest("button[data-order-move]");
+        if (!button) return;
+        const from = Number(button.dataset.orderMove);
+        const to = from + Number(button.dataset.dir);
+        if (to < 0 || to >= trackOrderDraft.length) return;
+        const [moved] = trackOrderDraft.splice(from, 1);
+        trackOrderDraft.splice(to, 0, moved);
+        renderTrackOrder();
+      };
+
+      q("saveTrackOrder").onclick = async () => {
+        const b = q("saveTrackOrder");
+        try {
+          const product_id = q("uRelease").value;
+          if (!product_id) throw Error("Choose a release.");
+          if (!trackOrderDraft.length) throw Error("Upload at least one track.");
+          if (trackOrderDraft.some((t) => !String(t.title || "").trim()))
+            throw Error("Every track needs a title.");
+          setBusy(b, true, "Saving…");
+          await af(M, {
+            method: "POST",
+            body: JSON.stringify({
+              action: "save_track_order",
+              product_id,
+              tracks: trackOrderDraft.map((t) => ({ id: t.id, title: String(t.title).trim() })),
+              expected: trackOrderExpected,
+            }),
+          });
+          q("trackOrderMsg").textContent = "Saved. This order now drives the storefront track list and automatic buyer package.";
+          await loadR();
+          syncTrackOrderEditor();
+        } catch (e) {
+          q("trackOrderMsg").textContent = e.message;
+        } finally {
+          setBusy(b, false);
+        }
+      };
+
+      q("uRelease").onchange = () => {
+        q("trackOrderMsg").textContent = "";
+        syncTrackOrderEditor();
+      };
+
       q("uKind").onchange = () => {
         const t = q("uKind").value === "track";
         q("tn").classList.toggle("hidden", !t);
         q("tt").classList.toggle("hidden", !t);
+        q("file").multiple = t;
+        q("file").accept = t
+          ? ".mp3,.wav,audio/mpeg,audio/wav"
+          : q("uKind").value === "cover"
+            ? "image/jpeg,image/png,image/webp"
+            : q("uKind").value === "package"
+              ? ".zip,application/zip"
+              : ".mp3,.wav,audio/mpeg,audio/wav";
+        q("trackTitle").placeholder = t ? "Optional for one file; filename used otherwise" : "";
       };
+
       q("upload").onclick = async () => {
         const b = q("upload");
         try {
           setBusy(b, true, "Uploading…");
-          const f = q("file").files[0];
-          if (!f) throw Error("Choose a file");
+          const files = Array.from(q("file").files || []);
+          if (!files.length) throw Error("Choose a file");
           const product_id = q("uRelease").value,
             kind = q("uKind").value;
-          let op = null;
+          if (!product_id) throw Error("Choose a release");
+
           if (kind === "track") {
-            const title = q("trackTitle").value.trim();
-            if (!title) throw Error("Track title required");
-            const tr = await af(M, {
-              method: "POST",
-              body: JSON.stringify({
-                action: "add_track",
-                product_id,
-                track_number: Number(q("trackNo").value),
-                title,
-                filename: f.name,
-              }),
-            });
-            op = tr.track.audio_object_path;
+            if (files.some((f) => !/\.(mp3|wav)$/i.test(f.name)))
+              throw Error("Tracks must be WAV or MP3.");
+            const start = Math.max(1, Number(q("trackNo").value) || 1);
+            const oneTitle = files.length === 1 ? q("trackTitle").value.trim() : "";
+            for (let i = 0; i < files.length; i++) {
+              const f = files[i];
+              const trackNumber = start + i;
+              const title = oneTitle || f.name.replace(/\.[^.]+$/, "");
+              q("upMsg").textContent = `Uploading track ${i + 1} of ${files.length}: ${title}`;
+              const tr = await af(M, {
+                method: "POST",
+                body: JSON.stringify({
+                  action: "add_track",
+                  product_id,
+                  track_number: trackNumber,
+                  title,
+                  filename: f.name,
+                }),
+              });
+              await uploadAsset(product_id, "track", f, tr.track.audio_object_path);
+            }
+            q("upMsg").textContent = `${files.length} track${files.length === 1 ? "" : "s"} uploaded. Set the order below and save it.`;
+          } else {
+            const f = files[0];
+            await uploadAsset(product_id, kind, f);
+            q("upMsg").textContent = "Upload complete.";
           }
-          await uploadAsset(product_id, kind, f, op);
-          q("upMsg").textContent = "Upload complete.";
+
+          q("file").value = "";
           await loadR();
+          syncTrackOrderEditor();
         } catch (e) {
           q("upMsg").textContent = e.message;
         } finally {
           setBusy(b, false);
         }
       };
+      q("uKind").onchange();
       q("previewAudio").onclick = async () => {
         try {
           const id = q("uRelease").value;
