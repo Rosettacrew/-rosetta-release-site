@@ -1030,7 +1030,7 @@
             <div id="addReleaseAssets" class="addReleaseAssets hidden">
               <h3>Drop assets for this release</h3>
               <p class="muted">
-                Cover must be exactly 3000×3000 JPG/PNG/WebP. For customer download on unlock day, also upload a Final ZIP package (or WAV/MP3 tracks first).
+                Cover must be exactly 3000×3000 JPG/PNG/WebP. Upload WAV/MP3 tracks directly here. A Final ZIP package is optional for bundled delivery; buyers can receive the uploaded tracks securely without one.
               </p>
               <div class="form">
                 <div class="wide">
@@ -1038,7 +1038,7 @@
                   <input id="psCoverFile" type="file" accept="image/jpeg,image/png,image/webp" />
                 </div>
                 <div class="wide">
-                  <label>Audio (WAV/MP3 track)</label>
+                  <label>Audio master (WAV/MP3) — primary upload</label>
                   <input id="psTrackFile" type="file" accept="audio/*,.wav,.mp3,.flac,.aiff" />
                 </div>
                 <div>
@@ -1050,7 +1050,7 @@
                   <input id="psTrackTitle" placeholder="Optional" />
                 </div>
                 <div class="wide">
-                  <label>Final ZIP package (download fulfillment)</label>
+                  <label>Final ZIP package (optional bundled download)</label>
                   <input id="psPackageFile" type="file" accept=".zip,application/zip" />
                 </div>
                 <div class="wide">
@@ -1204,7 +1204,8 @@
         </section>
         <section id="uploads" class="section">
           <div class="card">
-            <h2>Secure Upload</h2>
+            <h2>Secure Direct Upload</h2>
+            <p class="muted">Upload music and beats directly to Rosetta Crew. WAV/MP3 masters are stored privately per track. ZIP is optional.</p>
             <div class="form">
               <div>
                 <label>Release</label
@@ -1213,10 +1214,10 @@
               <div>
                 <label>Asset type</label
                 ><select id="uKind">
-                  <option value="cover">Cover art</option>
-                  <option value="package">Final ZIP package</option>
                   <option value="track">WAV/MP3 track</option>
+                  <option value="cover">Cover art</option>
                   <option value="preview">Audio preview</option>
+                  <option value="package">Final ZIP package (optional)</option>
                 </select>
               </div>
               <div id="tn" class="hidden">
