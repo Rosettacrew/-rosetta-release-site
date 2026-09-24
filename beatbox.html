@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#080808">
+  <title>Beatbox | Rosetta Crew</title>
+  <style>
+    :root{--bg:#080808;--panel:#121212;--gold:#d8ac51;--gold2:#ffdc86;--text:#f5f0e7;--muted:#b7b0a4;--line:#2d2a24;--green:#7bd89a;--red:#f09090}
+    *{box-sizing:border-box}
+    [hidden]{display:none !important}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:1.125rem;line-height:1.5}
+    button,input,select,textarea{font:inherit;color:inherit}
+    :focus-visible{outline:3px solid var(--gold2);outline-offset:3px}
+    .login{width:min(520px,calc(100% - 32px));margin:8vh auto;padding:28px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
+    .brand{color:var(--gold);font-size:.85rem;font-weight:900;letter-spacing:.18em}
+    h1{font-size:2.1rem;line-height:1.15;margin:.4rem 0}
+    h2{font-size:1.7rem;margin:0 0 .4rem}
+    .muted{color:var(--muted)}
+    input,select,textarea{width:100%;border:1px solid #403b31;border-radius:12px;background:#0b0b0b;padding:12px 14px}
+    textarea{min-height:120px;resize:vertical}
+    .btn,.ghost{border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}
+    .btn{border:0;background:linear-gradient(135deg,var(--gold2),#ad7824);color:#090705}
+    .ghost{border:1px solid #50462f;background:#111;color:var(--text)}
+    .btn:disabled,.ghost:disabled{opacity:.45;cursor:not-allowed}
+    .shell{min-height:100vh;display:grid;grid-template-columns:240px 1fr}
+    .side{padding:22px;border-right:1px solid var(--line);background:#0d0d0d}
+    .engine{display:grid;gap:8px;margin:18px 0}
+    .engine a{padding:10px 8px;text-align:center;border:1px solid #3b372f;border-radius:10px;color:#ccc;text-decoration:none;font-size:.95rem;font-weight:800}
+    .engine a.on{background:var(--gold);color:#080705;border-color:var(--gold)}
+    .main{padding:28px;max-width:980px}
+    .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+    .card{margin:16px 0;padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+    .drop{width:100%;min-height:240px;border:2px dashed #8a6a32;border-radius:18px;background:#14110c;color:var(--text);cursor:pointer;padding:28px;text-align:center}
+    .drop strong{display:block;font-size:2rem;line-height:1.2;color:var(--gold2)}
+    .drop span{display:block;margin-top:10px;color:var(--muted)}
+    .drop.hot{border-color:var(--gold2);background:#221b10}
+    .zip-input{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+    .form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .wide{grid-column:1 / -1}
+    label,legend{display:block;font-weight:750;margin-bottom:6px}
+    .check{display:flex;align-items:center;gap:10px;font-weight:700}
+    .check input{width:1.25rem;height:1.25rem;accent-color:var(--gold)}
+    .licenses{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;border:0;margin:8px 0 0;padding:0}
+    .license{padding:14px;border:1px solid var(--line);border-radius:12px}
+    .preview-grid{display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:center}
+    img,audio{width:100%;border-radius:12px}
+    img{aspect-ratio:1;object-fit:cover;border:1px solid #7f642e;background:#050505}
+    .errors{border:1px solid #753939;background:#1c1010;color:#ffd0d0;border-radius:12px;padding:12px 16px}
+    .errors ul{margin:8px 0 0;padding-left:1.2rem}
+    .message{min-height:1.5rem;color:var(--gold2)}
+    .suggestions{margin-top:8px;padding:14px;border:1px solid #6a522d;border-radius:12px;background:#171109}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .hint{color:var(--gold2);font-size:1rem;min-height:1.4rem}
+    @media(max-width:800px){
+      .shell{grid-template-columns:1fr}
+      .side{border-right:0;border-bottom:1px solid var(--line)}
+      .main{padding:16px}
+      .form,.licenses,.preview-grid{grid-template-columns:1fr}
+      .wide{grid-column:auto}
+      .drop strong{font-size:1.7rem}
+    }
+  </style>
+</head>
+<body>
+  <div id="login" class="login">
+    <div class="brand">ROSETTA CREW</div>
+    <h1>Beatbox</h1>
+    <p class="muted">Internal BeatBay intake for owner, admin, and staff. A ZIP becomes a draft. It is not published until an owner or admin uses Approve &amp; publish.</p>
+    <label for="email">Work email</label>
+    <input id="email" type="email" placeholder="Work email" autocomplete="email">
+    <p><button id="send" class="btn" type="button">Send secure sign-in link</button></p>
+    <div id="loginMsg" class="muted" role="status"></div>
+  </div>
+  <div id="app" class="shell" hidden>
+    <aside class="side">
+      <div class="brand">ROSETTA CREW</div>
+      <small class="muted">INTERNAL INTAKE</small>
+      <nav class="engine" aria-label="Admin">
+        <a href="admin-dashboard.html">Release Station</a>
+        <a href="beatbay-admin.html">BeatBay</a>
+        <a class="on" href="beatbox.html" aria-current="page">Beatbox</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="top">
+        <div>
+          <h1>Beatbox</h1>
+          <div id="who" class="muted"></div>
+        </div>
+        <button id="out" class="ghost" type="button">Sign out</button>
+      </div>
+      <section id="intake" class="card">
+        <h2>Drop a beat ZIP</h2>
+        <p id="dropHelp" class="muted">One package, up to 100 MB. An MP3 or WAV is required. A cover image and beat.json are optional. Press Enter or Space to choose a file. Press Escape to clear a loaded package.</p>
+        <button id="drop" class="drop" type="button" aria-describedby="dropHelp">
+          <strong>Drop a ZIP here</strong>
+          <span>or press Enter to choose a file</span>
+        </button>
+        <input id="zipFile" class="zip-input" type="file" accept=".zip,application/zip" tabindex="-1" aria-hidden="true">
+      </section>
+      <div id="errors" class="errors" role="alert" tabindex="-1" hidden></div>
+      <section id="review" class="card" hidden>
+        <h2 id="reviewHeading" tabindex="-1">Review draft</h2>
+        <p class="muted">Edit anything before you save. Filename and listening clues stay suggestions until you apply them. Save draft does not publish. Approve &amp; publish is a separate step for an owner or admin.</p>
+        <ul id="inventory"></ul>
+        <div id="warnings" class="errors" hidden></div>
+        <div class="preview-grid">
+          <div>
+            <img id="cover" alt="Cover image from the ZIP" hidden>
+            <p id="coverNote" class="muted"></p>
+          </div>
+          <div>
+            <p id="playerLabel">Preview audio</p>
+            <audio id="player" controls preload="metadata" aria-labelledby="playerLabel"></audio>
+          </div>
+        </div>
+        <div class="suggestions">
+          <h3>Suggestions</h3>
+          <p class="muted">BPM and style clues are not written into the form until you apply them.</p>
+          <ul id="suggestionList"></ul>
+          <div class="actions">
+            <button id="analyze" class="ghost" type="button">Listen for tempo</button>
+            <button id="applySuggestion" class="btn" type="button" hidden>Apply suggestions</button>
+          </div>
+          <div id="analysisStatus" class="message" role="status"></div>
+        </div>
+        <fieldset id="fields" class="form">
+          <legend class="wide">Listing</legend>
+          <div>
+            <label for="beatCode">Beat number</label>
+            <input id="beatCode" autocomplete="off" placeholder="BEAT 0007">
+          </div>
+          <div>
+            <label for="title">Title</label>
+            <input id="title" autocomplete="off">
+            <div id="titleHint" class="hint"></div>
+          </div>
+          <div>
+            <label for="style">Style</label>
+            <input id="style" autocomplete="off">
+            <div id="styleHint" class="hint"></div>
+          </div>
+          <div>
+            <label for="bpm">BPM</label>
+            <input id="bpm" type="number" min="40" max="240" inputmode="numeric">
+            <div id="bpmHint" class="hint"></div>
+          </div>
+          <div>
+            <label for="musicalKey">Key</label>
+            <input id="musicalKey" autocomplete="off" placeholder="F minor">
+            <div id="keyHint" class="hint"></div>
+          </div>
+          <div class="wide">
+            <label for="tags">Tags</label>
+            <input id="tags" autocomplete="off" placeholder="trap, dark, street">
+          </div>
+          <div class="wide">
+            <label for="description">Description</label>
+            <textarea id="description"></textarea>
+          </div>
+          <div class="wide licenses">
+            <div class="license">
+              <label class="check"><input id="licNon" type="checkbox" checked> Non-exclusive</label>
+              <label for="priceNon">Price (USD)</label>
+              <input id="priceNon" type="number" min="0" step="0.01" value="30.00">
+            </div>
+            <div class="license">
+              <label class="check"><input id="licExclusive" type="checkbox"> Exclusive by request</label>
+              <label for="priceExclusive">Price or leave open</label>
+              <input id="priceExclusive" type="number" min="0" step="0.01">
+            </div>
+            <div class="license">
+              <label class="check"><input id="licOwn" type="checkbox"> Full ownership</label>
+              <label for="priceOwn">Price or leave open</label>
+              <input id="priceOwn" type="number" min="0" step="0.01">
+            </div>
+          </div>
+        </fieldset>
+        <p class="muted">Exclusive and ownership stay off unless you opt in. The default non-exclusive price is $30.00.</p>
+        <label id="confirmRow" class="check"><input id="confirmPublish" type="checkbox"> I reviewed this listing and want it live on BeatBay.</label>
+        <p id="publishNote" class="muted"></p>
+        <div class="actions">
+          <button id="saveDraft" class="ghost" type="button">Save draft</button>
+          <button id="approve" class="btn" type="button">Approve &amp; publish</button>
+          <button id="reset" class="ghost" type="button">Choose a different ZIP</button>
+        </div>
+        <p id="status" class="message" role="status"></p>
+        <p id="done" hidden>This listing is on BeatBay. Further edits belong in <a href="beatbay-admin.html">BeatBay Admin</a>.</p>
+      </section>
+    </main>
+  </div>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+    import JSZip from "https://esm.sh/jszip@3.10.1";
+    import {
+      buildPublishBody,
+      buildReviewDraft,
+      buildSaveBody,
+      canPublishRole,
+      declaredSizeMatches,
+      parseSidecar,
+      suggestStyle,
+      uploadFilename,
+      validateReview,
+      validateZipEntries,
+      viewZipEntry,
+      zipRejectedReason,
+    } from "./beatbox/package-rules.mjs";
+
+    const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co";
+    const KEY = "sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju";
+    const API = BASE + "/functions/v1/beatbay-manager";
+    const sb = createClient(BASE, KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const q = (id) => document.getElementById(id);
+    let sess = null;
+    let role = "";
+    let catalogCodes = [];
+    let busy = false;
+    let bootToken = 0;
+    let beatId = "";
+    let extracted = null;
+    let suggestions = { bpm: null, style: null, musical_key: null };
+    let objectUrls = [];
+    let published = false;
+
+    function trackUrl(url) {
+      objectUrls.push(url);
+      return url;
+    }
+    function revokeUrls() {
+      for (const url of objectUrls) URL.revokeObjectURL(url);
+      objectUrls = [];
+    }
+    async function af(opt = {}) {
+      if (!sess) throw Error("Not signed in");
+      const response = await fetch(API, {
+        ...opt,
+        headers: { Authorization: "Bearer " + sess.access_token, apikey: KEY, "content-type": "application/json", ...(opt.headers || {}) },
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw Error(body.error || "Request failed");
+      return body;
+    }
+    function showErrors(list, heading = "This ZIP cannot be imported.") {
+      const box = q("errors");
+      box.replaceChildren();
+      if (!list.length) {
+        box.hidden = true;
+        return;
+      }
+      const title = document.createElement("strong");
+      title.textContent = heading;
+      const items = document.createElement("ul");
+      for (const item of list) {
+        const line = document.createElement("li");
+        line.textContent = item;
+        items.append(line);
+      }
+      box.append(title, items);
+      box.hidden = false;
+      box.focus();
+    }
+    function showWarnings(list) {
+      const box = q("warnings");
+      box.replaceChildren();
+      if (!list.length) {
+        box.hidden = true;
+        return;
+      }
+      const items = document.createElement("ul");
+      for (const item of list) {
+        const line = document.createElement("li");
+        line.textContent = item;
+        items.append(line);
+      }
+      box.append(items);
+      box.hidden = false;
+    }
+    function sourceHint(source, label) {
+      if (source === "sidecar") return label + " from beat.json / metadata.json.";
+      if (source === "filename") return label + " from the file name. Edit it before you save.";
+      return "";
+    }
+    function renderSuggestions() {
+      const list = q("suggestionList");
+      list.replaceChildren();
+      const rows = [];
+      if (suggestions.bpm) rows.push("Tempo " + suggestions.bpm + " BPM");
+      if (suggestions.style) rows.push("Style " + suggestions.style);
+      if (suggestions.musical_key) rows.push("Key " + suggestions.musical_key);
+      if (!rows.length) {
+        const item = document.createElement("li");
+        item.textContent = "No filename clues yet. You can still listen for a tempo.";
+        list.append(item);
+      } else {
+        for (const row of rows) {
+          const item = document.createElement("li");
+          item.textContent = row;
+          list.append(item);
+        }
+      }
+      q("applySuggestion").hidden = rows.length === 0;
+    }
+    function formState() {
+      return {
+        beat_code: q("beatCode").value,
+        title: q("title").value,
+        style: q("style").value,
+        bpm: q("bpm").value,
+        musical_key: q("musicalKey").value,
+        tags: q("tags").value,
+        description: q("description").value,
+        nonexclusive_enabled: q("licNon").checked,
+        nonexclusive_price: q("priceNon").value,
+        exclusive_enabled: q("licExclusive").checked,
+        exclusive_price: q("priceExclusive").value,
+        ownership_enabled: q("licOwn").checked,
+        ownership_price: q("priceOwn").value,
+      };
+    }
+    function applyRole() {
+      const allowed = canPublishRole(role);
+      q("confirmRow").hidden = !allowed;
+      q("publishNote").textContent = allowed
+        ? "Save draft keeps the beat off BeatBay. Approve & publish marks it Available and turns the storefront on."
+        : "Staff can save drafts. An owner or admin has to approve before this beat appears on BeatBay.";
+      q("who").textContent = (sess?.user?.email || "") + (role ? " · " + role : "");
+      syncApprove();
+    }
+    function syncApprove() {
+      const allowed = canPublishRole(role);
+      q("approve").disabled = busy || published || !allowed || !q("confirmPublish").checked;
+      q("saveDraft").disabled = busy || published;
+      q("analyze").disabled = busy || published;
+    }
+    function resetPackage() {
+      revokeUrls();
+      extracted = null;
+      beatId = "";
+      published = false;
+      suggestions = { bpm: null, style: null, musical_key: null };
+      q("review").hidden = true;
+      q("intake").hidden = false;
+      q("fields").disabled = false;
+      q("done").hidden = true;
+      q("status").textContent = "";
+      q("player").removeAttribute("src");
+      q("player").load();
+      q("cover").hidden = true;
+      q("cover").removeAttribute("src");
+      q("confirmPublish").checked = false;
+      showErrors([]);
+      q("drop").focus();
+      syncApprove();
+    }
+    function showReview(draft, result) {
+      q("beatCode").value = draft.beat_code;
+      q("title").value = draft.title;
+      q("style").value = draft.style;
+      q("bpm").value = draft.bpm;
+      q("musicalKey").value = draft.musical_key;
+      q("tags").value = draft.tags;
+      q("description").value = draft.description;
+      q("licNon").checked = draft.nonexclusive_enabled !== false;
+      q("priceNon").value = draft.nonexclusive_price;
+      q("licExclusive").checked = false;
+      q("priceExclusive").value = "";
+      q("licOwn").checked = false;
+      q("priceOwn").value = "";
+      q("titleHint").textContent = sourceHint(draft.sources.title, "Title");
+      q("styleHint").textContent = sourceHint(draft.sources.style, "Style");
+      q("bpmHint").textContent = sourceHint(draft.sources.bpm, "BPM");
+      q("keyHint").textContent = sourceHint(draft.sources.musical_key, "Key");
+      suggestions = { ...draft.suggestions };
+      renderSuggestions();
+      showWarnings(draft.warnings || []);
+      const inventory = q("inventory");
+      inventory.replaceChildren();
+      for (const line of [
+        "Preview: " + result.preview.path,
+        result.full ? "Master: " + result.full.path : "No master in this ZIP.",
+        result.cover ? "Cover: " + result.cover.path : "No cover image in this ZIP.",
+      ]) {
+        const item = document.createElement("li");
+        item.textContent = line;
+        inventory.append(item);
+      }
+      q("coverNote").textContent = result.cover
+        ? "Cover preview is for this review only. BeatBay listings keep the branded player art."
+        : "BeatBay will use the branded player art for this listing.";
+      q("intake").hidden = true;
+      q("review").hidden = false;
+      q("status").textContent = "Package ready. Review the fields, then save a draft or approve it.";
+      q("reviewHeading").focus();
+      syncApprove();
+    }
+    async function readZipFile(zip, item) {
+      const stored = zip.file(item.zipName) || zip.file(item.path);
+      if (!stored) throw Error("Missing " + item.path + " after validation.");
+      const bytes = await stored.async("uint8array");
+      if (!declaredSizeMatches(item.size, bytes.byteLength)) throw Error(item.path + " size did not match the ZIP directory. The file was not uploaded.");
+      return bytes;
+    }
+    function audioType(ext) {
+      return ext === "wav" ? "audio/wav" : "audio/mpeg";
+    }
+    async function acceptZip(file) {
+      if (busy) return;
+      resetPackage();
+      const reason = zipRejectedReason(file);
+      if (reason) return showErrors([reason]);
+      if (q("zipFile").dataset.multi === "1") return;
+      q("status").textContent = "";
+      try {
+        const zip = await JSZip.loadAsync(await file.arrayBuffer());
+        // viewZipEntry reads unsafeOriginalName so JSZip cannot hide ../ behind a sanitized name.
+        const result = validateZipEntries(Object.values(zip.files).map((entry) => viewZipEntry(entry)));
+        if (!result.ok) return showErrors(result.errors);
+        const previewBytes = await readZipFile(zip, result.preview);
+        const preview = new File([previewBytes], uploadFilename("preview", result.preview.ext), { type: audioType(result.preview.ext) });
+        let full = null;
+        if (result.full) {
+          const fullBytes = await readZipFile(zip, result.full);
+          full = new File([fullBytes], uploadFilename("full", result.full.ext), { type: audioType(result.full.ext) });
+        }
+        let sidecar = { ok: true, fields: {}, warnings: [] };
+        if (result.sidecar) {
+          const sidecarBytes = await readZipFile(zip, result.sidecar);
+          sidecar = parseSidecar(new TextDecoder("utf-8", { fatal: false }).decode(sidecarBytes));
+        }
+        revokeUrls();
+        const previewUrl = trackUrl(URL.createObjectURL(preview));
+        q("player").src = previewUrl;
+        if (result.cover) {
+          const coverBytes = await readZipFile(zip, result.cover);
+          const coverType = result.cover.ext === "png" ? "image/png" : result.cover.ext === "webp" ? "image/webp" : "image/jpeg";
+          q("cover").src = trackUrl(URL.createObjectURL(new Blob([coverBytes], { type: coverType })));
+          q("cover").hidden = false;
+        } else {
+          q("cover").hidden = true;
+        }
+        extracted = { preview, full, originalPreviewPath: result.preview.path };
+        const draft = buildReviewDraft({ previewPath: result.preview.path, sidecar, existingCodes: catalogCodes });
+        showReview(draft, result);
+      } catch (error) {
+        resetPackage();
+        showErrors([error?.message || "This file is not a valid ZIP archive."]);
+      }
+    }
+    async function analyzeFile(file, name) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      try {
+        const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
+        const rate = buffer.sampleRate;
+        const limit = Math.min(buffer.length, rate * 90);
+        const hop = 512;
+        const frame = 1024;
+        const energy = [];
+        for (let position = 0; position + frame < limit; position += hop) {
+          let sum = 0;
+          for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+            const data = buffer.getChannelData(channel);
+            for (let index = position; index < position + frame; index += 1) sum += data[index] * data[index];
+          }
+          energy.push(Math.sqrt(sum / (frame * buffer.numberOfChannels)));
+        }
+        const onset = energy.map((value, index) => Math.max(0, value - (energy[index - 1] || value)));
+        let best = 0;
+        let bestScore = -1;
+        for (let bpm = 60; bpm <= 190; bpm += 1) {
+          const lag = Math.round((60 * rate) / (bpm * hop));
+          let score = 0;
+          for (let index = lag; index < onset.length; index += 1) score += onset[index] * onset[index - lag];
+          if (score > bestScore) {
+            bestScore = score;
+            best = bpm;
+          }
+        }
+        if (best < 90 && best * 2 <= 190) best *= 2;
+        return { bpm: best, style: suggestStyle(name, best) };
+      } finally {
+        await ctx.close();
+      }
+    }
+    function previewDuration() {
+      const duration = q("player").duration;
+      if (!Number.isFinite(duration) || duration <= 0) return 30;
+      return Math.max(1, Math.min(600, Math.round(duration)));
+    }
+    async function putAsset(kind, file) {
+      const signed = await af({
+        method: "POST",
+        body: JSON.stringify({ action: "create_upload", id: beatId, kind, filename: file.name }),
+      });
+      const upload = await fetch(signed.signed_url, {
+        method: "PUT",
+        headers: { "content-type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      if (!upload.ok) throw Error("Upload failed.");
+      return af({
+        method: "POST",
+        body: JSON.stringify({
+          action: "attach_asset",
+          id: beatId,
+          kind,
+          path: signed.path,
+          public_url: signed.public_url,
+          duration_seconds: kind === "preview" ? previewDuration() : null,
+        }),
+      });
+    }
+    async function uploadAssets() {
+      if (!extracted?.preview) throw Error("A preview audio file is required.");
+      if (!extracted.previewUploaded) {
+        await putAsset("preview", extracted.preview);
+        extracted.previewUploaded = true;
+      }
+      if (extracted.full && !extracted.fullUploaded) {
+        await putAsset("full", extracted.full);
+        extracted.fullUploaded = true;
+      }
+    }
+    async function saveListing(publish) {
+      const form = formState();
+      const problems = validateReview(form);
+      if (problems.length) {
+        showErrors(problems, "Fix these fields before saving.");
+        throw Error(problems[0]);
+      }
+      showErrors([]);
+      const saved = await af({
+        method: "POST",
+        body: JSON.stringify(buildSaveBody(form, { id: beatId, publish })),
+      });
+      beatId = saved.beat?.id || beatId;
+      if (!beatId) throw Error("Draft was not created.");
+      await uploadAssets();
+      return saved.beat;
+    }
+    async function saveDraft() {
+      if (busy || published) return;
+      busy = true;
+      syncApprove();
+      q("status").textContent = "Saving draft…";
+      try {
+        await saveListing(false);
+        q("status").textContent = "Draft saved. BeatBay storefront was not changed.";
+        await refreshCatalog();
+      } catch (error) {
+        q("status").textContent = error.message;
+      } finally {
+        busy = false;
+        syncApprove();
+      }
+    }
+    async function approvePublish() {
+      if (!canPublishRole(role)) throw Error("Owner or admin approval is required to publish.");
+      if (!q("confirmPublish").checked) throw Error("Confirm the listing before publishing.");
+      if (busy || published) return;
+      busy = true;
+      syncApprove();
+      q("status").textContent = "Saving, uploading, then publishing…";
+      try {
+        await saveListing(false);
+        await saveListing(true);
+        const publishedBeat = await af({ method: "POST", body: JSON.stringify(buildPublishBody(beatId)) });
+        published = true;
+        q("fields").disabled = true;
+        q("done").hidden = false;
+        q("status").textContent = publishedBeat.beat?.storefront_enabled
+          ? "Published to BeatBay."
+          : "Publish finished.";
+        await refreshCatalog();
+      } catch (error) {
+        q("status").textContent = error.message;
+      } finally {
+        busy = false;
+        syncApprove();
+      }
+    }
+    async function refreshCatalog() {
+      const data = await af();
+      role = data.role || "";
+      catalogCodes = (data.beats || []).map((beat) => beat.beat_code).filter(Boolean);
+      applyRole();
+    }
+    q("drop").addEventListener("click", () => q("zipFile").click());
+    q("zipFile").addEventListener("change", () => {
+      const file = q("zipFile").files && q("zipFile").files[0];
+      q("zipFile").value = "";
+      if (file) acceptZip(file);
+    });
+    for (const type of ["dragenter", "dragover"]) {
+      q("drop").addEventListener(type, (event) => {
+        event.preventDefault();
+        q("drop").classList.add("hot");
+      });
+    }
+    q("drop").addEventListener("dragleave", () => q("drop").classList.remove("hot"));
+    q("drop").addEventListener("drop", (event) => {
+      event.preventDefault();
+      q("drop").classList.remove("hot");
+      const files = [...(event.dataTransfer?.files || [])];
+      if (files.length !== 1) return showErrors(["Drop one ZIP at a time."]);
+      acceptZip(files[0]);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || q("review").hidden) return;
+      event.preventDefault();
+      resetPackage();
+    });
+    q("confirmPublish").addEventListener("change", syncApprove);
+    q("saveDraft").addEventListener("click", () => { saveDraft().catch((error) => { q("status").textContent = error.message; }); });
+    q("approve").addEventListener("click", () => {
+      approvePublish().catch((error) => { q("status").textContent = error.message; });
+    });
+    q("reset").addEventListener("click", resetPackage);
+    q("applySuggestion").addEventListener("click", () => {
+      if (suggestions.bpm) q("bpm").value = String(suggestions.bpm);
+      if (suggestions.style) q("style").value = suggestions.style;
+      if (suggestions.musical_key) q("musicalKey").value = suggestions.musical_key;
+      q("analysisStatus").textContent = "Suggestions applied. Review the fields before you save.";
+    });
+    q("analyze").addEventListener("click", async () => {
+      if (!extracted?.preview) return;
+      q("analysisStatus").textContent = "Listening for tempo and style clues…";
+      try {
+        const result = await analyzeFile(extracted.preview, extracted.originalPreviewPath);
+        suggestions = { bpm: result.bpm, style: result.style, musical_key: suggestions.musical_key };
+        renderSuggestions();
+        q("analysisStatus").textContent = "Analysis ready. Apply suggestions only if they look right.";
+      } catch (error) {
+        q("analysisStatus").textContent = "Could not analyze this file. Try another MP3 or WAV.";
+      }
+    });
+    q("send").addEventListener("click", async () => {
+      q("loginMsg").textContent = "Sending…";
+      const { error } = await sb.auth.signInWithOtp({
+        email: q("email").value.trim(),
+        options: { emailRedirectTo: location.href, shouldCreateUser: false },
+      });
+      q("loginMsg").textContent = error ? error.message : "Check your email for the secure sign-in link.";
+    });
+    q("out").addEventListener("click", async () => {
+      await sb.auth.signOut();
+      location.reload();
+    });
+    async function boot() {
+      const token = ++bootToken;
+      const { data } = await sb.auth.getSession();
+      if (token !== bootToken) return;
+      sess = data.session;
+      if (!sess) {
+        q("login").hidden = false;
+        q("app").hidden = true;
+        return;
+      }
+      q("login").hidden = true;
+      q("app").hidden = false;
+      try {
+        await refreshCatalog();
+      } catch (error) {
+        q("who").textContent = error.message;
+        q("publishNote").textContent = "Sign-in succeeded, but BeatBay access was refused.";
+      }
+    }
+    sb.auth.onAuthStateChange((_event, next) => {
+      sess = next;
+      boot();
+    });
+    boot();
+    syncApprove();
+  </script>
+</body>
+</html>

@@ -40,6 +40,31 @@ const dollars = (value: unknown) => {
 const integer = (value: unknown) => value === "" || value === null || value === undefined ? null : Math.round(Number(value));
 const safeExt = (name: string) => name.includes(".") ? name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin";
 
+// Beatbox intake records a draft listing. It must never enable the storefront.
+// Publishing stays on set_storefront, which remains owner/admin only.
+function beatboxLicenseChanges(body: any): { error?: string; changes?: Record<string, unknown> } {
+  try {
+    const nonexclusive = body.nonexclusive_enabled !== false;
+    const exclusive = body.exclusive_enabled === true;
+    const ownership = body.ownership_enabled === true;
+    const nonexclusivePrice = dollars(nonexclusive ? (body.nonexclusive_price ?? "30") : "");
+    if (nonexclusive && nonexclusivePrice === null) return { error: "Non-exclusive price is required" };
+    return {
+      changes: {
+        signature_sound: false,
+        nonexclusive_enabled: nonexclusive,
+        nonexclusive_price_cents: nonexclusive ? nonexclusivePrice : null,
+        exclusive_enabled: exclusive,
+        exclusive_price_cents: exclusive ? dollars(body.exclusive_price) : null,
+        ownership_enabled: ownership,
+        ownership_price_cents: ownership ? dollars(body.ownership_price) : null,
+      },
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid license price" };
+  }
+}
+
 async function activityReport(
   supabase: ReturnType<typeof client>,
   session: any,
@@ -128,6 +153,8 @@ Deno.serve(async (req: Request) => {
       const id = String(body.id ?? "").trim();
       const beatCode = String(body.beat_code ?? "").trim().toUpperCase();
       const title = String(body.title ?? "").trim();
+      const beatboxIntake = body.intake === "beatbox";
+      if (beatboxIntake && body.storefront_enabled === true) return json({ error: "Beatbox cannot publish from save. Use Approve & publish." }, 400);
       if (!/^BEAT [0-9]{4}$/.test(beatCode)) return json({ error: "Beat number must look like BEAT 0000" }, 400);
       if (!title) return json({ error: "Beat title is required" }, 400);
       const bpm = integer(body.bpm);
@@ -138,22 +165,31 @@ Deno.serve(async (req: Request) => {
         producer: String(body.producer || "Rosetta Crew Music Group").trim(),
         style: String(body.style ?? "").trim() || null,
         bpm,
-        metadata_source: String(body.metadata_source || "manual"),
+        metadata_source: beatboxIntake ? "beatbox" : String(body.metadata_source || "manual"),
         musical_key: String(body.musical_key ?? "").trim() || null,
         description: String(body.description ?? "").trim() || null,
         tags: String(body.tags ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
       };
-      const ownerChanges: Record<string, any> = ownerAccess ? {
-        signature_sound: body.signature_sound === true,
-        status: String(body.status || "draft"),
-        nonexclusive_enabled: body.nonexclusive_enabled !== false,
-        nonexclusive_price_cents: dollars(body.nonexclusive_price),
-        exclusive_enabled: body.exclusive_enabled !== false,
-        exclusive_price_cents: dollars(body.exclusive_price),
-        ownership_enabled: body.ownership_enabled !== false,
-        ownership_price_cents: dollars(body.ownership_price),
-      } : {};
-      if (ownerAccess && ownerChanges.nonexclusive_enabled && ownerChanges.nonexclusive_price_cents === null) return json({ error: "Non-exclusive price is required" }, 400);
+      let ownerChanges: Record<string, any> = {};
+      if (beatboxIntake) {
+        const status = String(body.status || "draft");
+        if (ownerAccess && !["draft", "available"].includes(status)) return json({ error: "Beatbox can only save a draft or mark a beat Available" }, 400);
+        const licenses = beatboxLicenseChanges(body);
+        if (licenses.error) return json({ error: licenses.error }, 400);
+        ownerChanges = { ...licenses.changes, status: ownerAccess ? status : "draft" };
+      } else if (ownerAccess) {
+        ownerChanges = {
+          signature_sound: body.signature_sound === true,
+          status: String(body.status || "draft"),
+          nonexclusive_enabled: body.nonexclusive_enabled !== false,
+          nonexclusive_price_cents: dollars(body.nonexclusive_price),
+          exclusive_enabled: body.exclusive_enabled !== false,
+          exclusive_price_cents: dollars(body.exclusive_price),
+          ownership_enabled: body.ownership_enabled !== false,
+          ownership_price_cents: dollars(body.ownership_price),
+        };
+        if (ownerChanges.nonexclusive_enabled && ownerChanges.nonexclusive_price_cents === null) return json({ error: "Non-exclusive price is required" }, 400);
+      }
       let result;
       if (id && !ownerAccess) {
         const { data: current, error } = await supabase.from("beatbay_beats").select("status,storefront_enabled").eq("id", id).single();
@@ -163,10 +199,17 @@ Deno.serve(async (req: Request) => {
       if (id) result = await supabase.from("beatbay_beats").update({ ...musicChanges, ...ownerChanges, updated_at: new Date().toISOString() }).eq("id", id).select("*").single();
       else result = await supabase.from("beatbay_beats").insert({
         ...musicChanges, ...ownerChanges, created_by: session.user.id,
-        ...(!ownerAccess ? { status: "draft", signature_sound: false, nonexclusive_enabled: false, exclusive_enabled: false, ownership_enabled: false, storefront_enabled: false, is_featured: false } : {}),
+        ...(!ownerAccess && !beatboxIntake ? { status: "draft", signature_sound: false, nonexclusive_enabled: false, exclusive_enabled: false, ownership_enabled: false, storefront_enabled: false, is_featured: false } : {}),
+        ...(beatboxIntake ? { storefront_enabled: false, is_featured: false } : {}),
       }).select("*").single();
       if (result.error) throw result.error;
-      await activityReport(supabase, session, { action: id ? "update_beat_draft" : "create_beat_draft", entityType: "beat", entityId: result.data.id, summary: `${id ? "Updated" : "Created"} BeatBay draft: ${beatCode} — ${title}` });
+      await activityReport(supabase, session, {
+        action: id ? "update_beat_draft" : "create_beat_draft",
+        entityType: "beat",
+        entityId: result.data.id,
+        summary: `${id ? "Updated" : "Created"} ${beatboxIntake ? "Beatbox" : "BeatBay"} draft: ${beatCode} — ${title}`,
+        ...(beatboxIntake ? { details: { intake: "beatbox", status: ownerChanges.status ?? "draft" } } : {}),
+      });
       return json({ beat: result.data });
     }
 

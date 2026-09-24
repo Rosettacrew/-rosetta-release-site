@@ -6,6 +6,7 @@ const files = [
   "admin-dashboard.html",
   "index.html",
   "beatbay-admin.html",
+  "beatbox.html",
   "beatbay/index.html",
   "studio/index.html",
   "studio/password.html",
@@ -354,6 +355,7 @@ const publicFiles = [
   "manifest.webmanifest",
   "admin.webmanifest",
   "beatbay-admin.html",
+  "beatbox.html",
   "beatbay/index.html",
   "studio/index.html",
   "music-studio.html",
@@ -481,6 +483,10 @@ assert.match(ownerRecovery, /PASSWORD_RECOVERY/);
 assert.doesNotMatch(ownerRecovery, /release-admin-data/);
 assert.doesNotMatch(ownerRecovery, /data-tab="overview"/);
 
+assert.match(robots, /Disallow: \/beatbox\.html/);
+assert.match(robots, /Disallow: \/beatbox\//);
+assert.match(readFileSync("beatbay-admin.html", "utf8"), /href="beatbox\.html"/);
+assert.match(readFileSync("beatbox.html", "utf8"), /<meta name="robots" content="noindex,nofollow"\s*\/?>/);
 assert.match(robots, /Disallow: \/admin-dashboard\.html/);
 assert.match(robots, /Disallow: \/studio\//);
 assert.match(robots, /Disallow: \/music-studio\.html/);
@@ -534,6 +540,15 @@ assert.match(
 assert.match(
   studio,
   /action: "signed_upload"[\s\S]*?await fetch\(signed\.signed_url[\s\S]*?action: "add_track"[\s\S]*?object_path: signed\.path/,
+);
+
+const beatbox = spawnSync(process.execPath, ["scripts/check-beatbox.mjs"], {
+  encoding: "utf8",
+});
+assert.equal(
+  beatbox.status,
+  0,
+  `Beatbox checks failed:\n${beatbox.stderr || beatbox.stdout}`,
 );
 
 const helpers = spawnSync(process.execPath, ["scripts/check-publish-helpers.mjs"], {
