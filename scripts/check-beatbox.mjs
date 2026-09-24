@@ -14,6 +14,13 @@ import {
   nextBeatCode,
   parseSidecar,
   suggestStyle,
+  executableMagic,
+  inflateEntry,
+  isPublicApiCredential,
+  isQuarantinePath,
+  magicAllowlist,
+  redactLog,
+  sandboxedExtractPath,
   uploadFilename,
   validateReview,
   validateZipEntries,
@@ -194,7 +201,69 @@ assert.equal(opted.status, "available");
 assert.equal(opted.exclusive_enabled, true);
 assert.equal(opted.exclusive_price, "250.00");
 assert.equal(opted.ownership_enabled, false);
-assert.deepEqual(buildPublishBody("abc"), { action: "set_storefront", id: "abc", enabled: true });
+assert.deepEqual(buildPublishBody("abc"), {
+  action: "set_storefront",
+  id: "abc",
+  enabled: true,
+  intake: "beatbox",
+  confirm_publish: true,
+});
+assert.equal(buildPublishBody("abc").enabled, true);
+assert.equal("storefront_enabled" in buildPublishBody("abc"), false);
+
+const id3 = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+const frame = new Uint8Array([0xff, 0xfb, 0x90, 0x00]);
+const wav = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]);
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+const webp = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+assert.equal(magicAllowlist("mp3", id3).ok, true);
+assert.equal(magicAllowlist("mp3", frame).mime, "audio/mpeg");
+assert.equal(magicAllowlist("wav", wav).mime, "audio/wav");
+assert.equal(magicAllowlist("png", png).mime, "image/png");
+assert.equal(magicAllowlist("jpg", jpeg).mime, "image/jpeg");
+assert.equal(magicAllowlist("webp", webp).mime, "image/webp");
+assert.equal(magicAllowlist("json", new TextEncoder().encode('{"title":"Night"}')).ok, true);
+assert.equal(magicAllowlist("mp3", new Uint8Array([0x4d, 0x5a, 0x90, 0x00])).ok, false);
+assert.equal(executableMagic(new Uint8Array([0x7f, 0x45, 0x4c, 0x46])), "ELF");
+assert.match(magicAllowlist("wav", new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 0])).error, /executable/);
+assert.match(magicAllowlist("mp3", jpeg).error, /does not match an MP3/);
+assert.match(magicAllowlist("mp3", new TextEncoder().encode("#!/bin/sh\n")).error, /executable/);
+assert.match(magicAllowlist("json", new TextEncoder().encode('{"a":"<script>alert(1)</script>"}')).error, /polyglot/);
+assert.equal(magicAllowlist("exe", id3).ok, false);
+
+const beatId = "11111111-1111-4111-8111-111111111111";
+const quarantine = `beatbay/${beatId}/quarantine/22222222-2222-4222-8222-222222222222.mp3`;
+assert.equal(isQuarantinePath(beatId, quarantine, "mp3"), true);
+assert.equal(isQuarantinePath(beatId, `beatbay/${beatId}/preview/22222222-2222-4222-8222-222222222222.mp3`, "mp3"), false);
+assert.equal(isQuarantinePath(beatId, `beatbay/${beatId}/quarantine/../preview/x.mp3`, "mp3"), false);
+assert.equal(sandboxedExtractPath("audio/preview.mp3"), "beatbox-sandbox/audio/preview.mp3");
+assert.equal(sandboxedExtractPath("../preview.mp3"), null);
+assert.equal(sandboxedExtractPath("/tmp/preview.mp3"), null);
+
+const escaped = validateZipEntries([
+  entry("audio/preview.mp3", { zipName: "elsewhere/preview.mp3", uncompressedSize: 128, compressedSize: 64 }),
+]);
+assert.equal(escaped.ok, false);
+assert.match(escaped.errors.join("\n"), /sandbox/);
+
+const dottedLookup = validateZipEntries([
+  entry("./audio/preview.mp3", { zipName: "./audio/preview.mp3", uncompressedSize: 128, compressedSize: 64 }),
+]);
+assert.equal(dottedLookup.ok, true, dottedLookup.errors.join("\n"));
+assert.equal(dottedLookup.preview.zipName, "./audio/preview.mp3");
+assert.deepEqual(inflateEntry(dottedLookup.preview).names, ["./audio/preview.mp3", "audio/preview.mp3"]);
+assert.equal(inflateEntry({ path: "audio/preview.mp3", zipName: "../preview.mp3" }).ok, false);
+
+const many = Array.from({ length: 41 }, (_, index) => entry(`note-${index}.pdf`, { uncompressedSize: 20, compressedSize: 10 }));
+assert.match(validateZipEntries(many).errors.join("\n"), /too many files/);
+
+assert.equal(isPublicApiCredential("", "sb_publishable_example"), true);
+assert.equal(isPublicApiCredential("sb_publishable_example", "sb_publishable_example"), true);
+assert.equal(isPublicApiCredential("sb_secret_example", ""), true);
+assert.equal(isPublicApiCredential("user-jwt", "sb_publishable_example"), false);
+assert.match(redactLog("bearer abc.def.ghi token sb_secret_abc user@example.com sk_live_123 whsec_abc"), /\[redacted/);
+assert.doesNotMatch(redactLog("bearer abc.def.ghi user@example.com sk_live_123"), /user@example.com|sk_live_123|bearer abc/);
 assert.deepEqual(validateReview({ ...filenameDraft, title: "" }), ["Title is required."]);
 assert.equal(canPublishRole("owner"), true);
 assert.equal(canPublishRole("admin"), true);
@@ -220,8 +289,14 @@ assert.doesNotMatch(beforeApprove, /buildPublishBody\(/);
 assert.match(html.slice(html.indexOf("async function approvePublish")), /buildPublishBody\(/);
 assert.match(html, /if \(!canPublishRole\(role\)\) throw Error\("Owner or admin approval is required to publish\."\)/);
 assert.match(html, /unsafeOriginalName/);
-assert.doesNotMatch(html, /service_role|SUPABASE_SERVICE_ROLE|SUPABASE_SECRET/);
+assert.doesNotMatch(html, /service_role|SUPABASE_SERVICE_ROLE|SUPABASE_SECRET|STRIPE|RESEND|sk_live|sk_test|whsec_/);
 assert.doesNotMatch(html, /storefront_enabled:\s*true/);
+assert.match(html, /intake: "beatbox"/);
+assert.match(html, /application\/octet-stream/);
+assert.match(html, /signed\.quarantine/);
+assert.match(html, /inflateEntry\(item\)/);
+assert.match(html, /magicAllowlist\(item\.ext, bytes\)/);
+assert.doesNotMatch(html, /public_url: signed\.public_url/);
 
 const manager = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
 assert.match(manager, /function beatboxLicenseChanges/);
@@ -236,6 +311,25 @@ assert.doesNotMatch(saveAction, /storefront_enabled:\s*true/);
 assert.match(manager, /action === "set_storefront"/);
 assert.match(manager, /if \(!ownerAccess\) return json\(\{ error: "Owner approval required" \}, 403\)/);
 assert.match(saveAction, /status: ownerAccess \? status : "draft"/);
+assert.match(manager, /isPublicApiCredential/);
+assert.match(manager, /gate\.status === 403 \? "Forbidden" : "Unauthorized"/);
+assert.match(manager, /body\.confirm_publish !== true/);
+assert.match(manager, /beatbay\/\$\{id\}\/quarantine\//);
+assert.match(manager, /magicAllowlist\(ext, bytes\)/);
+assert.match(manager, /redactLog/);
+assert.match(manager, /public_url: null/);
+assert.doesNotMatch(manager, /STRIPE|stripe-release-webhook|createCheckout|RESEND_API_KEY\s*=/);
+const guard = readFileSync("supabase/functions/beatbay-manager/beatbox-guard.mjs", "utf8");
+const rules = readFileSync("beatbox/package-rules.mjs", "utf8");
+for (const source of [guard, rules, html]) {
+  assert.doesNotMatch(source, /sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|SUPABASE_SERVICE_ROLE_KEY\s*=/);
+}
+assert.doesNotMatch(guard, /SUPABASE_SECRET_KEYS|service_role/);
+assert.doesNotMatch(rules, /SUPABASE_SECRET_KEYS|service_role/);
+const migration = readFileSync("supabase/migrations/20260924_beatbox_revoke_anon_writes.sql", "utf8");
+assert.match(migration, /revoke insert, update, delete, truncate on table public\.beatbay_beats from public, anon, authenticated/i);
+assert.match(migration, /Do not apply this to production/);
+assert.doesNotMatch(readFileSync("beatbay/index.html", "utf8"), /beatbox\.html|release-manager/);
 
 const admin = readFileSync("beatbay-admin.html", "utf8");
 assert.match(admin, /href="beatbox\.html"/);

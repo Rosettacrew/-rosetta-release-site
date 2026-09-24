@@ -200,6 +200,8 @@
       buildSaveBody,
       canPublishRole,
       declaredSizeMatches,
+      inflateEntry,
+      magicAllowlist,
       parseSidecar,
       suggestStyle,
       uploadFilename,
@@ -397,46 +399,45 @@
       syncApprove();
     }
     async function readZipFile(zip, item) {
-      const stored = zip.file(item.zipName) || zip.file(item.path);
+      const gate = inflateEntry(item);
+      if (!gate.ok) throw Error(gate.error);
+      const stored = gate.names.map((name) => zip.file(name)).find(Boolean);
       if (!stored) throw Error("Missing " + item.path + " after validation.");
       const bytes = await stored.async("uint8array");
       if (!declaredSizeMatches(item.size, bytes.byteLength)) throw Error(item.path + " size did not match the ZIP directory. The file was not uploaded.");
-      return bytes;
-    }
-    function audioType(ext) {
-      return ext === "wav" ? "audio/wav" : "audio/mpeg";
+      const verdict = magicAllowlist(item.ext, bytes);
+      if (!verdict.ok) throw Error(verdict.error);
+      return { bytes, mime: verdict.mime };
     }
     async function acceptZip(file) {
       if (busy) return;
       resetPackage();
       const reason = zipRejectedReason(file);
       if (reason) return showErrors([reason]);
-      if (q("zipFile").dataset.multi === "1") return;
       q("status").textContent = "";
       try {
         const zip = await JSZip.loadAsync(await file.arrayBuffer());
         // viewZipEntry reads unsafeOriginalName so JSZip cannot hide ../ behind a sanitized name.
         const result = validateZipEntries(Object.values(zip.files).map((entry) => viewZipEntry(entry)));
         if (!result.ok) return showErrors(result.errors);
-        const previewBytes = await readZipFile(zip, result.preview);
-        const preview = new File([previewBytes], uploadFilename("preview", result.preview.ext), { type: audioType(result.preview.ext) });
+        const previewRead = await readZipFile(zip, result.preview);
+        const preview = new File([previewRead.bytes], uploadFilename("preview", result.preview.ext), { type: previewRead.mime });
         let full = null;
         if (result.full) {
-          const fullBytes = await readZipFile(zip, result.full);
-          full = new File([fullBytes], uploadFilename("full", result.full.ext), { type: audioType(result.full.ext) });
+          const fullRead = await readZipFile(zip, result.full);
+          full = new File([fullRead.bytes], uploadFilename("full", result.full.ext), { type: fullRead.mime });
         }
         let sidecar = { ok: true, fields: {}, warnings: [] };
         if (result.sidecar) {
-          const sidecarBytes = await readZipFile(zip, result.sidecar);
-          sidecar = parseSidecar(new TextDecoder("utf-8", { fatal: false }).decode(sidecarBytes));
+          const sidecarRead = await readZipFile(zip, result.sidecar);
+          sidecar = parseSidecar(new TextDecoder("utf-8", { fatal: false }).decode(sidecarRead.bytes));
         }
         revokeUrls();
         const previewUrl = trackUrl(URL.createObjectURL(preview));
         q("player").src = previewUrl;
         if (result.cover) {
-          const coverBytes = await readZipFile(zip, result.cover);
-          const coverType = result.cover.ext === "png" ? "image/png" : result.cover.ext === "webp" ? "image/webp" : "image/jpeg";
-          q("cover").src = trackUrl(URL.createObjectURL(new Blob([coverBytes], { type: coverType })));
+          const coverRead = await readZipFile(zip, result.cover);
+          q("cover").src = trackUrl(URL.createObjectURL(new Blob([coverRead.bytes], { type: coverRead.mime })));
           q("cover").hidden = false;
         } else {
           q("cover").hidden = true;
@@ -493,11 +494,12 @@
     async function putAsset(kind, file) {
       const signed = await af({
         method: "POST",
-        body: JSON.stringify({ action: "create_upload", id: beatId, kind, filename: file.name }),
+        body: JSON.stringify({ action: "create_upload", intake: "beatbox", id: beatId, kind, filename: file.name }),
       });
+      if (!signed.quarantine || signed.public_url) throw Error("Upload was not placed in private quarantine.");
       const upload = await fetch(signed.signed_url, {
         method: "PUT",
-        headers: { "content-type": file.type || "application/octet-stream" },
+        headers: { "content-type": "application/octet-stream" },
         body: file,
       });
       if (!upload.ok) throw Error("Upload failed.");
@@ -505,10 +507,10 @@
         method: "POST",
         body: JSON.stringify({
           action: "attach_asset",
+          intake: "beatbox",
           id: beatId,
           kind,
           path: signed.path,
-          public_url: signed.public_url,
           duration_seconds: kind === "preview" ? previewDuration() : null,
         }),
       });

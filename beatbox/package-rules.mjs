@@ -1,5 +1,20 @@
 /** Beatbox V1 package rules. Pure functions shared by the admin page and node checks. */
 
+import { sandboxedExtractPath } from "../supabase/functions/beatbay-manager/beatbox-guard.mjs";
+
+export {
+  QUARANTINE_UPLOAD_TTL_SECONDS,
+  PRIVATE_DOWNLOAD_TTL_SECONDS,
+  SANDBOX_PREFIX,
+  isPublicApiCredential,
+  isQuarantinePath,
+  isUuid,
+  magicAllowlist,
+  executableMagic,
+  redactLog,
+  sandboxedExtractPath,
+} from "../supabase/functions/beatbay-manager/beatbox-guard.mjs";
+
 export const LIMITS = {
   zipBytes: 100 * 1024 * 1024,
   audioBytes: 80 * 1024 * 1024,
@@ -171,8 +186,14 @@ export function validateZipEntries(entries) {
     }
     uncompressed += size;
     kept += 1;
+    const storedName = String(entry.zipName || parsed.path);
+    const stored = canonicalZipPath(storedName);
+    if (stored.error || stored.path !== parsed.path || !sandboxedExtractPath(parsed.path)) {
+      errors.push(`Rejected ${label(parsed.path)}: entry name escapes the sandbox.`);
+      continue;
+    }
     const ext = extensionOf(parsed.path);
-    const file = { path: parsed.path, zipName: entry.zipName || parsed.path, ext, size };
+    const file = { path: parsed.path, zipName: storedName, ext, size, sandbox: sandboxedExtractPath(parsed.path) };
     if (ext === "zip") {
       errors.push(`Rejected ${label(parsed.path)}: nested ZIP files are not supported.`);
       continue;
@@ -468,8 +489,26 @@ export function buildSaveBody(form, { id = "", publish = false } = {}) {
   };
 }
 
+export function inflateEntry(item) {
+  const sandbox = sandboxedExtractPath(item?.path);
+  const stored = canonicalZipPath(item?.zipName);
+  if (!sandbox || stored.error || stored.path !== item?.path) {
+    return { ok: false, error: "Refused to open an entry outside the Beatbox sandbox." };
+  }
+  const names = [];
+  if (item.zipName) names.push(String(item.zipName));
+  if (item.path && item.path !== item.zipName) names.push(String(item.path));
+  return { ok: true, names };
+}
+
 export function buildPublishBody(id) {
-  return { action: "set_storefront", id: String(id || ""), enabled: true };
+  return {
+    action: "set_storefront",
+    id: String(id || ""),
+    enabled: true,
+    intake: "beatbox",
+    confirm_publish: true,
+  };
 }
 
 export function canPublishRole(role) {
