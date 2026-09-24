@@ -2,7 +2,16 @@
 
 Internal admin intake for BeatBay. Beatbox is not a customer page. It does not replace BeatBay Admin’s single-file upload, and it does not change the public BeatBay storefront except through the existing owner/admin publish action.
 
-**Not for production until Craig’s security pass and Owner sign-off. Do not merge this branch to `main`. Do not deploy `beatbay-manager` and do not apply `supabase/migrations/20260924_beatbox_revoke_anon_writes.sql` on production from this PR.**
+**Not for production until Craig’s security pass and Owner sign-off. Do not merge this branch to `main`. Do not deploy `beatbay-manager`. Do not apply either migration below to production until Craig re-score and Owner sign-off.**
+
+## Migrations (staging only)
+
+Apply in this order:
+
+1. `supabase/migrations/20260924_beatbox_metadata_source.sql` widens `beatbay_beats_metadata_source_check` to `metadata_source IN ('manual','audio_assisted','beatbox')`. Prod currently allows only `manual` and `audio_assisted`. Without this, every Beatbox `save_beat` fails with check violation `23514`.
+2. `supabase/migrations/20260924_beatbox_revoke_anon_writes.sql` revokes anon and authenticated writes.
+
+Both are additive. Neither rewrites existing rows.
 
 ## Scope for BoB
 
@@ -96,7 +105,7 @@ The bytes then go to a **private quarantine** object, not the public preview pat
 | 6. RLS / API | Anon cannot call the manager. Migration `20260924_beatbox_revoke_anon_writes.sql` revokes `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` on `beatbay_beats` and `beatbay_auctions` from `public`, `anon`, and `authenticated`, and grants those writes to `service_role`. |
 | 7. Payment perimeter | No Stripe webhook, checkout, or order code is changed. |
 | 8. Storage | Beatbox audio is uploaded to private `release-private/beatbay/{id}/quarantine/…` and promoted only after magic PASS. Full masters stay private. Download URLs for full masters remain 300 seconds. Quarantine upload signing requests `expiresIn: 120`. |
-| 9. Staging first | This PR does not merge and does not deploy. Apply the migration and the function on a test project only. |
+| 9. Staging first | This PR does not merge and does not deploy. On a test project, apply `20260924_beatbox_metadata_source.sql` first, then `20260924_beatbox_revoke_anon_writes.sql`, then the function. |
 | 10. Logging | Edge `console.error` and stored Resend `email_error` go through `redactLog` (bearer tokens, JWTs, key prefixes, emails). |
 
 ### Residuals Craig should still score
