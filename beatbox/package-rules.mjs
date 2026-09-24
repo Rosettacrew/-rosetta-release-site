@@ -16,7 +16,7 @@ export {
 } from "../supabase/functions/beatbay-manager/beatbox-guard.mjs";
 
 export const LIMITS = {
-  zipBytes: 100 * 1024 * 1024,
+  zipBytes: 50 * 1024 * 1024,
   audioBytes: 80 * 1024 * 1024,
   coverBytes: 8 * 1024 * 1024,
   sidecarBytes: 64 * 1024,
@@ -261,7 +261,7 @@ export function zipRejectedReason(file) {
   const size = Number(file?.size);
   if (!Number.isFinite(size)) return "Could not read the ZIP size.";
   if (size <= 0) return "The ZIP file is empty.";
-  if (size > LIMITS.zipBytes) return "This ZIP is larger than 100 MB. Reduce the audio size and try again.";
+  if (size > LIMITS.zipBytes) return "This ZIP is larger than 50 MB. Reduce the audio size and try again.";
   return null;
 }
 

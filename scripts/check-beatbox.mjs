@@ -126,7 +126,9 @@ assert.equal(canonicalZipPath("audio/preview.mp3").path, "audio/preview.mp3");
 assert.equal(canonicalZipPath("./audio/preview.mp3").path, "audio/preview.mp3");
 assert.equal(canonicalZipPath("../x.mp3").error, "path traversal");
 
-assert.match(zipRejectedReason({ name: "beat.zip", size: LIMITS.zipBytes + 1 }), /100 MB/);
+assert.equal(LIMITS.zipBytes, 50 * 1024 * 1024);
+assert.match(zipRejectedReason({ name: "beat.zip", size: LIMITS.zipBytes + 1 }), /50 MB/);
+assert.equal(zipRejectedReason({ name: "beat.zip", size: LIMITS.zipBytes }), null);
 assert.equal(zipRejectedReason({ name: "beat.zip", size: 100 }), null);
 assert.match(zipRejectedReason({ name: "beat.rar", size: 100 }), /\.zip/);
 
@@ -281,6 +283,8 @@ assert.match(html, /from "\.\/beatbox\/package-rules\.mjs"/);
 assert.match(html, /https:\/\/esm\.sh\/jszip@3\.10\.1/);
 assert.match(html, /shouldCreateUser:\s*false/);
 assert.match(html, /id="drop"/);
+assert.match(html, /up to 50 MB/);
+assert.doesNotMatch(html, /100 MB/);
 assert.match(html, /id="confirmPublish"/);
 assert.match(html, /async function approvePublish/);
 assert.match(html, /async function saveDraft/);

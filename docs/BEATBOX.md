@@ -41,9 +41,22 @@ beat.zip
 }
 ```
 
-Rules:
+## Hard limits before extract
 
-- `.zip` only, 100 MB maximum for the archive.
+These fire before any entry is inflated:
+
+| Cap | Value |
+| --- | --- |
+| ZIP file size | **50 MB** |
+| Entry count | **40** kept files (`__MACOSX/`, `.DS_Store`, `Thumbs.db`, and `desktop.ini` do not count) |
+| Uncompressed total | **250 MB** declared |
+| Compression ratio | **500:1** (declared uncompressed size divided by compressed size, per entry) |
+
+A ZIP larger than 50 MB is refused before unzip. That is BoB’s oversized fixture.
+
+Other package rules:
+
+- `.zip` only.
 - At least one `.mp3` or `.wav`. A single audio file is the preview, including one MP3 sitting at the ZIP root.
 - At most two audio files. If there are two, one must be identifiable as the preview (`preview.mp3` / `preview.wav`) or the other must be identifiable as the master (`full.wav`, `full.mp3`, `master.wav`, `master.mp3`).
 - One optional cover: `.jpg`, `.jpeg`, `.png`, or `.webp`, 8 MB maximum. Beatbox shows it on the review screen only. BeatBay listings keep the existing branded player art. V1 does not upload the cover, because `beatbay_beats` has no cover column.
@@ -77,7 +90,7 @@ The bytes then go to a **private quarantine** object, not the public preview pat
 | --- | --- |
 | 1. Admin-only auth | `beatbay-manager` has no public write route. Missing, publishable, anon, or secret keys fail closed with **401** before `getUser`. A signed-in user who is not active `owner`, `admin`, or `staff` gets **403**. `music_uploader` stays excluded. |
 | 2. No auto-publish | `save_beat` cannot set `storefront_enabled`. Beatbox Approve sends `set_storefront` only with `intake: "beatbox"` and `confirm_publish: true`. The server rejects that call without the flag. Staff cannot publish. |
-| 3. ZIP defenses before extract | 100 MB ZIP, 40 entries, 250 MB declared uncompressed total, 500:1 compression-ratio cap, `..` and absolute paths rejected, inflate only under `beatbox-sandbox/…`, symlink mode rejected. |
+| 3. ZIP defenses before extract | 50 MB ZIP, 40 entries, 250 MB declared uncompressed total, 500:1 compression-ratio cap, `..` and absolute paths rejected, inflate only under `beatbox-sandbox/…`, symlink mode rejected. |
 | 4. Allowlist plus magic bytes | MP3, WAV, one JPG/PNG/WebP, one JSON sidecar. Extension must match magic bytes (`ID3` or MP3 frame sync, `RIFF`/`WAVE`, JPEG, PNG, WebP, JSON object). `MZ`, ELF, shebang, Mach-O, and `<script` / `<?php` in the first 1 KB are rejected. Content-Type is not the check. |
 | 5. Secrets | Service role, Stripe, and Resend stay in Edge environment variables. They are not in `beatbox.html`, `beatbox/package-rules.mjs`, or `beatbox-guard.mjs`. The page only has the same publishable key BeatBay Admin already ships. |
 | 6. RLS / API | Anon cannot call the manager. Migration `20260924_beatbox_revoke_anon_writes.sql` revokes `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` on `beatbay_beats` and `beatbay_auctions` from `public`, `anon`, and `authenticated`, and grants those writes to `service_role`. |
@@ -114,7 +127,7 @@ Run these on a **staging** project. Do not point them at production. Record stat
 
 8. ZIP with `../secret.mp3` or `audio/../../x.wav`. Expect a path error and no storage object.
 9. ZIP whose central directory shows uncompressed/compressed above 500:1 (a `preview.mp3` made of zeros, a few megabytes, zipped). Expect the ratio error before review.
-10. ZIP larger than 100 MB. Expect the size error before unzip.
+10. ZIP larger than 50 MB. Expect the size error before unzip.
 11. More than 40 real files. Expect the entry-count error.
 12. `payload.exe`, or `preview.mp3` whose first bytes are `MZ` or `#!/bin/sh`. Expect rejection and no promote.
 13. `.wav` whose first bytes are ELF, or `.mp3` whose bytes are a JPEG. Expect a magic-byte error.
@@ -140,25 +153,18 @@ Use the staging publishable key against PostgREST, not the service role.
 
 ## What BoB should QA
 
-Build these ZIPs and run them in a **non-production** project while signed in as staff, then again as owner or admin.
+Locked fixture matrix. Build these ZIPs and run them in a **non-production** project against this PR.
 
 | Fixture | Expected |
 | --- | --- |
-| Happy: `audio/preview.mp3`, `audio/full.wav`, `cover.jpg`, `beat.json` | Review opens, sidecar fields are editable, audio plays, cover shows. Save draft stays off the storefront. Preview object appears under `beatbay/{id}/preview/` only after attach. Master stays under `beatbay/{id}/full/` in `release-private`. |
-| Missing audio: cover and `beat.json` only | Asks for an MP3 or WAV. Nothing stored. |
-| Single root `Night-Drive.mp3` with ID3 or frame-sync bytes | Treated as the preview. |
-| Filename `140bpm` / `trap` | Suggestions only, until Apply. |
-| Oversized: ZIP over 100 MB, or one audio file over 80 MB | Clear size error, nothing saved. |
-| Traversal: `../secret.mp3`, `audio/../../x.wav`, `/tmp/abs.mp3` | Path error, nothing uploaded. |
-| Zip bomb: small ZIP whose declared uncompressed size is more than 500 times the compressed size, or a zero-filled multi-megabyte `preview.mp3` | Ratio error before review. |
-| Unexpected exec: `payload.exe`, `run.sh`, or `preview.mp3` starting with `MZ` | Rejected. No public object. |
-| Nested `.zip`, two unnamed MP3s, symlink mode `0120000` | Rejected as documented above. |
-| Staff: Save draft, then try Approve | Draft exists, storefront stays off, Approve is unavailable. |
-| Owner: Approve without the confirm checkbox | Button stays disabled. Calling publish without `confirm_publish` returns 400. |
-| Owner: confirm, Approve & publish, preview magic passes | Status Available, then storefront on. |
-| Owner: Approve when quarantine magic fails | Storefront stays off and the quarantine object is removed. |
+| happy: `audio/preview.mp3`, `audio/full.wav`, `cover.jpg`, `beat.json` | Review opens, sidecar fields are editable, audio plays, cover shows. Save draft stays off the storefront. Preview object appears under `beatbay/{id}/preview/` only after attach. Master stays under `beatbay/{id}/full/` in `release-private`. |
+| missing-audio: cover and `beat.json` only | Asks for an MP3 or WAV. Nothing stored. |
+| oversized: ZIP file larger than **50 MB** | Size error before unzip. Nothing stored. |
+| path-traversal: `../secret.mp3`, `audio/../../x.wav`, or `/tmp/abs.mp3` | Path error. Nothing uploaded. |
+| zip-bomb: declared uncompressed size more than 500 times the compressed size | Ratio error before review. Nothing stored. |
+| unexpected `.exe`: `payload.exe` inside the ZIP | Rejected. No public object. |
 
-Also check keyboard: Tab to the drop zone, visible focus ring, Enter/Space opens the file picker, Escape clears a loaded package and returns focus to the drop zone.
+On the same staging project, also check a single root MP3, filename suggestions that stay suggestions until Apply, an audio file over 80 MB, nested ZIPs, symlink mode `0120000`, staff Save versus owner Approve, and a quarantine magic failure that stays off the storefront. Keyboard: Tab to the drop zone, visible focus ring, Enter/Space opens the file picker, Escape clears a loaded package and returns focus to the drop zone.
 
 ## What Craig should score
 
