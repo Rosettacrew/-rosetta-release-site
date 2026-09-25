@@ -1,5 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  UPLOAD_ACTIONS,
+  createUploadService,
+  isSessionAttach,
+  studioAuthorizer,
+} from "../_shared/upload-sessions.mjs";
+import { createSupabaseUploadDb, createSupabaseUploadStorage } from "../_shared/upload-sessions-supabase.mjs";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -309,6 +316,41 @@ function publicLibraryItem(release: any) {
   };
 }
 
+// Issue #91 (P10): same shared upload-session module as beatbay-manager.
+// Henry (music_uploader) may only target beats explicitly assigned to him that are
+// still draft and off the storefront. No owner tier here, no publish, no cleanup action.
+function studioUploadSessions(
+  supabase: ReturnType<typeof adminClient>,
+  session: { user: { id: string; email?: string | null }; admin: { role: string } },
+) {
+  const db = createSupabaseUploadDb(supabase);
+  return {
+    service: createUploadService({
+      db,
+      storage: createSupabaseUploadStorage({ supabase, url: supabaseUrl(), key: serviceRoleKey(), bucket: "release-private" }),
+      bucket: "release-private",
+      origin: "studio_manager",
+      log: (message: string) => console.error(String(message).slice(0, 300)),
+      audit: (event: any) => activityReport(supabase, session, {
+        surface: "beatbay",
+        action: event.action,
+        entityType: "beat",
+        entityId: event.session?.beat_id ?? null,
+        summary: `Studio partner large ${event.session?.kind ?? ""} upload (${String(event.action).replace("upload_", "")}): ${event.session?.filename ?? ""}`,
+        details: { session_id: event.session?.id ?? null, ...(event.details ?? {}) },
+      }),
+    }),
+    ctx: {
+      user: session.user,
+      ownerTier: false,
+      authorizeBeat: studioAuthorizer({
+        isAssigned: (beatId: string) => requireAssignedBeat(supabase, session.user.id, beatId),
+        getBeat: (beatId: string) => db.getBeat(beatId),
+      }),
+    },
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -382,6 +424,12 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method !== "POST") return json({ error: "Method Not Allowed" }, 405);
+
+    if (UPLOAD_ACTIONS.includes(action)) {
+      const uploads = studioUploadSessions(supabase, session);
+      const result = await uploads.service.handle(action, body, uploads.ctx);
+      return json(result.body, result.status);
+    }
 
     if (action === "signed_upload") {
       const productId = String(body.product_id ?? "");
@@ -575,6 +623,12 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "beatbay_attach_asset") {
+      if (isSessionAttach(body)) {
+        const uploads = studioUploadSessions(supabase, session);
+        const result = await uploads.service.handleAttach(body, uploads.ctx);
+        const { beat, ...rest } = result.body as any;
+        return json(beat ? { ...rest, beat: publicBeatItem(beat) } : rest, result.status);
+      }
       const beatId = String(body.beat_id ?? "");
       const kind = String(body.kind ?? "");
       const path = String(body.path ?? "");
