@@ -10,6 +10,14 @@ import {
   magicAllowlist,
   redactLog,
 } from "./beatbox-guard.mjs";
+import {
+  UPLOAD_ACTIONS,
+  beatbayAuthorizer,
+  createUploadService,
+  isSessionAttach,
+  isSessionManifestPath,
+} from "../_shared/upload-sessions.mjs";
+import { createSupabaseUploadDb, createSupabaseUploadStorage } from "../_shared/upload-sessions-supabase.mjs";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -158,6 +166,43 @@ async function activityReport(
   }
 }
 
+// Issue #91: large-file upload sessions (verified chunk parts in release-private/uploads/).
+// Small files keep the create_upload / attach_asset single-object paths above, unchanged.
+// Same gate as everything else here: owner/admin any beat, staff draft-only; never storefront.
+const uploadAuditLabel: Record<string, string> = {
+  upload_started: "Started",
+  upload_verified: "Verified",
+  upload_failed: "Failed",
+  upload_aborted: "Cancelled",
+  upload_attached: "Attached",
+};
+function uploadSessions(supabase: ReturnType<typeof client>, session: any) {
+  const { url, key } = serviceCredentials();
+  const db = createSupabaseUploadDb(supabase);
+  const ownerTier = isOwner(session);
+  return {
+    service: createUploadService({
+      db,
+      storage: createSupabaseUploadStorage({ supabase, url, key, bucket: "release-private" }),
+      bucket: "release-private",
+      origin: "beatbay_manager",
+      log: (message: string) => console.error(redactLog(message)),
+      audit: (event: any) => activityReport(supabase, session, {
+        action: event.action,
+        entityType: "beat",
+        entityId: event.session?.beat_id ?? null,
+        summary: `${uploadAuditLabel[event.action] ?? "Updated"} large ${event.session?.kind ?? ""} upload: ${event.session?.filename ?? ""}`,
+        details: { session_id: event.session?.id ?? null, ...(event.details ?? {}) },
+      }),
+    }),
+    ctx: {
+      user: session.user,
+      ownerTier,
+      authorizeBeat: beatbayAuthorizer({ ownerTier, getBeat: (id: string) => db.getBeat(id) }),
+    },
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -190,6 +235,24 @@ Deno.serve(async (req: Request) => {
     if (req.method !== "POST") return json({ error: "Method Not Allowed" }, 405);
     const body = await req.json();
     const action = String(body.action ?? "");
+
+    if (UPLOAD_ACTIONS.includes(action)) {
+      const uploads = uploadSessions(supabase, session);
+      const result = await uploads.service.handle(action, body, uploads.ctx);
+      return json(result.body, result.status);
+    }
+
+    if (action === "cleanup_uploads") {
+      if (!ownerAccess) return json({ error: "Owner approval required", code: "FORBIDDEN" }, 403);
+      const uploads = uploadSessions(supabase, session);
+      // Replaced chunked masters are never auto-deleted: listed (dry run) unless the owner sends confirm: true.
+      return json({ cleanup: await uploads.service.cleanup({
+        limit: 50,
+        orphanSweep: true,
+        replaced: body.confirm === true ? "confirm" : "dry_run",
+        sessionIds: Array.isArray(body.session_ids) ? body.session_ids : null,
+      }) });
+    }
 
     if (action === "save_beat") {
       const id = String(body.id ?? "").trim();
@@ -316,6 +379,11 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "attach_asset") {
+      if (isSessionAttach(body)) {
+        const uploads = uploadSessions(supabase, session);
+        const result = await uploads.service.handleAttach(body, uploads.ctx);
+        return json(result.body, result.status);
+      }
       const id = String(body.id ?? ""), kind = String(body.kind ?? ""), path = String(body.path ?? "");
       if (!id || !path || !["preview", "full"].includes(kind)) return json({ error: "Beat, file path, and valid upload type are required" }, 400);
       if (!ownerAccess) {
@@ -372,6 +440,12 @@ Deno.serve(async (req: Request) => {
       const { data: beat, error } = await supabase.from("beatbay_beats").select("beat_code,title,full_audio_bucket,full_audio_path").eq("id", id).single();
       if (error) throw error;
       if (!beat.full_audio_bucket || !beat.full_audio_path) return json({ error: "Full master has not been uploaded" }, 404);
+      if (beat.full_audio_bucket === "release-private" && isSessionManifestPath(beat.full_audio_path)) {
+        const chunked = await uploadSessions(supabase, session).service.manifestDownload(beat.full_audio_path, PRIVATE_DOWNLOAD_TTL_SECONDS);
+        if (!chunked) return json({ error: "Full master upload is not attached" }, 404);
+        await activityReport(supabase, session, { action: "download_full_beat", entityType: "beat", entityId: id, summary: `Downloaded full master: ${beat.beat_code} — ${beat.title}` });
+        return json(chunked); // download_url: null so old clients fail clearly; single-object masters use the path below unchanged.
+      }
       const { data: signed, error: signedError } = await supabase.storage.from(beat.full_audio_bucket).createSignedUrl(beat.full_audio_path, PRIVATE_DOWNLOAD_TTL_SECONDS, { download: true });
       if (signedError) throw signedError;
       await activityReport(supabase, session, { action: "download_full_beat", entityType: "beat", entityId: id, summary: `Downloaded full master: ${beat.beat_code} — ${beat.title}` });
