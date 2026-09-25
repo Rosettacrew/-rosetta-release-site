@@ -19,6 +19,8 @@ begin
 end $$;
 create trigger protect_objects_delete before delete on storage.objects for each statement execute function storage.protect_delete();
 create table public.beatbay_beats (id uuid primary key default gen_random_uuid(), status text, storefront_enabled boolean default false, full_audio_bucket text, full_audio_path text);
+create table public.music_activity_log (id uuid primary key default gen_random_uuid(), action text,
+  email_status text not null default 'pending' check (email_status in ('pending', 'sent', 'not_configured', 'failed')));
 insert into storage.buckets values
   ('release-private', array['application/zip','audio/mpeg','audio/wav','audio/x-wav','image/jpeg','image/png','image/webp']),
   ('release-public', null);

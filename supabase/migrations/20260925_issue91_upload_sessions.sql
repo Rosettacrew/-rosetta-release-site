@@ -2,6 +2,8 @@
 -- NON-PROD DRY-RUN FIRST. Do not apply to prod (sktgkrcahsxvidzjjxxt) until
 -- the non-prod dry-run, Craig's security review, and Owner approval.
 --
+-- Also: status 'replaced' (superseded chunked masters; parts deleted only on
+-- explicit owner confirm) and music_activity_log.email_status 'suppressed'.
 -- Adds: upload_limits (single config row), upload_sessions, upload_chunks,
 -- beatbay_beat_assets (stems/video/zip attach target), upload_storage_usage()
 -- (Free 1 GB budget check), upload_sessions_expire() (hourly cleanup; schedule
@@ -87,7 +89,7 @@ create table if not exists public.upload_sessions (
   manifest_root_sha256 text check (manifest_root_sha256 is null or manifest_root_sha256 ~ '^[0-9a-f]{64}$'),
   manifest_path text,
   status text not null default 'open'
-    check (status in ('open', 'complete', 'verified', 'failed', 'expired', 'aborted', 'attached')),
+    check (status in ('open', 'complete', 'verified', 'failed', 'expired', 'aborted', 'attached', 'replaced')),
   failure_code text,
   bucket text not null default 'release-private' check (bucket = 'release-private'),
   storage_prefix text not null,
@@ -220,7 +222,7 @@ begin
   get diagnostics v_expired = row_count;
 
   delete from public.upload_sessions s
-   where s.status in ('expired', 'failed', 'aborted')
+   where s.status in ('expired', 'failed', 'aborted', 'replaced')
      and s.parts_purged_at is not null
      and s.parts_purged_at < now() - interval '7 days'
      and s.storage_prefix like 'uploads/%'
@@ -233,6 +235,21 @@ $$;
 
 revoke all on function public.upload_sessions_expire() from public, anon, authenticated;
 grant execute on function public.upload_sessions_expire() to service_role;
+
+-- ---------------------------------------------------------------------------
+-- music_activity_log: allow email_status = 'suppressed' for log-only upload
+-- events (studio uploads email the Owner once per upload, on attach only).
+-- Widening only; existing values unchanged.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if to_regclass('public.music_activity_log') is not null then
+    alter table public.music_activity_log drop constraint if exists music_activity_log_email_status_check;
+    alter table public.music_activity_log add constraint music_activity_log_email_status_check
+      check (email_status in ('pending', 'sent', 'not_configured', 'failed', 'suppressed'));
+  end if;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- release-private MIME allowlist: add video/mp4 (DEV ask f) and

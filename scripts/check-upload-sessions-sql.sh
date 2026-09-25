@@ -21,4 +21,7 @@ if run -f supabase/rollback/20260925_issue91_upload_sessions_rollback.sql 2>/dev
 run -c "update public.beatbay_beats set full_audio_path = null;"
 run -f supabase/rollback/20260925_issue91_upload_sessions_rollback.sql
 run -tA -c "select case when to_regclass('public.upload_sessions') is null and not (select allowed_mime_types @> array['video/mp4'] from storage.buckets where id = 'release-private') then 'rollback ok' else 'rollback FAILED' end;" | grep -qx "rollback ok"
+# rollback restored the original email_status check (log-only rows mapped, 'suppressed' now rejected)
+run -tA -c "select count(*) from public.music_activity_log where email_status = 'suppressed';" | grep -qx "0"
+if run -c "insert into public.music_activity_log (action, email_status) values ('x', 'suppressed');" 2>/dev/null; then echo "email_status rollback missing" >&2; exit 1; fi
 echo "Issue #91 SQL checks passed (local throwaway Postgres)."

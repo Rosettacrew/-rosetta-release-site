@@ -245,7 +245,13 @@ Deno.serve(async (req: Request) => {
     if (action === "cleanup_uploads") {
       if (!ownerAccess) return json({ error: "Owner approval required", code: "FORBIDDEN" }, 403);
       const uploads = uploadSessions(supabase, session);
-      return json({ cleanup: await uploads.service.cleanup({ limit: 50, orphanSweep: true }) });
+      // Replaced chunked masters are never auto-deleted: listed (dry run) unless the owner sends confirm: true.
+      return json({ cleanup: await uploads.service.cleanup({
+        limit: 50,
+        orphanSweep: true,
+        replaced: body.confirm === true ? "confirm" : "dry_run",
+        sessionIds: Array.isArray(body.session_ids) ? body.session_ids : null,
+      }) });
     }
 
     if (action === "save_beat") {
@@ -438,7 +444,7 @@ Deno.serve(async (req: Request) => {
         const chunked = await uploadSessions(supabase, session).service.manifestDownload(beat.full_audio_path, PRIVATE_DOWNLOAD_TTL_SECONDS);
         if (!chunked) return json({ error: "Full master upload is not attached" }, 404);
         await activityReport(supabase, session, { action: "download_full_beat", entityType: "beat", entityId: id, summary: `Downloaded full master: ${beat.beat_code} — ${beat.title}` });
-        return json({ download_url: chunked.manifest_url, ...chunked });
+        return json(chunked); // download_url: null so old clients fail clearly; single-object masters use the path below unchanged.
       }
       const { data: signed, error: signedError } = await supabase.storage.from(beat.full_audio_bucket).createSignedUrl(beat.full_audio_path, PRIVATE_DOWNLOAD_TTL_SECONDS, { download: true });
       if (signedError) throw signedError;

@@ -88,6 +88,10 @@ export function createFakeDb({ clock, limits = {}, storage }) {
       Object.assign(b, clone(patch));
       return clone(b);
     },
+    async listAttachedSessions(limit) {
+      return clone([...state.sessions.values()].filter((s) => s.status === "attached" && !s.parts_purged_at).slice(0, limit));
+    },
+    async getBeatAsset(beatId, kind) { return clone(state.assets.get(`${beatId}:${kind}`) ?? null); },
     async upsertBeatAsset(row) { state.assets.set(`${row.beat_id}:${row.kind}`, clone(row)); },
   };
 }
@@ -153,7 +157,7 @@ export function createFakeStorage({ clock, bucket = "release-private", allowedMi
         if (!path.startsWith(base)) continue;
         const rest = path.slice(base.length);
         const name = rest.split("/")[0];
-        if (!names.has(name)) names.set(name, { name, created_at: rest.includes("/") ? null : o.created_at });
+        if (!names.has(name)) names.set(name, rest.includes("/") ? { name, created_at: null, size: null } : { name, created_at: o.created_at, size: o.bytes.byteLength });
       }
       return [...names.values()];
     },

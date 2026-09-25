@@ -97,5 +97,15 @@ begin
   select * into r from public.upload_sessions_expire();
   if r.deleted_count <> 1 or exists (select 1 from public.upload_chunks where session_id = v_sid) then raise exception 'purged row not deleted'; end if;
   if (select count(*) from storage.objects) <> 2 then raise exception 'storage touched'; end if;
+  -- email_status widened for log-only rows; still rejects junk
+  insert into public.music_activity_log (action, email_status) values ('upload_started', 'suppressed');
+  begin
+    insert into public.music_activity_log (action, email_status) values ('x', 'bogus');
+    raise exception 'email_status CHECK missing';
+  exception when check_violation then null; end;
+  -- 'replaced' is a valid status and is pruned after purge like other terminal states
+  update public.upload_sessions set status = 'replaced', parts_purged_at = now() - interval '8 days' where id = v_old;
+  select * into r from public.upload_sessions_expire();
+  if r.deleted_count <> 1 then raise exception 'replaced row not pruned'; end if;
   raise notice 'issue91 local SQL assertions passed';
 end $$;

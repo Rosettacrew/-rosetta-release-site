@@ -94,6 +94,13 @@ export function createSupabaseUploadDb(supabase) {
     async updateBeat(id, patch) {
       return one(supabase.from("beatbay_beats").update(patch).eq("id", id).select("*").single());
     },
+    async listAttachedSessions(limit) {
+      return one(supabase.from("upload_sessions").select("*").eq("status", "attached").is("parts_purged_at", null)
+        .order("attached_at", { ascending: true }).limit(limit));
+    },
+    async getBeatAsset(beatId, kind) {
+      return one(supabase.from("beatbay_beat_assets").select("beat_id,kind,session_id").eq("beat_id", beatId).eq("kind", kind).maybeSingle());
+    },
     async upsertBeatAsset(row) {
       await one(supabase.from("beatbay_beat_assets").upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: "beat_id,kind" }).select("beat_id"));
     },

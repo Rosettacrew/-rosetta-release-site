@@ -30,6 +30,8 @@ export const UPLOAD_ACTIONS = Object.freeze([
   "abort_upload",
 ]);
 export const UPLOAD_KINDS = Object.freeze(["full", "stems", "video", "zip"]);
+/** Audit events that may notify the Owner by email. Everything else is log-only (Henry: one email per upload, on attach). */
+export const NOTIFY_ACTIONS = Object.freeze(["upload_attached"]);
 export const HARD_MAX_CHUNK_BYTES = 50 * 1024 * 1024; // Free global object cap; chunk_bytes must be strictly below.
 export const UPLOAD_PREFIX = "uploads/";
 export const STALE_COMPLETE_LOCK_MS = 120_000;
@@ -420,6 +422,7 @@ export function createUploadService(deps) {
   const now = deps.now ?? (() => Date.now());
   const randomUUID = deps.randomUUID ?? (() => crypto.randomUUID());
   const audit = deps.audit ?? (async () => {});
+  const emit = (event) => audit({ ...event, notify: NOTIFY_ACTIONS.includes(event.action) });
   const log = deps.log ?? (() => {});
   const iso = (ms = now()) => new Date(ms).toISOString();
 
@@ -476,7 +479,7 @@ export function createUploadService(deps) {
     } catch (error) {
       log(`upload parts cleanup deferred for ${s.id}: ${error?.message ?? error}`);
     }
-    await audit({ action: "upload_failed", session: s, details: { code, ...(detail ?? {}), removed } });
+    await emit({ action: "upload_failed", session: s, details: { code, ...(detail ?? {}), removed } });
     return removed;
   }
 
@@ -516,6 +519,8 @@ export function createUploadService(deps) {
       failure_code: s.failure_code ?? null,
       limits: publicLimits(L),
       storage: storageUsage,
+      storage_used_bytes: storageUsage.used_bytes,
+      storage_quota_bytes: storageUsage.max_total_upload_bytes,
     };
   }
 
@@ -529,7 +534,8 @@ export function createUploadService(deps) {
   async function startUpload(body, ctx) {
     const L = await limits();
     if (body.dry_run === true) {
-      return { status: 200, body: { protocol: PROTOCOL_VERSION, dry_run: true, limits: publicLimits(L), storage: await usage(L) } };
+      const u = await usage(L);
+      return { status: 200, body: { protocol: PROTOCOL_VERSION, dry_run: true, limits: publicLimits(L), storage: u, storage_used_bytes: u.used_bytes, storage_quota_bytes: u.max_total_upload_bytes } };
     }
     const kind = String(body.kind ?? "");
     if (!UPLOAD_KINDS.includes(kind) || !L.allowed[kind]) fail(ERR.BAD_REQUEST, 400, "kind must be full, stems, video, or zip.", { field: "kind" });
@@ -658,7 +664,7 @@ export function createUploadService(deps) {
       if (winner) return { status: 200, body: { ...statusPayload(winner, await db.listChunks(winner.id), L, u), resumed: true } };
       fail(ERR.STORAGE_ERROR, 500, "Could not create the upload session.");
     }
-    await audit({ action: "upload_started", session: row, details: { kind, total_bytes: totalBytes, chunk_count: count, encoding } });
+    await emit({ action: "upload_started", session: row, details: { kind, total_bytes: totalBytes, chunk_count: count, encoding } });
     return { status: 201, body: { ...statusPayload(row, chunks, L, { ...u, reserved_bytes: u.reserved_bytes + totalBytes, remaining_bytes: Math.max(0, u.remaining_bytes - totalBytes) }), resumed: false, replaced_session_id: replaced } };
   }
 
@@ -884,7 +890,7 @@ export function createUploadService(deps) {
         status: "verified", manifest_root_sha256: root, manifest_path: mPath, file_sha256: manifest.file_sha256, verified_at: verifiedAt, updated_at: verifiedAt,
       });
       if (!done) fail(ERR.INVALID_STATE, 409, "Session changed during completion.");
-      await audit({ action: "upload_verified", session: s, details: { kind: s.kind, total_bytes: total, chunk_count: ordered.length, manifest_root_sha256: root } });
+      await emit({ action: "upload_verified", session: s, details: { kind: s.kind, total_bytes: total, chunk_count: ordered.length, manifest_root_sha256: root } });
       return { status: 200, body: completeBody(done, false) };
     } catch (error) {
       if (error instanceof UploadError && [ERR.MAGIC_MISMATCH, ERR.ZIP_UNSAFE, ERR.CHUNK_HASH_MISMATCH].includes(error.code)) {
@@ -920,7 +926,7 @@ export function createUploadService(deps) {
     if (!done) return 0;
     const removed = await removeSessionParts(s.id);
     await db.updateSession(s.id, { parts_purged_at: iso() });
-    await audit({ action: "upload_aborted", session: s, details: { reason, removed } });
+    await emit({ action: "upload_aborted", session: s, details: { reason, removed } });
     return removed;
   }
 
@@ -977,7 +983,7 @@ export function createUploadService(deps) {
     try {
       const beat = r.beatChanges ? await db.updateBeat(beatId, r.beatChanges) : await db.getBeat(beatId);
       if (r.assetRow) await db.upsertBeatAsset(r.assetRow);
-      await audit({ action: "upload_attached", session: r.session, details: { kind: r.session.kind, manifest_path: r.session.manifest_path } });
+      await emit({ action: "upload_attached", session: r.session, details: { kind: r.session.kind, manifest_path: r.session.manifest_path } });
       return { status: 200, body: { ...r.body, beat } };
     } catch (error) {
       await r.rollback();
@@ -992,19 +998,77 @@ export function createUploadService(deps) {
     const s = await db.getSession(sessionId);
     if (!s || s.status !== "attached") return null;
     const chunks = (await db.listChunks(sessionId)).sort((a, b) => a.idx - b.idx);
-    const paths = [path, ...chunks.map((c) => partPath(sessionId, c.idx))];
-    const urls = await storage.signDownloads(paths, ttlSeconds);
+    const urls = await storage.signDownloads(chunks.map((c) => partPath(sessionId, c.idx)), ttlSeconds);
     return {
+      // null on purpose: an old client that only reads download_url fails clearly instead of saving manifest.json as audio.
+      download_url: null,
       chunked: true,
-      manifest_url: urls[0] ?? null,
+      message: "Chunked master: download every part in parts[] in idx order, check each sha256, and join them.",
       manifest: {
         session_id: s.id, filename: s.filename, ext: s.ext, mime: s.declared_mime, encoding: s.encoding,
         original_bytes: s.original_bytes ?? null, total_bytes: Number(s.total_bytes), chunk_bytes: Number(s.chunk_bytes),
         chunk_count: Number(s.chunk_count), file_sha256: s.file_sha256 ?? null, manifest_root_sha256: s.manifest_root_sha256,
       },
-      parts: chunks.map((c, i) => ({ idx: c.idx, bytes: Number(c.bytes), sha256: c.sha256, url: urls[i + 1] ?? null })),
+      parts: chunks.map((c, i) => ({ idx: c.idx, bytes: Number(c.bytes), sha256: c.sha256, url: urls[i] ?? null })),
       expires_in: ttlSeconds,
     };
+  }
+
+  // ---- replaced chunked masters (never auto-deleted) ------------------------
+  /** Attached sessions whose manifest is no longer referenced by the beat (full) or beatbay_beat_assets (stems/video/zip). */
+  async function findReplaced(limit) {
+    const out = [];
+    for (const s of await db.listAttachedSessions(limit)) {
+      if (s.status !== "attached" || !isUuid(s.id) || s.storage_prefix !== sessionPrefix(s.id)) continue;
+      if (s.kind === "full") {
+        const beat = await db.getBeat(s.beat_id);
+        if (!beat) continue; // beat gone: leave it for a human, never guess
+        if (beat.full_audio_bucket === bucket && beat.full_audio_path === s.manifest_path) continue;
+      } else {
+        const asset = await db.getBeatAsset(s.beat_id, s.kind);
+        if (asset && asset.session_id === s.id) continue;
+      }
+      out.push(s);
+    }
+    return out;
+  }
+
+  async function describeParts(s) {
+    const prefix = sessionPrefix(s.id);
+    const objects = (await storage.list(prefix.slice(0, -1))).filter((o) => isSafeUploadObject(`${prefix}${o.name}`, s.id));
+    const sized = objects.every((o) => Number.isFinite(Number(o.size)) && o.size !== null);
+    const bytes = sized ? objects.reduce((a, o) => a + Number(o.size), 0) : Number(s.total_bytes);
+    return {
+      session_id: s.id, beat_id: s.beat_id, kind: s.kind, filename: s.filename, attached_at: s.attached_at ?? null,
+      manifest_path: s.manifest_path, object_count: objects.length, bytes, paths: objects.map((o) => `${prefix}${o.name}`),
+    };
+  }
+
+  /**
+   * mode "dry_run": list only. mode "confirm": delete (Owner passed confirm: true), optionally limited to sessionIds.
+   * Each session is re-checked as unreferenced immediately before deletion.
+   */
+  async function replacedMasters({ mode = "dry_run", sessionIds = null, limit = 200 } = {}) {
+    const wanted = Array.isArray(sessionIds) && sessionIds.length ? new Set(sessionIds.map(String)) : null;
+    const candidates = (await findReplaced(limit)).filter((s) => !wanted || wanted.has(s.id));
+    const replaced_parts = [];
+    for (const s of candidates) replaced_parts.push(await describeParts(s));
+    const bytes_reclaimable = replaced_parts.reduce((a, r) => a + r.bytes, 0);
+    if (mode !== "confirm") return { dry_run: true, replaced_parts, bytes_reclaimable };
+    let removed_objects = 0;
+    let bytes_reclaimed = 0;
+    const deleted = [];
+    for (const r of replaced_parts) {
+      const still = (await findReplaced(limit)).some((s) => s.id === r.session_id);
+      if (!still) continue;
+      const moved = await db.casSession(r.session_id, ["attached"], { status: "replaced", updated_at: iso() });
+      if (!moved) continue;
+      removed_objects += await removeSessionParts(r.session_id);
+      await db.updateSession(r.session_id, { parts_purged_at: iso() });
+      bytes_reclaimed += r.bytes;
+      deleted.push(r.session_id);
+    }
+    return { dry_run: false, replaced_parts, bytes_reclaimable: bytes_reclaimable - bytes_reclaimed, bytes_reclaimed, removed_objects, deleted_session_ids: deleted };
   }
 
   // ---- cleanup (hourly via owner action / opportunistic in start_upload) ---
@@ -1012,7 +1076,10 @@ export function createUploadService(deps) {
    * Deletes parts via the Storage API (SQL cannot delete storage objects on Supabase).
    * Only ever touches `uploads/<uuid>/...`; never beatbay/<id>/full or release files; never attached sessions.
    */
-  async function cleanup({ limit = 20, orphanSweep = true } = {}) {
+  /**
+   * @param {{ limit?: number, orphanSweep?: boolean, replaced?: "dry_run" | "confirm" | null, sessionIds?: string[] | null }} [opts]
+   */
+  async function cleanup({ limit = 20, orphanSweep = true, replaced = null, sessionIds = null } = {}) {
     const report = { expired: 0, purged_sessions: 0, removed_objects: 0, orphan_folders: 0, skipped: [] };
     const candidates = await db.listCleanupCandidates(iso(), limit);
     for (const s of candidates) {
@@ -1042,6 +1109,7 @@ export function createUploadService(deps) {
         report.orphan_folders += 1;
       }
     }
+    if (replaced === "dry_run" || replaced === "confirm") report.replaced = await replacedMasters({ mode: replaced, sessionIds });
     return report;
   }
 
@@ -1076,6 +1144,14 @@ export function createUploadService(deps) {
   }
 
   return { handle, handleAttach, attachSession, cleanup, manifestDownload, limits };
+}
+
+/**
+ * Routes audit events: notify=true (attach only) -> email-capable reporter; everything else -> log-only insert.
+ * studio-manager uses this so Henry triggers at most one Owner email per upload.
+ */
+export function uploadAuditRouter({ notify, logOnly }) {
+  return async (event) => (event.notify ? notify(event) : logOnly(event));
 }
 
 export function errorResult(error) {

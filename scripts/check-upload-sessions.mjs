@@ -25,6 +25,7 @@ import {
   isSessionManifestPath,
   manifestRoot,
   studioAuthorizer,
+  uploadAuditRouter,
 } from "../supabase/functions/_shared/upload-sessions.mjs";
 import { createClock, createFakeDb, createFakeStorage } from "./lib/upload-fakes.mjs";
 
@@ -128,7 +129,7 @@ function patchZipName(path, from, to) {
 // ---------------------------------------------------------------------------
 // Environment + client simulator
 // ---------------------------------------------------------------------------
-function makeEnv({ limits = {}, assigned = [BEAT] } = {}) {
+function makeEnv({ limits = {}, assigned = [BEAT], studioAudit = null } = {}) {
   const clock = createClock();
   const storage = createFakeStorage({ clock });
   const db = createFakeDb({ clock, limits, storage });
@@ -139,7 +140,7 @@ function makeEnv({ limits = {}, assigned = [BEAT] } = {}) {
   const audits = [];
   const deps = { db, storage, bucket: "release-private", now: clock.now, audit: async (e) => { audits.push(e); } };
   const beatbay = createUploadService({ ...deps, origin: "beatbay_manager" });
-  const studio = createUploadService({ ...deps, origin: "studio_manager" });
+  const studio = createUploadService({ ...deps, origin: "studio_manager", ...(studioAudit ? { audit: studioAudit } : {}) });
   const getBeat = (id) => db.getBeat(id);
   const assignedSet = new Set(assigned);
   const ctx = {
@@ -816,6 +817,159 @@ test("same head + size but different file (upfront hashes differ) replaces the s
   assert.equal(sb.r.body.replaced_session_id, sa.r.body.session_id);
   assert.equal((await env.db.getSession(sa.r.body.session_id)).status, "aborted");
   assert.deepEqual(objectsUnder(env, sa.r.body.session_id), []);
+});
+
+test("DEV ask: storage_used_bytes + storage_quota_bytes on start_upload, upload_status and dry_run", async () => {
+  const env = makeEnv({ limits: SMALL });
+  env.storage.setOtherBucketBytes("release-public", 3 * MiB);
+  const dry = await env.beatbay.handle("start_upload", { dry_run: true }, env.ctx.owner);
+  assert.equal(dry.body.storage_used_bytes, 3 * MiB);
+  assert.equal(dry.body.storage_quota_bytes, 960 * MiB, "quota = config max_total_upload_bytes (960 MiB default, under the 1 GiB cap)");
+  const path = makeWav("quota.wav", 300 * KiB);
+  const s = await start(env, env.beatbay, env.ctx.owner, { path });
+  assert.equal(s.r.body.storage_used_bytes, 3 * MiB);
+  assert.equal(s.r.body.storage_quota_bytes, 960 * MiB);
+  await sendChunks(env, env.beatbay, env.ctx.owner, { path, session_id: s.r.body.session_id, cb: s.cb, only: [0] });
+  const st = await env.beatbay.handle("upload_status", { session_id: s.r.body.session_id }, env.ctx.owner);
+  assert.equal(st.body.storage_used_bytes, 3 * MiB + 256 * KiB, "used counts stored parts");
+  assert.equal(st.body.storage_quota_bytes, 960 * MiB);
+  env.db.state.limits.max_total_upload_bytes = 4 * MiB;
+  const r = await env.beatbay.handle("start_upload", { dry_run: true }, env.ctx.owner);
+  assert.equal(r.body.storage_quota_bytes, 4 * MiB, "quota follows config");
+  const over = await start(env, env.beatbay, env.ctx.owner, { path: makeWav("quota2.wav", 900 * KiB), beat_id: BEAT2 });
+  assert.equal(over.r.body.code, ERR.STORAGE_BUDGET_EXCEEDED, "code kept; client maps it to its LIMIT_EXCEEDED handling");
+});
+
+test("Henry emails: at most ONE owner email per upload (attach only); start/verify/fail logged without email", async () => {
+  const emails = [];
+  const logs = [];
+  const studioAudit = uploadAuditRouter({ notify: async (e) => { emails.push(e.action); }, logOnly: async (e) => { logs.push(e.action); } });
+  const env = makeEnv({ limits: SMALL, studioAudit });
+  const path = makeWav("henry-mail.wav", 700 * KiB);
+  let flipped = false;
+  const up = await fullUpload(env, env.studio, env.ctx.henry, {
+    path, mode: "deferred",
+    corrupt: (idx, b) => { if (idx !== 1 || flipped) return b; flipped = true; const c = new Uint8Array(b); c[0] ^= 1; return c; },
+  });
+  assert.equal(up.complete.body.code, ERR.INCOMPLETE, "chunk 1 went bad on the first pass");
+  await sendChunks(env, env.studio, env.ctx.henry, { path, session_id: up.sessionId, cb: up.cb, mode: "deferred", hashes: up.h.list });
+  assert.equal((await env.studio.handle("complete_upload", { session_id: up.sessionId }, env.ctx.henry)).status, 200);
+  assert.deepEqual(emails, [], "no email before attach");
+  assert.deepEqual(logs, ["upload_started", "upload_verified"]);
+  await env.studio.handleAttach({ beat_id: BEAT, kind: "full", session_id: up.sessionId }, env.ctx.henry);
+  await env.studio.handleAttach({ beat_id: BEAT, kind: "full", session_id: up.sessionId }, env.ctx.henry); // repeat: no 2nd email
+  assert.deepEqual(emails, ["upload_attached"]);
+  // A failed upload never emails.
+  const bad = makeMp3("henry-bad.wav", 200 * KiB);
+  const f = await fullUpload(env, env.studio, env.ctx.henry, { path: bad, beat_id: BEAT, mode: "deferred" });
+  assert.equal(f.complete.body.code, ERR.MAGIC_MISMATCH);
+  const ab = await start(env, env.studio, env.ctx.henry, { path: makeWav("henry-abort.wav", 100 * KiB), mode: "deferred" });
+  await env.studio.handle("abort_upload", { session_id: ab.r.body.session_id }, env.ctx.henry);
+  assert.deepEqual(emails, ["upload_attached"]);
+  assert.ok(logs.includes("upload_failed") && logs.includes("upload_aborted"));
+  // studio-manager wires the router: attach -> activityReport (email), everything else -> log-only insert.
+  const studio = readFileSync("supabase/functions/studio-manager/index.ts", "utf8");
+  assert.match(studio, /audit: uploadAuditRouter\(\{\s*notify: \(event: any\) => activityReport\(/);
+  assert.match(studio, /logOnly: \(event: any\) => activityLogOnly\(/);
+  const logOnlyFn = studio.slice(studio.indexOf("async function activityLogOnly"), studio.indexOf("function studioUploadActivity"));
+  assert.match(logOnlyFn, /email_status: "suppressed"/);
+  assert.doesNotMatch(logOnlyFn, /resend|fetch\(/i);
+  assert.match(readFileSync("supabase/migrations/20260925_issue91_upload_sessions.sql", "utf8"), /'failed', 'suppressed'/);
+});
+
+test("download_full_beat compatibility: chunked master returns download_url null + parts; single-object path untouched", async () => {
+  const env = makeEnv({ limits: SMALL });
+  const path = makeWav("dl.wav", 600 * KiB);
+  const up = await fullUpload(env, env.beatbay, env.ctx.owner, { path });
+  await env.beatbay.handleAttach({ intake: "beatbox", id: BEAT, kind: "full", session_id: up.sessionId }, env.ctx.owner);
+  const beat = await env.db.getBeat(BEAT);
+  const dl = await env.beatbay.manifestDownload(beat.full_audio_path, 300);
+  assert.equal(dl.download_url, null, "old clients get no URL instead of manifest.json-as-audio");
+  assert.ok(!("manifest_url" in dl));
+  assert.equal(dl.chunked, true);
+  assert.equal(dl.manifest.total_bytes, readFileSync(path).length);
+  assert.equal(dl.manifest.manifest_root_sha256, up.complete.body.manifest_root_sha256);
+  assert.deepEqual(dl.parts.map((p) => p.idx), [0, 1, 2]);
+  assert.ok(dl.parts.every((p) => p.url && !p.url.includes("manifest.json") && p.sha256 === up.h.list[p.idx]));
+  assert.equal(dl.expires_in, 300);
+  assert.equal(await env.beatbay.manifestDownload("beatbay/x/full/master.wav", 300), null, "single-object masters are not handled here");
+  // The Edge function: chunked branch returns the body as is; the single-object lines are the original ones.
+  const src = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
+  const action = src.slice(src.indexOf('if (action === "download_full_beat")'), src.indexOf('if (action === "save_auction")'));
+  assert.match(action, /isSessionManifestPath\(beat\.full_audio_path\)[\s\S]*?return json\(chunked\);/);
+  assert.doesNotMatch(action, /download_url: chunked/);
+  assert.match(action, /createSignedUrl\(beat\.full_audio_path, PRIVATE_DOWNLOAD_TTL_SECONDS, \{ download: true \}\)[\s\S]*?return json\(\{ download_url: signed\.signedUrl, expires_in: PRIVATE_DOWNLOAD_TTL_SECONDS \}\);/);
+});
+
+test("replaced chunked masters: never auto-deleted; owner dry-run lists replaced_parts + bytes_reclaimable; delete only with confirm", async () => {
+  const env = makeEnv({ limits: SMALL });
+  const a = makeWav("masterA.wav", 600 * KiB);
+  const upA = await fullUpload(env, env.beatbay, env.ctx.owner, { path: a });
+  await env.beatbay.handleAttach({ intake: "beatbox", id: BEAT, kind: "full", session_id: upA.sessionId }, env.ctx.owner);
+  const b = makeWav("masterB.wav", 400 * KiB);
+  const upB = await fullUpload(env, env.beatbay, env.ctx.owner, { path: b });
+  await env.beatbay.handleAttach({ intake: "beatbox", id: BEAT, kind: "full", session_id: upB.sessionId }, env.ctx.owner);
+  // stems replaced too
+  const z1 = makeZip("st1.zip", [{ name: "a.wav", bytes: Buffer.concat([wavHeader(5000), randomBytes(5000)]) }]);
+  const z2 = makeZip("st2.zip", [{ name: "b.wav", bytes: Buffer.concat([wavHeader(6000), randomBytes(6000)]) }]);
+  const s1 = await fullUpload(env, env.beatbay, env.ctx.owner, { path: z1, kind: "stems" });
+  await env.beatbay.handleAttach({ id: BEAT, kind: "stems", session_id: s1.sessionId }, env.ctx.owner);
+  const s2 = await fullUpload(env, env.beatbay, env.ctx.owner, { path: z2, kind: "stems" });
+  await env.beatbay.handleAttach({ id: BEAT, kind: "stems", session_id: s2.sessionId }, env.ctx.owner);
+  const aObjects = objectsUnder(env, upA.sessionId).length;
+  assert.equal(aObjects, 3 + 1);
+  // Routine / automatic cleanup never touches them, even long after expiry.
+  env.clock.advance(30 * 24 * 3600 * 1000);
+  await env.beatbay.cleanup();
+  await start(env, env.beatbay, env.ctx.owner, { path: makeWav("trigger.wav", 10 * KiB), beat_id: BEAT2 }); // opportunistic pass
+  assert.equal(objectsUnder(env, upA.sessionId).length, aObjects);
+  // Owner dry run (the action's default): listed, nothing deleted.
+  const dry = await env.beatbay.cleanup({ replaced: "dry_run" });
+  assert.equal(dry.replaced.dry_run, true);
+  assert.deepEqual(dry.replaced.replaced_parts.map((r) => r.session_id).sort(), [upA.sessionId, s1.sessionId].sort());
+  const ra = dry.replaced.replaced_parts.find((r) => r.session_id === upA.sessionId);
+  const manifestBytes = env.storage.objects.get(`uploads/${upA.sessionId}/manifest.json`).bytes.byteLength;
+  assert.equal(ra.bytes, readFileSync(a).length + manifestBytes);
+  assert.equal(ra.object_count, 4);
+  assert.ok(ra.paths.every((p) => p.startsWith(`uploads/${upA.sessionId}/`)));
+  const expected = dry.replaced.replaced_parts.reduce((sum, r) => sum + r.bytes, 0);
+  assert.equal(dry.replaced.bytes_reclaimable, expected);
+  assert.equal(objectsUnder(env, upA.sessionId).length, aObjects, "dry run deletes nothing");
+  // confirm limited to one session
+  const one = await env.beatbay.cleanup({ replaced: "confirm", sessionIds: [s1.sessionId] });
+  assert.deepEqual(one.replaced.deleted_session_ids, [s1.sessionId]);
+  assert.deepEqual(objectsUnder(env, s1.sessionId), []);
+  assert.equal(objectsUnder(env, upA.sessionId).length, aObjects);
+  // confirm all
+  const all = await env.beatbay.cleanup({ replaced: "confirm" });
+  assert.deepEqual(all.replaced.deleted_session_ids, [upA.sessionId]);
+  assert.equal(all.replaced.bytes_reclaimed, ra.bytes);
+  assert.equal(all.replaced.bytes_reclaimable, 0);
+  assert.deepEqual(objectsUnder(env, upA.sessionId), []);
+  assert.equal((await env.db.getSession(upA.sessionId)).status, "replaced");
+  // Current masters (B, stems s2) are never listed or touched.
+  assert.equal(objectsUnder(env, upB.sessionId).length, 2 + 1);
+  assert.ok(objectsUnder(env, s2.sessionId).length > 0);
+  assert.equal((await env.db.getSession(upB.sessionId)).status, "attached");
+  assert.equal((await env.beatbay.cleanup({ replaced: "dry_run" })).replaced.replaced_parts.length, 0);
+  // Re-pointing between dry run and confirm is respected (re-checked before delete).
+  const c = makeWav("masterC.wav", 300 * KiB);
+  const upC = await fullUpload(env, env.beatbay, env.ctx.owner, { path: c, beat_id: BEAT2 });
+  await env.beatbay.handleAttach({ intake: "beatbox", id: BEAT2, kind: "full", session_id: upC.sessionId }, env.ctx.owner);
+  const d = makeWav("masterD.wav", 300 * KiB);
+  const upD = await fullUpload(env, env.beatbay, env.ctx.owner, { path: d, beat_id: BEAT2 });
+  await env.beatbay.handleAttach({ intake: "beatbox", id: BEAT2, kind: "full", session_id: upD.sessionId }, env.ctx.owner);
+  const listed = await env.beatbay.cleanup({ replaced: "dry_run" });
+  assert.deepEqual(listed.replaced.replaced_parts.map((r) => r.session_id), [upC.sessionId]);
+  env.db.state.beats.get(BEAT2).full_audio_path = `uploads/${upC.sessionId}/manifest.json`; // owner rolled back to C
+  const conf = await env.beatbay.cleanup({ replaced: "confirm", sessionIds: [upC.sessionId] });
+  assert.deepEqual(conf.replaced.deleted_session_ids, []);
+  assert.ok(objectsUnder(env, upC.sessionId).length > 0);
+  // Owner-only + confirm wiring in the Edge function.
+  const src = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
+  const cleanupAction = src.slice(src.indexOf('if (action === "cleanup_uploads")'), src.indexOf('if (action === "save_beat")'));
+  assert.match(cleanupAction, /if \(!ownerAccess\) return json\(\{ error: "Owner approval required", code: "FORBIDDEN" \}, 403\);/);
+  assert.match(cleanupAction, /replaced: body\.confirm === true \? "confirm" : "dry_run"/);
 });
 
 test("small-file path regression: create_upload/attach_asset untouched (diff is additions only) and routing", async () => {

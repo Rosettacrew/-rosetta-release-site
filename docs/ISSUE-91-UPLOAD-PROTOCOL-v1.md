@@ -41,7 +41,7 @@ Small files are unchanged. If `size <= limits.single_object_threshold` (45 MiB b
 | `INVALID_STATE` | 409 | Wrong state for the action (for example ticket on a failed or aborted session, attach before verify, abort after attach). Includes `session_status`. | Call `upload_status` and reconcile |
 | `EXT_NOT_ALLOWED` | 400 | Extension not allowed for the kind, or gzip used on a non-compressible type. Includes `kind`, `ext`, `allowed`. | Fail closed |
 | `LIMIT_EXCEEDED` | 400 / 409 / 413 / 429 | Includes `limit`: one of `max_file_bytes` (413), `chunk_bytes` (400), `ticket_batch_max` (400), `max_attempts` (409), `max_open_sessions_per_user` (429), `compress_max_bytes` (413). Also includes `max`. | Fail closed. For 429, finish or cancel another upload |
-| `STORAGE_BUDGET_EXCEEDED` | 507 | `used + reserved + total_bytes > max_total_upload_bytes` (Free: 1 GB per project). Includes `storage`, `total_bytes`. | Fail closed. Tell the operator that storage is full |
+| `STORAGE_BUDGET_EXCEEDED` | 507 | `used + reserved + total_bytes > max_total_upload_bytes` (Free: 1 GB per project). Includes `storage`, `total_bytes`. | **Treat as a limit error.** DEV proposed `LIMIT_EXCEEDED` for this case; the server keeps the distinct code, so map `STORAGE_BUDGET_EXCEEDED → LIMIT_EXCEEDED` handling (fail closed, no retry) and show "Project storage is full" |
 | `CHUNK_OUT_OF_RANGE` | 400 | idx not in `0..chunk_count-1` | Bug |
 | `CHUNK_MISSING` | 409 | `chunk_done` before the object exists. Does not count as an attempt. | Re-PUT (new ticket if expired), then `chunk_done` |
 | `CHUNK_SIZE_MISMATCH` | 422 | Stored part length is not the expected length. Part deleted, attempts+1. Includes `expected_bytes`, `received_bytes`, `attempts`, `max_attempts`, `retryable`, `session_status`. | If `retryable`: re-read the slice, new ticket, retry **that idx only**. Else fail closed |
@@ -130,18 +130,25 @@ Response `201` (new) or `200` (resumed). This is also the `upload_status` shape:
     "max_total_upload_bytes": 1006632960, "remaining_bytes": 673460756,
     "scope": "project"
   },
+  "storage_used_bytes": 123456789,
+  "storage_quota_bytes": 1006632960,
   "resumed": false,
   "replaced_session_id": null
 }
 ```
-- `status` is one of: `open` | `complete` (server-side completion lock, transient) | `verified` | `failed` | `expired` | `aborted` | `attached`.
+- `status` is one of: `open` | `complete` (server-side completion lock, transient) | `verified` | `failed` | `expired` | `aborted` | `attached` | `replaced` (a superseded master whose parts the owner deleted).
 - `missing` lists idx that are not verified and not bad (pending or ticketed). `bad` lists idx whose last attempt failed. `attempts` maps idx to failed attempts (non-zero only).
 
 **Limits without a session (DEV ask b, P11):**
 ```json
 { "action": "start_upload", "dry_run": true }
 ```
-Response: `{ "protocol": 1, "dry_run": true, "limits": { ... }, "storage": { ... } }`. No beat or session is needed. Nothing is created.
+Response: `{ "protocol": 1, "dry_run": true, "limits": { ... }, "storage": { ... }, "storage_used_bytes": 123456789, "storage_quota_bytes": 1006632960 }`. No beat or session is needed. Nothing is created.
+
+**Storage fields (DEV ask), on `start_upload`, `upload_status` and `dry_run`:**
+- `storage_used_bytes`: bytes currently stored in Storage. Same value as `storage.used_bytes`. All buckets by default, because the Free cap is per project.
+- `storage_quota_bytes`: config `upload_limits.max_total_upload_bytes`, default **960 MiB** (1006632960), a safety margin under the 1 GiB hard cap. Same value as `storage.max_total_upload_bytes`.
+- `storage.reserved_bytes` (bytes still owed by live sessions) also counts toward the budget. Show `storage.remaining_bytes` for the bytes you can still start.
 
 `storage` (P11 / Free 1 GB budget): `used_bytes` is the sum of `storage.objects` sizes across **all buckets** (the Free cap is project-wide; config `budget_bucket_ids` can scope it). `reserved_bytes` is the bytes still expected by live sessions. start_upload refuses with `STORAGE_BUDGET_EXCEEDED` when `used + reserved + total_bytes > max_total_upload_bytes`.
 
@@ -278,12 +285,12 @@ Returns 200 `{ "session_id": "uuid", "status": "aborted", "removed": 2 }`, or `a
 
 ## 9. Owner master download of a chunked master (additive)
 
-`download_full_beat` is unchanged for normal paths. When `full_audio_path` is `uploads/<id>/manifest.json`:
+`download_full_beat` is byte-identical for single-object masters: `{ "download_url": "<signed>", "expires_in": 300 }`. When `full_audio_path` is `uploads/<id>/manifest.json`:
 ```json
 {
-  "download_url": "<signed manifest url>",
+  "download_url": null,
   "chunked": true,
-  "manifest_url": "<signed manifest url>",
+  "message": "Chunked master: download every part in parts[] in idx order, check each sha256, and join them.",
   "manifest": { "session_id": "uuid", "filename": "master.wav", "ext": "wav", "mime": "audio/wav", "encoding": "identity",
                 "original_bytes": null, "total_bytes": 209715244, "chunk_bytes": 16777216, "chunk_count": 13,
                 "file_sha256": "hex64", "manifest_root_sha256": "hex64" },
@@ -291,13 +298,34 @@ Returns 200 `{ "session_id": "uuid", "status": "aborted", "removed": 2 }`, or `a
   "expires_in": 300
 }
 ```
-The client joins the parts in idx order and checks each part's SHA-256. If `encoding` is `gzip`, it gunzips the joined stream and then checks `original_sha256` if present. Old clients that only read `download_url` get the manifest JSON, not audio, so they need the new client.
+`download_url` is **null on purpose**. An old client that only reads `download_url` fails clearly instead of saving manifest.json as audio. There is no manifest URL; everything needed is inline. The new client joins the parts in idx order and checks each part's SHA-256. If `encoding` is `gzip`, it gunzips the joined stream and then checks `original_sha256` if present. Branch on `chunked === true`.
 
 ## 10. Owner maintenance
 
-`POST beatbay-manager {"action":"cleanup_uploads"}` (owner/admin only) returns
-`{ "cleanup": { "expired": n, "purged_sessions": n, "removed_objects": n, "orphan_folders": n, "skipped": [] } }`.
-It only ever deletes under `release-private/uploads/<uuid>/`. It never touches attached sessions, `beatbay/<id>/…`, or release files. `start_upload` also runs a bounded pass (5 sessions) before the budget check.
+`POST beatbay-manager {"action":"cleanup_uploads"}` (owner/admin only; others get 403 `FORBIDDEN`).
+
+- **Routine part (always runs, same as the automatic pass):** purges expired, failed or aborted sessions' parts and orphan folders older than 1 h. It only ever deletes under `release-private/uploads/<uuid>/`. It never touches attached sessions, `beatbay/<id>/…`, or release files. `start_upload` also runs a bounded routine pass (5 sessions) before the budget check.
+- **Replaced chunked masters are never auto-deleted.** A replaced master is an attached session whose manifest is no longer the beat's `full_audio_path` (or no longer the `beatbay_beat_assets` row for stems/video/zip). By default the call only **lists** them (dry run):
+
+```json
+{ "cleanup": {
+  "expired": 0, "purged_sessions": 0, "removed_objects": 0, "orphan_folders": 0, "skipped": [],
+  "replaced": {
+    "dry_run": true,
+    "replaced_parts": [
+      { "session_id": "uuid", "beat_id": "uuid", "kind": "full", "filename": "old-master.wav", "attached_at": "ISO",
+        "manifest_path": "uploads/<id>/manifest.json", "object_count": 4, "bytes": 614933,
+        "paths": ["uploads/<id>/0.part", "uploads/<id>/1.part", "uploads/<id>/2.part", "uploads/<id>/manifest.json"] }
+    ],
+    "bytes_reclaimable": 614933
+  } } }
+```
+
+- Delete them only with `{"action":"cleanup_uploads","confirm":true}`, optionally with `"session_ids":["uuid", ...]` to limit it. Each session is re-checked as unreferenced right before deletion. If the owner re-pointed a beat to it meanwhile, it is kept. Deleted sessions get status `replaced`. The response has `"dry_run": false`, `deleted_session_ids`, `removed_objects`, `bytes_reclaimed`, and the remaining `bytes_reclaimable`.
+
+## 10a. Activity log and email (Henry / studio-manager)
+
+At most **one** Owner email per upload, sent on attach (`upload_attached`). `upload_started`, `upload_verified`, `upload_failed` and `upload_aborted` are written to `music_activity_log` with `email_status = "suppressed"` and send no email. beatbay-manager is unchanged: owner, admin and staff never trigger emails.
 
 ## 11. Suggested client flow
 

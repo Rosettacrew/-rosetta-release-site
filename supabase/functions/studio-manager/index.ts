@@ -5,6 +5,7 @@ import {
   createUploadService,
   isSessionAttach,
   studioAuthorizer,
+  uploadAuditRouter,
 } from "../_shared/upload-sessions.mjs";
 import { createSupabaseUploadDb, createSupabaseUploadStorage } from "../_shared/upload-sessions-supabase.mjs";
 
@@ -316,9 +317,42 @@ function publicLibraryItem(release: any) {
   };
 }
 
+// Issue #91: log-only activity row (no Owner email). Used for upload start/verify/fail/abort so
+// Henry triggers at most ONE Owner email per upload (on attach, via activityReport).
+async function activityLogOnly(
+  supabase: ReturnType<typeof adminClient>,
+  session: { user: { id: string; email?: string | null }; admin: { role: string } },
+  input: { surface: "release_station" | "beatbay"; action: string; entityType: string; entityId?: string | null; summary: string; details?: Record<string, unknown> },
+) {
+  const { error } = await supabase.from("music_activity_log").insert({
+    actor_user_id: session.user.id,
+    actor_email: session.user.email ?? null,
+    actor_role: session.admin.role,
+    surface: input.surface,
+    action: input.action,
+    entity_type: input.entityType,
+    entity_id: input.entityId ?? null,
+    summary: input.summary,
+    details: input.details ?? {},
+    email_status: "suppressed",
+  });
+  if (error) console.error("Studio activity log failed", error.message);
+}
+
 // Issue #91 (P10): same shared upload-session module as beatbay-manager.
 // Henry (music_uploader) may only target beats explicitly assigned to him that are
 // still draft and off the storefront. No owner tier here, no publish, no cleanup action.
+function studioUploadActivity(event: any) {
+  return {
+    surface: "beatbay" as const,
+    action: event.action,
+    entityType: "beat",
+    entityId: event.session?.beat_id ?? null,
+    summary: `Studio partner large ${event.session?.kind ?? ""} upload (${String(event.action).replace("upload_", "")}): ${event.session?.filename ?? ""}`,
+    details: { session_id: event.session?.id ?? null, ...(event.details ?? {}) },
+  };
+}
+
 function studioUploadSessions(
   supabase: ReturnType<typeof adminClient>,
   session: { user: { id: string; email?: string | null }; admin: { role: string } },
@@ -331,13 +365,9 @@ function studioUploadSessions(
       bucket: "release-private",
       origin: "studio_manager",
       log: (message: string) => console.error(String(message).slice(0, 300)),
-      audit: (event: any) => activityReport(supabase, session, {
-        surface: "beatbay",
-        action: event.action,
-        entityType: "beat",
-        entityId: event.session?.beat_id ?? null,
-        summary: `Studio partner large ${event.session?.kind ?? ""} upload (${String(event.action).replace("upload_", "")}): ${event.session?.filename ?? ""}`,
-        details: { session_id: event.session?.id ?? null, ...(event.details ?? {}) },
+      audit: uploadAuditRouter({
+        notify: (event: any) => activityReport(supabase, session, studioUploadActivity(event)),
+        logOnly: (event: any) => activityLogOnly(supabase, session, studioUploadActivity(event)),
       }),
     }),
     ctx: {

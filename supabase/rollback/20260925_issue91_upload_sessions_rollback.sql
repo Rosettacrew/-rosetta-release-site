@@ -36,6 +36,18 @@ drop table if exists public.upload_chunks;
 drop table if exists public.upload_sessions;
 drop table if exists public.upload_limits;
 
+-- Restore the original music_activity_log.email_status check (map log-only rows first).
+do $$
+begin
+  if to_regclass('public.music_activity_log') is not null then
+    update public.music_activity_log set email_status = 'not_configured' where email_status = 'suppressed';
+    alter table public.music_activity_log drop constraint if exists music_activity_log_email_status_check;
+    alter table public.music_activity_log add constraint music_activity_log_email_status_check
+      check (email_status in ('pending', 'sent', 'not_configured', 'failed'));
+  end if;
+end;
+$$;
+
 -- Remove only the two MIME types this migration added.
 update storage.buckets
    set allowed_mime_types = array(
