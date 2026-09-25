@@ -20,3 +20,5 @@ jobs:
           node-version: 22
       - name: Check embedded scripts and preview safeguards
         run: node scripts/check-static-html.mjs
+      - name: Check upload sessions
+        run: node scripts/check-upload-sessions.mjs
