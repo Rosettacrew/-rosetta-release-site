@@ -20,3 +20,5 @@ jobs:
           node-version: 22
       - name: Check embedded scripts and preview safeguards
         run: node scripts/check-static-html.mjs
+      - name: Check vendored script integrity
+        run: node scripts/check-script-integrity.mjs
