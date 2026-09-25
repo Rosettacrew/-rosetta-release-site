@@ -24,13 +24,16 @@ export function formatStorageBytes(size) {
 
 export function storageUsageLine(storage) {
   if (!storage || storage.usedBytes == null || storage.quotaBytes == null) return "";
-  return `Storage: ${formatStorageBytes(storage.usedBytes)} of ${formatStorageBytes(storage.quotaBytes)} used`;
+  const used = `Storage: ${formatStorageBytes(storage.usedBytes)} of ${formatStorageBytes(storage.quotaBytes)} used`;
+  if (storage.remainingBytes == null) return used;
+  return `${used} · ${formatStorageBytes(storage.remainingBytes)} left`;
 }
 
 export function storageOutlook(storage, incomingBytes = 0) {
   if (!storage || storage.usedBytes == null || storage.quotaBytes == null) return { level: "unknown" };
   const incoming = Number(incomingBytes) || 0;
-  const projected = storage.usedBytes + incoming;
+  const reserved = Number(storage.reservedBytes) || 0;
+  const projected = storage.usedBytes + reserved + incoming;
   if (!(storage.quotaBytes > 0) || projected > storage.quotaBytes) return { level: "block", projected };
   if (projected / storage.quotaBytes > STORAGE_WARN_RATIO) return { level: "warn", projected };
   return { level: "ok", projected };

@@ -592,9 +592,11 @@ class UploadController {
   }
 
   async ticketFor(item, refreshed = false) {
+    if (this.verified.has(item.idx)) return null;
     const cached = this.tickets.get(item.idx);
     if (cached && this.remaining(item.idx) >= TICKET_REFRESH_SECONDS) return cached;
     await this.enqueueTicket(item);
+    if (this.verified.has(item.idx)) return null;
     const ticket = this.tickets.get(item.idx);
     if (!ticket) throw fail("REQUEST_FAILED", "Upload ticket was missing a signed URL.");
     if (!refreshed && this.remaining(item.idx) < TICKET_REFRESH_SECONDS) {
@@ -619,8 +621,13 @@ class UploadController {
             seen.add(item.idx);
             unique.push(item);
           }
-          const tickets = await this.protocol.tickets(this.sessionId, unique);
+          const issuedBatch = await this.protocol.tickets(this.sessionId, unique);
+          const tickets = Array.isArray(issuedBatch) ? issuedBatch : (issuedBatch.tickets || []);
+          const skipped = Array.isArray(issuedBatch) ? [] : (issuedBatch.skipped || []);
           const issued = this.now();
+          for (const skip of skipped) {
+            if (skip.reason === "verified") this.verified.add(Number(skip.idx));
+          }
           for (const ticket of tickets) {
             this.tickets.set(ticket.idx, ticket);
             this.ticketIssuedAt.set(ticket.idx, issued);
@@ -634,13 +641,19 @@ class UploadController {
 
   async putWithRetry(item) {
     let attempt = 0;
+    let missingRetries = 0;
     let current = item;
     while (attempt < this.maxAttempts) {
       await this.waitWhilePaused();
       if (this.stopped) return;
+      if (this.verified.has(current.idx)) return;
       attempt += 1;
       try {
         const ticket = await this.ticketFor(current);
+        if (!ticket) {
+          if (this.verified.has(current.idx)) return;
+          throw fail("REQUEST_FAILED", "Upload ticket was missing a signed URL.");
+        }
         this.inFlight += 1;
         this.peakInFlight = Math.max(this.peakInFlight, this.inFlight);
         let put;
@@ -650,7 +663,7 @@ class UploadController {
           this.inFlight -= 1;
         }
         if (!put.ok && (put.status === 409 || put.status === 400) && /already exists/i.test(put.text || "")) {
-          const done = await this.protocol.chunkDone(this.sessionId, current.idx);
+          const done = await this.protocol.chunkDone(this.sessionId, current.idx, current.sha256);
           if (!done.ok) this.raiseProtocol(done);
           this.markVerified(current);
           return;
@@ -659,9 +672,26 @@ class UploadController {
           throw fail("RETRY", "The upload was interrupted.");
         }
         if (!put.ok) throw fail("PUT_FAILED", "Upload failed.");
-        const done = await this.protocol.chunkDone(this.sessionId, current.idx);
+        const done = await this.protocol.chunkDone(this.sessionId, current.idx, current.sha256);
         if (!done.ok) {
+          if (done.code === "CHUNK_MISSING") {
+            missingRetries += 1;
+            if (missingRetries > this.maxAttempts) throw fail(done.code, done.message);
+            this.tickets.delete(current.idx);
+            attempt -= 1;
+            continue;
+          }
+          if (done.code === "INVALID_STATE") {
+            const status = await this.protocol.status(this.sessionId);
+            if (!status.ok) this.raiseProtocol(status);
+            this.applyStatus(status);
+            if (this.verified.has(current.idx)) return;
+            this.raiseProtocol(done);
+          }
           if (done.code === "CHUNK_HASH_MISMATCH" || done.code === "CHUNK_SIZE_MISMATCH") {
+            if (done.body?.retryable === false || done.body?.session_status === "failed") {
+              throw fail(done.code, done.message || "This file failed a safety check and was not saved. Nothing was published.");
+            }
             current = await this.hashSliceOnly(current.idx);
             this.phase = "retrying";
             this.emit({ phase: "retrying", part: current.idx + 1, attempt: Math.min(this.maxAttempts, attempt + 1) });
@@ -691,7 +721,7 @@ class UploadController {
       const message = storageFullMessage(this.storageUsage);
       this.phase = "storage-full";
       this.emit({ phase: "storage-full", detail: message });
-      throw fail("LIMIT_EXCEEDED", message);
+      throw fail("STORAGE_BUDGET_EXCEEDED", message);
     }
     if (outlook.level === "warn") {
       this.storageWarning = storageWarningMessage(this.storageUsage, incomingBytes);
@@ -706,7 +736,7 @@ class UploadController {
       const message = storageFullMessage(this.storageUsage);
       this.phase = "storage-full";
       this.emit({ phase: "storage-full", detail: message });
-      throw fail("LIMIT_EXCEEDED", message);
+      throw fail("STORAGE_BUDGET_EXCEEDED", message);
     }
     throw fail(result.code || "REQUEST_FAILED", result.message);
   }

@@ -25,15 +25,18 @@ export function createMockUploadServer(options = {}) {
   const limits = {
     chunk_bytes: options.chunkBytes ?? 64 * 1024,
     single_object_threshold: options.singleObjectThreshold ?? 45 * 1024 * 1024,
-    max_file_bytes: options.maxFileBytes ?? 2 * 1024 * 1024 * 1024,
+    max_file_bytes: options.maxFileBytes ?? 900 * 1024 * 1024,
     preview_max_bytes: options.previewMaxBytes ?? 10 * 1024 * 1024,
     compress_min_saving: options.compressMinSaving ?? 0.1,
     compress_max_bytes: options.compressMaxBytes ?? 512 * 1024 * 1024,
     session_ttl_seconds: options.sessionTtlSeconds ?? 24 * 60 * 60,
     max_attempts: options.maxAttempts ?? 5,
-    ticket_batch_cap: options.ticketBatchCap ?? 16,
+    ticket_batch_cap: options.ticketBatchCap ?? options.ticketBatchMax ?? 16,
+    ticket_batch_max: options.ticketBatchMax ?? options.ticketBatchCap ?? 16,
+    min_chunk_bytes: options.minChunkBytes ?? 1024 * 1024,
+    max_total_upload_bytes: options.storageQuotaBytes === undefined ? 960 * 1024 * 1024 : options.storageQuotaBytes,
   };
-  const storageQuotaBytes = options.storageQuotaBytes === undefined ? 1024 * 1024 * 1024 : options.storageQuotaBytes;
+  const storageQuotaBytes = limits.max_total_upload_bytes;
   const state = {
     hashMode: options.hashMode || "deferred",
     batchSupported: options.batchSupported !== false,
@@ -44,6 +47,7 @@ export function createMockUploadServer(options = {}) {
     objects: new Map(),
     requests: [],
     puts: [],
+    putHeaders: [],
     corruptOnce: new Set(options.corruptOnce || []),
     conflictOnce: new Set(options.conflictOnce || []),
     failPutOnce: new Set(options.failPutOnce || []),
@@ -57,7 +61,17 @@ export function createMockUploadServer(options = {}) {
     putCount: 0,
     storageUsedBytes: options.storageUsedBytes ?? 0,
     storageQuotaBytes,
+    reservedBytes: options.reservedBytes ?? 0,
   };
+
+  function mimeFor(filename = "") {
+    const ext = String(filename).toLowerCase().split(".").pop();
+    if (ext === "wav" || ext === "wave") return "audio/wav";
+    if (ext === "mp3") return "audio/mpeg";
+    if (ext === "zip") return "application/zip";
+    if (ext === "mp4") return "video/mp4";
+    return "application/octet-stream";
+  }
 
   function sessionOrFail(id) {
     const session = state.sessions.get(id);
@@ -83,20 +97,60 @@ export function createMockUploadServer(options = {}) {
     return { missing, bad, verified };
   }
 
+  function storageSnapshot() {
+    if (state.storageQuotaBytes == null) return {};
+    const used = state.storageUsedBytes ?? 0;
+    const reserved = state.reservedBytes ?? 0;
+    const quota = state.storageQuotaBytes;
+    return {
+      storage_used_bytes: used,
+      storage_quota_bytes: quota,
+      storage: {
+        used_bytes: used,
+        reserved_bytes: reserved,
+        max_total_upload_bytes: quota,
+        remaining_bytes: Math.max(0, quota - used - reserved),
+        scope: "project",
+      },
+    };
+  }
+
+  function protocolLimits() {
+    return {
+      chunk_bytes: limits.chunk_bytes,
+      min_chunk_bytes: limits.min_chunk_bytes,
+      single_object_threshold: limits.single_object_threshold,
+      max_file_bytes: limits.max_file_bytes,
+      max_total_upload_bytes: state.storageQuotaBytes,
+      session_ttl_seconds: limits.session_ttl_seconds,
+      max_attempts: limits.max_attempts,
+      ticket_ttl_seconds: state.ticketTtl,
+      ticket_batch_max: limits.ticket_batch_max,
+      max_open_sessions_per_user: 3,
+      preview_max_bytes: limits.preview_max_bytes,
+      compress_min_saving: limits.compress_min_saving,
+      compress_max_bytes: limits.compress_max_bytes,
+      compressible_exts: ["wav"],
+      zip_max_entries: 2000,
+      allowed: { full: ["wav", "mp3"], stems: ["zip"], video: ["mp4"], zip: ["zip"] },
+    };
+  }
+
   function limitBody(extra = {}) {
-    const storage = {};
-    if (state.storageQuotaBytes != null) {
-      storage.storage_used_bytes = state.storageUsedBytes ?? 0;
-      storage.storage_quota_bytes = state.storageQuotaBytes;
-    }
-    return { ...limits, ...storage, hash_mode: state.hashMode, ...extra };
+    return {
+      protocol: 1,
+      limits: protocolLimits(),
+      hash_mode: state.hashMode,
+      ...storageSnapshot(),
+      ...extra,
+    };
   }
 
   async function handle(message, headers = {}) {
     const action = message.action;
     state.requests.push({ action, body: message, authorization: headers.Authorization || headers.authorization || "" });
     if (action === "upload_status" && message.dry_run) return ok(limitBody());
-    if (action === "start_upload" && message.dry_run) return ok(limitBody());
+    if (action === "start_upload" && message.dry_run) return ok(limitBody({ dry_run: true }));
     if (action === "start_upload") return startUpload(message);
     if (action === "chunk_ticket") return chunkTicket(message);
     if (action === "chunk_done") return chunkDone(message);
@@ -120,16 +174,23 @@ export function createMockUploadServer(options = {}) {
     }
     const total = Number(message.total_bytes);
     if (!Number.isFinite(total) || total <= 0) return fail("EMPTY", 400);
-    if (state.storageQuotaBytes != null && state.storageUsedBytes + total > state.storageQuotaBytes) {
-      return fail("LIMIT_EXCEEDED", 413, {
-        reason: "storage_quota",
-        message: "storage quota exceeded",
+    const reserved = state.reservedBytes ?? 0;
+    if (state.storageQuotaBytes != null && state.storageUsedBytes + reserved + total > state.storageQuotaBytes) {
+      return fail("STORAGE_BUDGET_EXCEEDED", 507, {
+        message: "Project storage is full",
         total_bytes: total,
+        storage: {
+          used_bytes: state.storageUsedBytes,
+          reserved_bytes: reserved,
+          max_total_upload_bytes: state.storageQuotaBytes,
+          remaining_bytes: Math.max(0, state.storageQuotaBytes - state.storageUsedBytes - reserved),
+          scope: "project",
+        },
         storage_used_bytes: state.storageUsedBytes,
         storage_quota_bytes: state.storageQuotaBytes,
       });
     }
-    if (total > limits.max_file_bytes) return fail("LIMIT_EXCEEDED", 413);
+    if (total > limits.max_file_bytes) return fail("LIMIT_EXCEEDED", 413, { limit: "max_file_bytes", max: limits.max_file_bytes });
     const chunkBytes = limits.chunk_bytes;
     const chunkCount = Math.ceil(total / chunkBytes);
     if (upfront && message.chunk_sha256.length !== chunkCount) return fail("CHUNK_SIZE_MISMATCH", 400);
@@ -174,14 +235,18 @@ export function createMockUploadServer(options = {}) {
     const session = found.session;
     const indexes = Array.isArray(message.idx) ? message.idx : [message.idx];
     if (!state.batchSupported && Array.isArray(message.idx)) return fail("BATCH_NOT_SUPPORTED", 400, { message: "idx must be a number" });
-    if (indexes.length > limits.ticket_batch_cap) return fail("LIMIT_EXCEEDED", 400);
+    if (indexes.length > limits.ticket_batch_max) return fail("LIMIT_EXCEEDED", 400, { limit: "ticket_batch_max", max: limits.ticket_batch_max });
     const hashes = Array.isArray(message.sha256) ? message.sha256 : (message.sha256 ? [message.sha256] : []);
     const tickets = [];
+    const skipped = [];
     for (let position = 0; position < indexes.length; position += 1) {
       const idx = Number(indexes[position]);
       if (!Number.isInteger(idx) || idx < 0 || idx >= session.chunkCount) return fail("CHUNK_OUT_OF_RANGE", 400);
       const row = session.chunks[idx];
-      if (row.status === "verified") return fail("CHUNK_OUT_OF_RANGE", 400, { message: "chunk already verified" });
+      if (row.status === "verified") {
+        skipped.push({ idx, reason: "verified" });
+        continue;
+      }
       let ttl = state.ticketTtl;
       if (state.shortTicketOnce) {
         ttl = 10;
@@ -190,15 +255,20 @@ export function createMockUploadServer(options = {}) {
       const sha = hashes[position] || session.chunkSha256[idx] || "";
       if (state.hashMode === "deferred" && !sha) return fail("HASHES_REQUIRED", 400, { message: "sha256 is required" });
       session.tickets.set(idx, { sha256: sha, expiresAt: Date.now() + ttl * 1000 });
+      const bytes = idx === session.chunkCount - 1 ? session.total - idx * session.chunkBytes : session.chunkBytes;
       tickets.push({
         idx,
+        method: "PUT",
+        bucket: "release-private",
+        path: `uploads/${session.id}/${idx}.part`,
         signed_url: `https://upload.mock.local/object/${session.id}/${idx}`,
-        headers: { "content-type": "application/octet-stream" },
+        headers: { "content-type": mimeFor(session.filename), "x-upsert": "false" },
+        bytes,
+        sha256: sha || null,
         expires_in: ttl,
       });
     }
-    if (tickets.length === 1 && !Array.isArray(message.idx)) return ok(tickets[0]);
-    return ok({ tickets });
+    return ok({ session_id: session.id, tickets, skipped });
   }
 
   function chunkDone(message) {
@@ -208,9 +278,9 @@ export function createMockUploadServer(options = {}) {
     const idx = Number(message.idx);
     if (!Number.isInteger(idx) || idx < 0 || idx >= session.chunkCount) return fail("CHUNK_OUT_OF_RANGE", 400);
     const row = session.chunks[idx];
-    if (row.status === "verified") return ok({ status: "verified", noop: true, idx });
+    if (row.status === "verified") return ok({ session_id: session.id, idx, status: "verified", duplicate: true, noop: true });
     const stored = state.objects.get(`${session.id}:${idx}`);
-    if (!stored) return fail("CHUNK_SIZE_MISMATCH", 400);
+    if (!stored) return fail("CHUNK_MISSING", 409, { message: "Chunk object is missing." });
     const expected = session.tickets.get(idx)?.sha256 || session.chunkSha256[idx] || "";
     const actual = stored.sha256;
     const expectedBytes = idx === session.chunkCount - 1 ? session.total - idx * session.chunkBytes : session.chunkBytes;
@@ -239,9 +309,10 @@ export function createMockUploadServer(options = {}) {
       ...limitBody(),
       session_id: found.session.id,
       status: found.session.status,
-      missing_idx: lists.missing,
-      bad_idx: lists.bad,
-      verified_idx: lists.verified,
+      chunk_count: found.session.chunkCount,
+      missing: lists.missing,
+      bad: lists.bad,
+      verified_count: lists.verified.length,
       expires_at: new Date(found.session.expiresAt).toISOString(),
     });
   }
@@ -256,10 +327,10 @@ export function createMockUploadServer(options = {}) {
       state.incompleteOnce = false;
       const idx = lists.verified[0] ?? 0;
       session.chunks[idx].status = "bad";
-      return fail("INCOMPLETE", 409, { missing_idx: [idx], missing: [idx] });
+      return fail("INCOMPLETE", 409, { missing: [idx], bad: [] });
     }
     if (lists.missing.length || lists.bad.length) {
-      return fail("INCOMPLETE", 409, { missing_idx: [...lists.missing, ...lists.bad] });
+      return fail("INCOMPLETE", 409, { missing: lists.missing, bad: lists.bad });
     }
     if (message.file_sha256) session.fileSha256 = message.file_sha256;
     session.status = "verified";
@@ -287,7 +358,7 @@ export function createMockUploadServer(options = {}) {
     return ok({ attached: true, storefront_enabled: false, status: "draft" });
   }
 
-  async function handlePut(url, body) {
+  async function handlePut(url, body, headers = {}) {
     const match = /\/object\/([^/]+)\/(\d+)/.exec(String(url));
     if (!match) return new Response("missing", { status: 404 });
     const session = state.sessions.get(match[1]);
@@ -300,6 +371,7 @@ export function createMockUploadServer(options = {}) {
     state.activePuts -= 1;
     state.putCount += 1;
     state.puts.push(idx);
+    state.putHeaders.push(headers);
     if (state.expireAfterPuts != null && state.putCount >= state.expireAfterPuts) session.status = "expired";
     if (state.failPutOnce.has(idx)) {
       state.failPutOnce.delete(idx);
@@ -320,7 +392,7 @@ export function createMockUploadServer(options = {}) {
   }
 
   async function fetchImpl(url, init = {}) {
-    if (String(url).includes("/object/")) return handlePut(url, init.body);
+    if (String(url).includes("/object/")) return handlePut(url, init.body, init.headers || {});
     const message = JSON.parse(init.body || "{}");
     const result = await handle(message, init.headers || {});
     return new Response(JSON.stringify(result.body), {

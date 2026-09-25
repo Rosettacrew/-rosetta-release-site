@@ -5,7 +5,7 @@ import { createProtocol } from "./protocol.mjs";
 import { readHead } from "./intake.mjs";
 import { blobSource } from "./source.mjs";
 
-export const STUDIO_LARGE_UPLOAD_ENABLED = false;
+export const STUDIO_LARGE_UPLOAD_ENABLED = true;
 
 const KIND_MAP = {
   track: "full",
@@ -19,7 +19,7 @@ const KIND_MAP = {
 
 export async function uploadStudioFile(options) {
   if (!options?.enabled && !STUDIO_LARGE_UPLOAD_ENABLED) return { handled: false };
-  if (options.kind === "cover") return { handled: false };
+  if (options.kind === "cover" || options.surface === "release") return { handled: false };
   const kind = KIND_MAP[options.kind] || "full";
   const protocol = options.protocol || createProtocol({ ...options, kind });
   const limitsResult = options.limits ? { ok: true, limits: options.limits } : await protocol.fetchLimits();

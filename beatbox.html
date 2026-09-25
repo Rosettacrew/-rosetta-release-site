@@ -559,17 +559,9 @@
       try {
         const result = await uploader.upload(source, meta);
         ui.render({ phase: "verified", name: plan.name || source.name, size: source.size, ratio: 1 });
-        return af({
-          method: "POST",
-          body: JSON.stringify({
-            action: "attach_asset",
-            intake: "beatbox",
-            id: beatId,
-            kind,
-            session_id: result.sessionId,
-            duration_seconds: kind === "preview" ? previewDuration() : null,
-          }),
-        });
+        const attached = await uploader.protocol.attach({ kind, sessionId: result.sessionId });
+        if (!attached.ok) throw Object.assign(new Error(attached.message || "Attach failed."), { code: attached.code });
+        return attached.body;
       } finally {
         if (plan.close) await plan.close().catch(() => {});
         if (activeUpload === uploader) activeUpload = null;

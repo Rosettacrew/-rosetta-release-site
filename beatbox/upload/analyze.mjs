@@ -77,30 +77,53 @@ export function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function limitsSource(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  if (raw.limits && typeof raw.limits === "object") return raw.limits;
+  return raw;
+}
+
 export function normalizeLimits(raw) {
-  const source = raw || {};
+  const source = limitsSource(raw);
+  const envelope = raw && raw.limits ? raw : {};
   return {
     chunkBytes: numberOrNull(source.chunkBytes ?? source.chunk_bytes),
+    minChunkBytes: numberOrNull(source.minChunkBytes ?? source.min_chunk_bytes),
     singleObjectThreshold: numberOrNull(source.singleObjectThreshold ?? source.single_object_threshold),
     maxFileBytes: numberOrNull(source.maxFileBytes ?? source.max_file_bytes),
+    maxTotalUploadBytes: numberOrNull(source.maxTotalUploadBytes ?? source.max_total_upload_bytes ?? envelope.storage_quota_bytes),
     previewMaxBytes: numberOrNull(source.previewMaxBytes ?? source.preview_max_bytes),
     compressMinSaving: numberOrNull(source.compressMinSaving ?? source.compress_min_saving),
     compressMaxBytes: numberOrNull(source.compressMaxBytes ?? source.compress_max_bytes),
     sessionTtlSeconds: numberOrNull(source.sessionTtlSeconds ?? source.session_ttl_seconds ?? source.ttl_seconds),
     maxAttempts: numberOrNull(source.maxAttempts ?? source.max_attempts),
-    ticketBatchCap: numberOrNull(source.ticketBatchCap ?? source.ticket_batch_cap),
-    storageUsedBytes: numberOrNull(source.storageUsedBytes ?? source.storage_used_bytes),
-    storageQuotaBytes: numberOrNull(source.storageQuotaBytes ?? source.storage_quota_bytes),
+    ticketBatchCap: numberOrNull(source.ticketBatchCap ?? source.ticket_batch_cap ?? source.ticketBatchMax ?? source.ticket_batch_max),
+    ticketTtlSeconds: numberOrNull(source.ticketTtlSeconds ?? source.ticket_ttl_seconds),
+    storageUsedBytes: numberOrNull(envelope.storageUsedBytes ?? envelope.storage_used_bytes ?? source.storageUsedBytes ?? source.storage_used_bytes),
+    storageQuotaBytes: numberOrNull(envelope.storageQuotaBytes ?? envelope.storage_quota_bytes ?? source.storageQuotaBytes ?? source.storage_quota_bytes ?? source.max_total_upload_bytes),
     allowedExt: source.allowedExt || source.allowed_ext || null,
+    allowed: source.allowed || null,
+    compressibleExts: source.compressibleExts || source.compressible_exts || null,
   };
 }
 
 export function storageFrom(raw) {
   const source = raw || {};
-  const used = numberOrNull(source.usedBytes ?? source.storageUsedBytes ?? source.storage_used_bytes);
-  const quota = numberOrNull(source.quotaBytes ?? source.storageQuotaBytes ?? source.storage_quota_bytes);
+  const nested = source.storage && typeof source.storage === "object" ? source.storage : {};
+  const limits = source.limits && typeof source.limits === "object" ? source.limits : {};
+  const used = numberOrNull(source.usedBytes ?? source.storageUsedBytes ?? source.storage_used_bytes ?? nested.used_bytes);
+  const quota = numberOrNull(
+    source.quotaBytes ?? source.storageQuotaBytes ?? source.storage_quota_bytes ?? nested.max_total_upload_bytes ?? limits.max_total_upload_bytes,
+  );
+  const reserved = numberOrNull(source.reservedBytes ?? source.reserved_bytes ?? nested.reserved_bytes);
+  const remaining = numberOrNull(source.remainingBytes ?? source.remaining_bytes ?? nested.remaining_bytes);
   if (used == null && quota == null) return null;
-  return { usedBytes: used, quotaBytes: quota };
+  return {
+    usedBytes: used,
+    quotaBytes: quota,
+    reservedBytes: reserved ?? 0,
+    remainingBytes: remaining,
+  };
 }
 
 export function choosePath({ size, isBeatboxZip = false, limits }) {

@@ -5,7 +5,7 @@ import { crc32 } from "node:zlib";
 import { Worker } from "node:worker_threads";
 import { classify, choosePath, chunkPlan, compressionAllowed, detectMagic, middleSampleRange, normalizeLimits, storageFrom } from "../beatbox/upload/analyze.mjs";
 import { gzipTrial, maybeCompress } from "../beatbox/upload/compress.mjs";
-import { joinParts, chooseJoinStrategy } from "../beatbox/upload/join-download.mjs";
+import { joinParts, chooseJoinStrategy, detectJoinStrategy, joinMasterDownload, normalizeMasterDownload } from "../beatbox/upload/join-download.mjs";
 import { createMemoryStorage, createUploader, backoffMs, resumeKey } from "../beatbox/upload/large-upload.mjs";
 import { inspectBeatboxZip } from "../beatbox/upload/intake.mjs";
 import { packLoose } from "../beatbox/upload/pack-loose.mjs";
@@ -257,7 +257,8 @@ assert.equal(smallResult.status, "verified");
 assert.equal(smallMock.state.peakPuts <= 3, true);
 assert.ok(smallMock.state.peakPuts >= 1);
 const actions = smallMock.state.requests.map((entry) => entry.action);
-assert.ok(actions.includes("upload_status"));
+assert.ok(smallMock.state.requests.some((entry) => entry.action === "start_upload" && entry.body.dry_run === true));
+assert.equal(smallMock.state.requests.some((entry) => entry.action === "upload_status" && entry.body.dry_run), false);
 assert.ok(actions.includes("start_upload"));
 assert.ok(actions.includes("chunk_ticket"));
 assert.ok(actions.includes("chunk_done"));
@@ -266,6 +267,9 @@ const start = smallMock.state.requests.find((entry) => entry.action === "start_u
 assert.equal(start.body.head_sha256.length, 64);
 assert.equal(start.body.file_sha256, undefined);
 assert.ok(Array.isArray(smallMock.state.requests.find((entry) => entry.action === "chunk_ticket").body.idx));
+assert.equal(smallMock.state.requests.find((entry) => entry.action === "chunk_done").body.sha256.length, 64);
+assert.equal(smallMock.state.putHeaders[0]["content-type"], "audio/mpeg");
+assert.notEqual(smallMock.state.putHeaders[0]["content-type"], "application/octet-stream");
 assert.equal(smallResult.fileSha256, createHash("sha256").update(new Uint8Array(await small.arrayBuffer())).digest("hex"));
 assert.equal(JSON.stringify(JSON.parse(smallRun.storage.getItem(smallRun.uploader.storageKey(blobSource(small))) || "null")), "null");
 
@@ -311,6 +315,7 @@ assert.equal((await uploaderFor(dupMock).uploader.upload(blobSource(dupFile))).s
 const dupSession = [...dupMock.state.sessions.values()][0];
 const dupDone = await dupMock.handle({ action: "chunk_done", session_id: dupSession.id, idx: 0 });
 assert.equal(dupDone.body.noop, true);
+assert.equal(dupDone.body.duplicate, true);
 assert.equal(dupSession.chunks[0].status, "verified");
 
 const gapMock = createMockUploadServer({ chunkBytes: 4, incompleteOnce: true });
@@ -434,8 +439,10 @@ assert.match(html, /id="largeUploadStorage"/);
 assert.match(html, /data-upload-storage-warning/);
 assert.match(html, /showStoragePlan/);
 assert.doesNotMatch(html, /storefront_enabled:\s*true/);
-assert.equal(STUDIO_LARGE_UPLOAD_ENABLED, false);
-assert.match(readFileSync("studio/index.html", "utf8"), /STUDIO_LARGE_UPLOAD_ENABLED = false/);
+assert.equal(STUDIO_LARGE_UPLOAD_ENABLED, true);
+assert.match(readFileSync("studio/index.html", "utf8"), /STUDIO_LARGE_UPLOAD_ENABLED = true/);
+assert.doesNotMatch(readFileSync("studio/index.html", "utf8"), /cleanup_uploads/);
+assert.doesNotMatch(readFileSync("beatbox/upload/studio-bridge.mjs", "utf8"), /cleanup_uploads|set_storefront/);
 assert.doesNotMatch(readFileSync("beatbox/upload/large-upload.mjs", "utf8"), /set_storefront|storefront_enabled:\s*true/);
 
 const studioSmall = createMockUploadServer({ chunkBytes: 4, singleObjectThreshold: 1000 });
@@ -455,6 +462,13 @@ const studioSmallResult = await uploadStudioFile({
   random,
 });
 assert.equal(studioSmallResult.handled, false);
+const releaseSkip = await uploadStudioFile({
+  enabled: true,
+  surface: "release",
+  kind: "track",
+  file: fileFrom(concat([wav, new Uint8Array(8)]), "song.wav"),
+});
+assert.equal(releaseSkip.handled, false);
 
 const headFile = fileFrom(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), "full.wav");
 const otherHead = fileFrom(new Uint8Array([9, 2, 3, 4, 5, 6, 7, 8]), "full.wav");
@@ -598,10 +612,16 @@ const quotaLimits = await quotaProtocol.fetchLimits();
 assert.equal(quotaLimits.storage.usedBytes, 612 * MB);
 assert.equal(quotaLimits.storage.quotaBytes, GB);
 assert.equal(normalizeLimits(quotaLimits.body).storageUsedBytes, 612 * MB);
-assert.deepEqual(storageFrom(quotaLimits.limits), quotaLimits.storage);
-const quotaStatus = await quotaMock.handle({ action: "upload_status", dry_run: true });
+assert.deepEqual(storageFrom(quotaLimits.body), quotaLimits.storage);
+assert.equal(quotaLimits.body.protocol, 1);
+assert.equal(quotaLimits.body.limits.chunk_bytes, 8);
+assert.equal(quotaLimits.body.limits.ticket_batch_max, 16);
+const quotaStatus = await quotaMock.handle({ action: "start_upload", dry_run: true });
+assert.equal(quotaStatus.body.dry_run, true);
 assert.equal(quotaStatus.body.storage_used_bytes, 612 * MB);
 assert.equal(quotaStatus.body.storage_quota_bytes, GB);
+assert.equal(quotaStatus.body.storage.used_bytes, 612 * MB);
+assert.equal(quotaStatus.body.storage.max_total_upload_bytes, GB);
 const quotaRefuse = await quotaMock.handle({
   action: "start_upload",
   total_bytes: 500 * MB,
@@ -609,9 +629,9 @@ const quotaRefuse = await quotaMock.handle({
   filename: "master.wav",
   kind: "full",
 });
-assert.equal(quotaRefuse.status, 413);
-assert.equal(quotaRefuse.body.code, "LIMIT_EXCEEDED");
-assert.equal(quotaRefuse.body.reason, "storage_quota");
+assert.equal(quotaRefuse.status, 507);
+assert.equal(quotaRefuse.body.code, "STORAGE_BUDGET_EXCEEDED");
+assert.match(quotaRefuse.body.message, /storage is full/i);
 assert.equal(quotaRefuse.body.storage_used_bytes, 612 * MB);
 assert.equal(isStorageQuotaFailure({ code: quotaRefuse.body.code, message: quotaRefuse.body.message, body: quotaRefuse.body }), true);
 const fileCap = await quotaMock.handle({
@@ -644,7 +664,7 @@ const blockedMock = createMockUploadServer({
 await assert.rejects(
   () => uploaderFor(blockedMock).uploader.upload(blobSource(fileFrom(new Uint8Array(32), "full.wav"))),
   (error) => {
-    assert.equal(error.code, "LIMIT_EXCEEDED");
+    assert.equal(error.code, "STORAGE_BUDGET_EXCEEDED");
     assert.match(error.message, /Storage is full/);
     assert.match(error.message, /plan needs upgrading/);
     assert.match(error.message, /Nothing was published/);
@@ -664,7 +684,8 @@ const warnPhases = [];
 const warned = await uploaderFor(warnMock, { onStatus: (state) => warnPhases.push(state) }).uploader.upload(blobSource(fileFrom(new Uint8Array(32), "full.wav")));
 assert.equal(warned.status, "verified");
 assert.ok(warnPhases.some((state) => state.phase === "storage-warning" && /past 80%/.test(state.message)));
-assert.equal(warnPhases.at(-1).storageLine, "Storage: 60 B of 100 B used");
+assert.match(warnPhases.at(-1).storageLine, /Storage: 60 B of 100 B used/);
+assert.match(warnPhases.at(-1).storageLine, /40 B left/);
 const liveStatus = await warnMock.handle({ action: "upload_status", session_id: warned.sessionId });
 assert.equal(liveStatus.body.storage_used_bytes, 60);
 assert.equal(liveStatus.body.storage_quota_bytes, 100);
@@ -680,7 +701,7 @@ await assert.rejects(
     limits: { chunkBytes: 8, singleObjectThreshold: 1, maxFileBytes: 1000 },
   }),
   (error) => {
-    assert.equal(error.code, "LIMIT_EXCEEDED");
+    assert.equal(error.code, "STORAGE_BUDGET_EXCEEDED");
     assert.match(error.message, /Storage is full/);
     assert.match(error.message, /plan needs upgrading/);
     return true;
@@ -688,5 +709,84 @@ await assert.rejects(
 );
 assert.ok(serverFull.state.requests.some((entry) => entry.action === "start_upload" && !entry.body.dry_run));
 assert.equal(serverFull.state.sessions.size, 0);
+
+const protocolDefaults = createMockUploadServer();
+assert.equal(protocolDefaults.limits.max_file_bytes, 900 * 1024 * 1024);
+assert.equal(protocolDefaults.state.storageQuotaBytes, 960 * 1024 * 1024);
+
+const singleMaster = normalizeMasterDownload({ download_url: "https://example.test/master.wav", expires_in: 300 });
+assert.equal(singleMaster.mode, "single");
+assert.equal(singleMaster.downloadUrl, "https://example.test/master.wav");
+assert.equal(singleMaster.chunked, false);
+const singleJoined = await joinMasterDownload({ response: { download_url: "https://example.test/master.wav", expires_in: 300 }, fetchPart: async () => { throw new Error("single object was fetched as parts"); } });
+assert.equal(singleJoined.mode, "single");
+assert.equal(singleJoined.downloadUrl, "https://example.test/master.wav");
+
+const masterParts = [new Uint8Array([9, 8]), new Uint8Array([7, 6])];
+const masterHashes = await Promise.all(masterParts.map((part) => sha256Hex(part)));
+const masterWhole = createHash("sha256").update(concat(masterParts)).digest("hex");
+const chunkedResponse = {
+  download_url: null,
+  chunked: true,
+  message: "Chunked master",
+  manifest: {
+    filename: "master.wav",
+    ext: "wav",
+    mime: "audio/wav",
+    encoding: "identity",
+    total_bytes: 4,
+    chunk_bytes: 2,
+    chunk_count: 2,
+    file_sha256: masterWhole,
+  },
+  parts: [
+    { idx: 1, bytes: 2, sha256: masterHashes[1], url: "https://upload.mock.local/part/1" },
+    { idx: 0, bytes: 2, sha256: masterHashes[0], url: "https://upload.mock.local/part/0" },
+  ],
+  expires_in: 300,
+};
+const chunkedPlan = normalizeMasterDownload(chunkedResponse);
+assert.equal(chunkedPlan.downloadUrl, null);
+assert.deepEqual(chunkedPlan.parts.map((part) => part.idx), [0, 1]);
+const masterWritten = [];
+const masterStream = await joinMasterDownload({
+  response: chunkedResponse,
+  strategy: "stream",
+  writable: { write: async (bytes) => masterWritten.push(bytes), close: async () => {} },
+  fetchPart: async (part) => masterParts[part.idx],
+});
+assert.equal(masterStream.mode, "stream");
+assert.equal(masterStream.fileSha256, masterWhole);
+assert.equal(createHash("sha256").update(concat(masterWritten)).digest("hex"), masterWhole);
+const masterPartsDownload = await joinMasterDownload({
+  response: chunkedResponse,
+  strategy: "parts",
+  fetchPart: async (part) => masterParts[part.idx],
+});
+assert.equal(masterPartsDownload.mode, "parts");
+assert.equal(masterPartsDownload.parts.length, 2);
+assert.equal(masterPartsDownload.parts[0].sha256, masterHashes[0]);
+assert.equal(detectJoinStrategy({ navigator: { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" } }), "parts");
+assert.equal(detectJoinStrategy({ showSaveFilePicker() {} }), "stream");
+assert.equal(detectJoinStrategy({}), "blob");
+
+const plainMaster = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+const gzippedMaster = new Uint8Array(await new Response(new Blob([plainMaster]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+const gzipSplit = [gzippedMaster.subarray(0, 4), gzippedMaster.subarray(4)];
+const gzipHashes = await Promise.all(gzipSplit.map((part) => sha256Hex(part)));
+const gzipWhole = createHash("sha256").update(gzippedMaster).digest("hex");
+const originalSha = await sha256Hex(plainMaster);
+const gunzipped = await joinMasterDownload({
+  response: {
+    download_url: null,
+    chunked: true,
+    manifest: { encoding: "gzip", file_sha256: gzipWhole, original_sha256: originalSha, filename: "master.wav" },
+    parts: gzipSplit.map((part, idx) => ({ idx, bytes: part.byteLength, sha256: gzipHashes[idx], url: `https://upload.mock.local/gz/${idx}` })),
+  },
+  strategy: "blob",
+  fetchPart: async (part) => gzipSplit[part.idx],
+});
+assert.equal(gunzipped.fileSha256, gzipWhole);
+assert.equal(await sha256Hex(gunzipped.bytes), originalSha);
 
 console.log("Large-file uploader checks passed.");

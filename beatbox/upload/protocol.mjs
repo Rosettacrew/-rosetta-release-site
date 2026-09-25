@@ -4,11 +4,15 @@ export { storageFrom };
 
 export const FAIL_CLOSED = new Set([
   "LIMIT_EXCEEDED",
+  "STORAGE_BUDGET_EXCEEDED",
   "EXT_NOT_ALLOWED",
   "MAGIC_MISMATCH",
   "ZIP_UNSAFE",
   "FORBIDDEN",
   "CHUNK_OUT_OF_RANGE",
+  "HASH_CONFLICT",
+  "BEAT_NOT_FOUND",
+  "KIND_MISMATCH",
 ]);
 
 export const TICKET_BATCH_CAP = 16;
@@ -50,7 +54,9 @@ function batchRejected(result) {
 }
 
 export function isStorageQuotaFailure(result) {
-  if (!result || result.code !== "LIMIT_EXCEEDED") return false;
+  if (!result) return false;
+  if (result.code === "STORAGE_BUDGET_EXCEEDED") return true;
+  if (result.code !== "LIMIT_EXCEEDED") return false;
   const reason = `${result.body?.reason || ""} ${result.body?.limit || ""}`.toLowerCase();
   const message = `${result.message || ""}`.toLowerCase();
   if (reason.includes("storage") || message.includes("storage")) return true;
@@ -66,7 +72,7 @@ function unknownGzip(result) {
 }
 
 function targetFields(target = {}) {
-  const fields = { surface: target.surface || "beatbay" };
+  const fields = {};
   if (target.beat_id) fields.beat_id = target.beat_id;
   if (target.product_id) fields.product_id = target.product_id;
   return fields;
@@ -129,7 +135,6 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
       kind: input.kind || kind,
       filename: input.filename,
       total_bytes: input.totalBytes,
-      last_modified: input.lastModified,
       head_sha256: input.headSha256,
       ...(gzip && input.encoding ? { encoding: input.encoding } : {}),
       ...(gzip && input.originalBytes != null ? { original_bytes: input.originalBytes } : {}),
@@ -156,15 +161,16 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
       return state.notes.slice();
     },
     async fetchLimits() {
-      let result = await call("upload_status", { dry_run: true });
-      if (!(result.ok && (result.body.chunk_bytes != null || result.body.chunkBytes != null))) {
-        result = await call("start_upload", { dry_run: true, total_bytes: 0, filename: "limits.bin", kind: kind || "full", ...targetFields(target) });
-      }
+      const result = await call("start_upload", { dry_run: true });
       if (result.status === 404 || result.code === "UNKNOWN_ACTION") {
-        return { ok: false, code: "LARGE_UPLOAD_UNSUPPORTED", message: "Large upload is not available.", limits: null };
+        return { ok: false, code: "LARGE_UPLOAD_UNSUPPORTED", message: "Large upload is not available.", limits: null, storage: null };
       }
       if (!result.ok) return { ...result, limits: null, storage: storageFrom(result.body) };
-      return { ok: true, code: "", message: "", limits: normalizeLimits(result.body), storage: storageFrom(result.body), body: result.body };
+      const limits = normalizeLimits(result.body);
+      if (limits.chunkBytes == null) {
+        return { ok: false, code: "LARGE_UPLOAD_UNSUPPORTED", message: "Large upload is not available.", limits: null, storage: storageFrom(result.body) };
+      }
+      return { ok: true, code: "", message: "", limits, storage: storageFrom(result.body), body: result.body };
     },
     async start(input) {
       if (state.hashMode === "upfront" || input.forceUpfront) {
@@ -196,13 +202,15 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
     async tickets(sessionId, parts) {
       const list = parts.filter((part) => Number.isInteger(part.idx));
       const cap = TICKET_BATCH_CAP;
-      const out = [];
+      const tickets = [];
+      const skipped = [];
       for (let offset = 0; offset < list.length; offset += cap) {
         const batch = list.slice(offset, offset + cap);
         const grouped = await requestBatch(batch);
-        out.push(...grouped);
+        tickets.push(...grouped.tickets);
+        skipped.push(...grouped.skipped);
       }
-      return out;
+      return { tickets, skipped };
 
       async function requestBatch(batch) {
         if (!state.batch || batch.length === 1 && state.batch === "single-only") {
@@ -230,17 +238,12 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
           error.result = result;
           throw error;
         }
-        const tickets = parseTicketList(result.body);
-        if (!tickets.length) {
-          const error = new Error("Upload ticket was missing a signed URL.");
-          error.code = "REQUEST_FAILED";
-          throw error;
-        }
-        return tickets.map(markHeaders);
+        return takeTickets(result.body, batch);
       }
 
       async function requestEach(batch) {
         const tickets = [];
+        const skipped = [];
         for (const part of batch) {
           const fields = { session_id: sessionId, idx: part.idx };
           if (state.hashMode !== "upfront" && part.sha256) fields.sha256 = part.sha256;
@@ -251,35 +254,62 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
             error.result = result;
             throw error;
           }
-          const ticket = parseTicketList(result.body)[0];
-          if (!ticket) throw Object.assign(new Error("Upload ticket was missing a signed URL."), { code: "REQUEST_FAILED" });
-          tickets.push(markHeaders(ticket));
+          const grouped = takeTickets(result.body, [part]);
+          tickets.push(...grouped.tickets);
+          skipped.push(...grouped.skipped);
         }
-        return tickets;
+        return { tickets, skipped };
+      }
+
+      function takeTickets(body, batch) {
+        const tickets = parseTicketList(body).map(markHeaders);
+        const skipped = Array.isArray(body?.skipped) ? body.skipped : [];
+        if (!tickets.length && !skipped.length) {
+          const error = new Error("Upload ticket was missing a signed URL.");
+          error.code = "REQUEST_FAILED";
+          throw error;
+        }
+        if (batch.length === 1 && !tickets.length && !skipped.length) {
+          const error = new Error("Upload ticket was missing a signed URL.");
+          error.code = "REQUEST_FAILED";
+          throw error;
+        }
+        return { tickets, skipped };
       }
 
       function markHeaders(ticket) {
-        if (!ticket.headers) {
-          note("ticket omitted headers; using application/octet-stream");
-          ticket.headers = { "content-type": ticket.contentType || "application/octet-stream" };
+        if (!ticket.headers || !(ticket.headers["content-type"] || ticket.headers["Content-Type"])) {
+          note("ticket omitted content-type; the client does not invent application/octet-stream");
         }
         return ticket;
       }
     },
-    async chunkDone(sessionId, idx) {
-      return call("chunk_done", { session_id: sessionId, idx });
+    async chunkDone(sessionId, idx, sha256) {
+      const fields = { session_id: sessionId, idx };
+      if (sha256) fields.sha256 = sha256;
+      return call("chunk_done", fields);
     },
     async status(sessionId) {
       const result = await call("upload_status", { session_id: sessionId });
       if (!result.ok) return result;
       const body = result.body || {};
+      const missing = body.missing || body.missing_idx || [];
+      const bad = body.bad || body.bad_idx || [];
+      let verified = body.verified || body.verified_idx || [];
+      if (!verified.length && Number.isInteger(Number(body.chunk_count))) {
+        const skip = new Set([...missing, ...bad].map(Number));
+        verified = [];
+        for (let idx = 0; idx < Number(body.chunk_count); idx += 1) {
+          if (!skip.has(idx)) verified.push(idx);
+        }
+      }
       return {
         ...result,
         limits: normalizeLimits(body),
         storage: storageFrom(body),
-        missing: body.missing_idx || body.missing || [],
-        bad: body.bad_idx || body.bad || [],
-        verified: body.verified_idx || body.verified || [],
+        missing,
+        bad,
+        verified,
         sessionStatus: body.status || "",
         expiresAt: body.expires_at || body.expiresAt || "",
       };
@@ -291,10 +321,9 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
         result = await call("complete_upload", { session_id: sessionId });
       }
       if (!result.ok && result.code === "INCOMPLETE") {
-        return {
-          ...result,
-          missing: result.body.missing_idx || result.body.missing || [],
-        };
+        const missing = result.body.missing || result.body.missing_idx || [];
+        const bad = result.body.bad || result.body.bad_idx || [];
+        return { ...result, missing: [...missing, ...bad], bad };
       }
       return result;
     },
@@ -317,8 +346,6 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
           beat_id: target.beat_id,
           kind: input.kind || kind,
           session_id: input.sessionId,
-          duration_seconds: input.durationSeconds ?? null,
-          surface,
         });
       }
       return call("attach_asset", {
@@ -326,15 +353,10 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
         id: target.beat_id,
         kind: input.kind || kind,
         session_id: input.sessionId,
-        duration_seconds: input.durationSeconds ?? null,
       });
     },
     async putChunk(ticket, bytes) {
       const headers = { ...(ticket.headers || {}) };
-      if (!headers["content-type"] && !headers["Content-Type"]) {
-        headers["content-type"] = "application/octet-stream";
-        note("PUT used application/octet-stream because the ticket had no content-type");
-      }
       const response = await fetchFn(ticket.signedUrl, { method: "PUT", headers, body: bytes });
       const text = await response.text().catch(() => "");
       return { ok: response.ok, status: response.status, text };
