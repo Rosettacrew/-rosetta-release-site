@@ -1,8 +1,8 @@
 import { chunkPlan, normalizeLimits, storageFrom } from "./analyze.mjs";
 import { bytesToBase64, base64ToBytes, createIncrementalSha256, sha256Hex } from "./hash-engine.mjs";
-import { FAIL_CLOSED, TICKET_BATCH_CAP, TICKET_REFRESH_SECONDS, createProtocol, isStorageQuotaFailure } from "./protocol.mjs";
+import { FAIL_CLOSED, TICKET_BATCH_CAP, TICKET_REFRESH_SECONDS, createProtocol, declaredContentType, headerContentType, isStorageQuotaFailure, retryFreshTicket } from "./protocol.mjs";
 import { bytesOf } from "./source.mjs";
-import { statusMessage, storageFullMessage, storageOutlook, storageUsageLine, storageWarningMessage } from "./status-copy.mjs";
+import { FILE_CHANGED_COPY, statusMessage, storageFullMessage, storageOutlook, storageUsageLine, storageWarningMessage } from "./status-copy.mjs";
 
 export const PARALLEL_PUTS = 3;
 
@@ -309,6 +309,8 @@ class UploadController {
     if (!limitsResult.ok) throw fail(limitsResult.code || "LARGE_UPLOAD_UNSUPPORTED", limitsResult.message);
     this.limits = limitsResult.limits;
     this.rememberStorage(limitsResult.storage || limitsResult.limits);
+    this.contentType = declaredContentType(source.name, { kind: this.kind, allowed: this.limits.allowed });
+    if (!this.contentType) throw fail("EXT_NOT_ALLOWED", "This file has no allowed content type. Nothing was published.");
     if (!this.limits.chunkBytes) throw fail("BAD_CHUNK", "The server did not provide chunk_bytes.");
     this.maxAttempts = this.limits.maxAttempts || 5;
     this.plan = chunkPlan(source.size, this.limits.chunkBytes);
@@ -331,6 +333,7 @@ class UploadController {
     this.emit({ phase: "verifying", ratio: 1 });
     const fileSha256 = await this.fileHash();
     let completed = await this.protocol.complete(this.sessionId, fileSha256);
+    if (!completed.ok && completed.code === "HASH_CONFLICT") await this.abortForHashConflict();
     if (!completed.ok && completed.code === "INCOMPLETE") {
       const status = await this.protocol.status(this.sessionId);
       if (!status.ok) throw fail(status.code, status.message);
@@ -341,6 +344,7 @@ class UploadController {
       this.emit({ phase: "verifying", ratio: 1 });
       completed = await this.protocol.complete(this.sessionId, fileSha256);
     }
+    if (!completed.ok && completed.code === "HASH_CONFLICT") await this.abortForHashConflict();
     if (!completed.ok) throw fail(completed.code || "REQUEST_FAILED", completed.message);
     this.phase = "verified";
     this.emit({ phase: "verified", ratio: 1 });
@@ -422,6 +426,7 @@ class UploadController {
       lastModified: this.source.lastModified,
       kind: this.kind,
       encoding: this.encoding,
+      contentType: this.contentType,
       originalBytes: this.originalBytes,
       originalSha256: this.originalSha256,
       headSha256: hashes.headSha256,
@@ -586,9 +591,19 @@ class UploadController {
   remaining(idx) {
     const ticket = this.tickets.get(idx);
     if (!ticket) return 0;
-    if (ticket.expiresIn == null) return TICKET_REFRESH_SECONDS;
     const issued = this.ticketIssuedAt.get(idx) || this.now();
-    return ticket.expiresIn - (this.now() - issued) / 1000;
+    const age = (this.now() - issued) / 1000;
+    const lifetimes = [];
+    if (ticket.expiresIn != null) lifetimes.push(ticket.expiresIn);
+    if (this.limits?.ticketTtlSeconds != null) lifetimes.push(this.limits.ticketTtlSeconds);
+    if (!lifetimes.length) return TICKET_REFRESH_SECONDS;
+    return Math.min(...lifetimes) - age;
+  }
+
+  chunkContentType(ticket) {
+    const fromTicket = headerContentType(ticket?.headers);
+    if (fromTicket && fromTicket !== "application/octet-stream") return fromTicket;
+    return this.contentType;
   }
 
   async ticketFor(item, refreshed = false) {
@@ -654,6 +669,13 @@ class UploadController {
           if (this.verified.has(current.idx)) return;
           throw fail("REQUEST_FAILED", "Upload ticket was missing a signed URL.");
         }
+        const contentType = this.chunkContentType(ticket);
+        if (!contentType || contentType === "application/octet-stream") {
+          throw fail("EXT_NOT_ALLOWED", "This file has no allowed content type. Nothing was published.");
+        }
+        if (headerContentType(ticket.headers) !== contentType) {
+          ticket.headers = { ...(ticket.headers || {}), "content-type": contentType };
+        }
         this.inFlight += 1;
         this.peakInFlight = Math.max(this.peakInFlight, this.inFlight);
         let put;
@@ -663,8 +685,14 @@ class UploadController {
           this.inFlight -= 1;
         }
         if (!put.ok && (put.status === 409 || put.status === 400) && /already exists/i.test(put.text || "")) {
-          const done = await this.protocol.chunkDone(this.sessionId, current.idx, current.sha256);
-          if (!done.ok) this.raiseProtocol(done);
+          const done = await this.protocol.chunkDone(this.sessionId, current.idx, current.sha256, contentType);
+          if (!done.ok) {
+            if (await this.recoverChunkDone(done, current)) {
+              if (attempt >= this.maxAttempts) throw fail(done.code, done.message);
+              continue;
+            }
+            this.raiseProtocol(done);
+          }
           this.markVerified(current);
           return;
         }
@@ -672,7 +700,7 @@ class UploadController {
           throw fail("RETRY", "The upload was interrupted.");
         }
         if (!put.ok) throw fail("PUT_FAILED", "Upload failed.");
-        const done = await this.protocol.chunkDone(this.sessionId, current.idx, current.sha256);
+        const done = await this.protocol.chunkDone(this.sessionId, current.idx, current.sha256, contentType);
         if (!done.ok) {
           if (done.code === "CHUNK_MISSING") {
             missingRetries += 1;
@@ -697,6 +725,10 @@ class UploadController {
             this.emit({ phase: "retrying", part: current.idx + 1, attempt: Math.min(this.maxAttempts, attempt + 1) });
             if (attempt >= this.maxAttempts) throw fail(done.code, done.message);
             await this.sleep(backoffMs(attempt, this.random));
+            continue;
+          }
+          if (await this.recoverChunkDone(done, current)) {
+            if (attempt >= this.maxAttempts) throw fail(done.code, done.message);
             continue;
           }
           this.raiseProtocol(done);
@@ -741,7 +773,37 @@ class UploadController {
     throw fail(result.code || "REQUEST_FAILED", result.message);
   }
 
+  async recoverChunkDone(result, current) {
+    if (result.code === "HASH_CONFLICT") await this.abortForHashConflict();
+    if (!retryFreshTicket(result)) return false;
+    this.tickets.delete(current.idx);
+    this.phase = "retrying";
+    this.emit({ phase: "retrying", part: current.idx + 1, attempt: Math.min(this.maxAttempts, (current.attempt || 1)) });
+    await this.sleep(backoffMs(1, this.random));
+    return true;
+  }
+
+  async abortForHashConflict() {
+    const sessionId = this.sessionId;
+    if (this.source) this.storage.removeItem(this.storageKey());
+    this.stopped = "restart";
+    this.phase = "failed";
+    this.emit({ phase: "failed", detail: FILE_CHANGED_COPY });
+    if (sessionId) {
+      try { await this.protocol.abort(sessionId); } catch { /* The hash conflict is still reported. */ }
+    }
+    throw fail("HASH_CONFLICT", FILE_CHANGED_COPY);
+  }
+
   raiseProtocol(result) {
+    if (result.code === "HASH_CONFLICT") {
+      this.stopped = "restart";
+      if (this.source) this.storage.removeItem(this.storageKey());
+      if (this.sessionId) this.protocol.abort(this.sessionId).catch(() => {});
+      this.phase = "failed";
+      this.emit({ phase: "failed", detail: FILE_CHANGED_COPY });
+      throw fail("HASH_CONFLICT", FILE_CHANGED_COPY);
+    }
     if (result.code === "SESSION_EXPIRED" || result.code === "SESSION_NOT_FOUND") this.dropSession(result.code);
     if (isStorageQuotaFailure(result)) this.raiseStartFailure(result);
     if (FAIL_CLOSED.has(result.code)) throw fail(result.code, "This file failed a safety check and was not saved. Nothing was published.");

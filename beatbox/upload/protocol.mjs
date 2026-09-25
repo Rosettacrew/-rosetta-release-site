@@ -18,6 +18,37 @@ export const FAIL_CLOSED = new Set([
 export const TICKET_BATCH_CAP = 16;
 export const TICKET_REFRESH_SECONDS = 30;
 
+const CONTENT_TYPES = {
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+  zip: "application/zip",
+  mp4: "video/mp4",
+};
+
+export function declaredContentType(filename, { kind, allowed } = {}) {
+  const ext = String(filename || "").toLowerCase().split(".").pop().replace(/[^a-z0-9]/g, "");
+  const row = allowed && kind ? allowed[kind] : null;
+  if (row && typeof row === "object" && !Array.isArray(row) && typeof row[ext] === "string" && row[ext] !== "application/octet-stream") {
+    return row[ext];
+  }
+  if (Array.isArray(row) && !row.includes(ext)) return "";
+  return CONTENT_TYPES[ext] || "";
+}
+
+export function headerContentType(headers = {}) {
+  if (!headers) return "";
+  return headers["content-type"] || headers["Content-Type"] || "";
+}
+
+export function retryFreshTicket(result) {
+  if (!result || result.ok || result.body?.retryable === false) return false;
+  if (result.code === "CHUNK_HASH_MISMATCH" || result.code === "CHUNK_SIZE_MISMATCH" || result.code === "CHUNK_MISSING") return false;
+  if (result.code === "HASH_CONFLICT" || FAIL_CLOSED.has(result.code)) return false;
+  if (result.body?.retryable === true) return true;
+  const text = `${result.code || ""} ${result.message || ""}`.toLowerCase();
+  return /ticket/.test(text) && /ttl|expir|stale|old/.test(text);
+}
+
 function asCode(body) {
   if (!body || typeof body !== "object") return "";
   if (typeof body.code === "string") return body.code;
@@ -136,6 +167,7 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
       filename: input.filename,
       total_bytes: input.totalBytes,
       head_sha256: input.headSha256,
+      ...(input.contentType ? { content_type: input.contentType } : {}),
       ...(gzip && input.encoding ? { encoding: input.encoding } : {}),
       ...(gzip && input.originalBytes != null ? { original_bytes: input.originalBytes } : {}),
       ...(gzip && input.originalSha256 ? { original_sha256: input.originalSha256 } : {}),
@@ -150,6 +182,7 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
       total_bytes: input.totalBytes,
       file_sha256: input.fileSha256,
       chunk_sha256: input.chunkSha256,
+      ...(input.contentType ? { content_type: input.contentType } : {}),
     };
   }
 
@@ -284,9 +317,10 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
         return ticket;
       }
     },
-    async chunkDone(sessionId, idx, sha256) {
+    async chunkDone(sessionId, idx, sha256, contentType) {
       const fields = { session_id: sessionId, idx };
       if (sha256) fields.sha256 = sha256;
+      if (contentType) fields.content_type = contentType;
       return call("chunk_done", fields);
     },
     async status(sessionId) {

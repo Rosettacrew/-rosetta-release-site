@@ -9,9 +9,9 @@ import { joinParts, chooseJoinStrategy, detectJoinStrategy, joinMasterDownload, 
 import { createMemoryStorage, createUploader, backoffMs, resumeKey } from "../beatbox/upload/large-upload.mjs";
 import { inspectBeatboxZip } from "../beatbox/upload/intake.mjs";
 import { packLoose } from "../beatbox/upload/pack-loose.mjs";
-import { createProtocol, isStorageQuotaFailure } from "../beatbox/upload/protocol.mjs";
+import { createProtocol, declaredContentType, isStorageQuotaFailure, retryFreshTicket } from "../beatbox/upload/protocol.mjs";
 import { applyProgress } from "../beatbox/upload/progress-ui.mjs";
-import { statusMessage, storageFullMessage, storageOutlook, storageUsageLine, storageWarningMessage } from "../beatbox/upload/status-copy.mjs";
+import { FILE_CHANGED_COPY, statusMessage, storageFullMessage, storageOutlook, storageUsageLine, storageWarningMessage } from "../beatbox/upload/status-copy.mjs";
 import { STUDIO_LARGE_UPLOAD_ENABLED, uploadStudioFile } from "../beatbox/upload/studio-bridge.mjs";
 import { zipJsEntryToView, preflightZip } from "../beatbox/upload/zip-preflight.mjs";
 import { entrySource } from "../beatbox/upload/zip-stream-entry.mjs";
@@ -269,7 +269,13 @@ assert.equal(start.body.file_sha256, undefined);
 assert.ok(Array.isArray(smallMock.state.requests.find((entry) => entry.action === "chunk_ticket").body.idx));
 assert.equal(smallMock.state.requests.find((entry) => entry.action === "chunk_done").body.sha256.length, 64);
 assert.equal(smallMock.state.putHeaders[0]["content-type"], "audio/mpeg");
-assert.notEqual(smallMock.state.putHeaders[0]["content-type"], "application/octet-stream");
+assert.equal(smallMock.state.putHeaders.every((headers) => headers["content-type"] === "audio/mpeg"), true);
+assert.equal(smallMock.state.requests.find((entry) => entry.action === "start_upload" && !entry.body.dry_run).body.content_type, "audio/mpeg");
+assert.equal(smallMock.state.requests.filter((entry) => entry.action === "chunk_done").every((entry) => entry.body.content_type === "audio/mpeg"), true);
+assert.doesNotMatch(readFileSync("beatbox/upload/intake.mjs", "utf8"), /octet-stream/);
+assert.equal(declaredContentType("master.wav", { kind: "full", allowed: { full: { wav: "audio/wav" } } }), "audio/wav");
+assert.equal(retryFreshTicket({ ok: false, code: "TICKET_TOO_OLD", message: "ticket older than ticket_ttl_seconds", body: { retryable: true } }), true);
+assert.equal(retryFreshTicket({ ok: false, code: "HASH_CONFLICT", message: "file changed", body: { retryable: false } }), false);
 assert.equal(smallResult.fileSha256, createHash("sha256").update(new Uint8Array(await small.arrayBuffer())).digest("hex"));
 assert.equal(JSON.stringify(JSON.parse(smallRun.storage.getItem(smallRun.uploader.storageKey(blobSource(small))) || "null")), "null");
 
@@ -788,5 +794,35 @@ const gunzipped = await joinMasterDownload({
 });
 assert.equal(gunzipped.fileSha256, gzipWhole);
 assert.equal(await sha256Hex(gunzipped.bytes), originalSha);
+
+const conflictMock = createMockUploadServer({ chunkBytes: 16, singleObjectThreshold: 1, conflictOnComplete: true });
+await assert.rejects(
+  () => uploaderFor(conflictMock).uploader.upload(blobSource(fileFrom(concat([wav, new Uint8Array(8)]), "master.wav"))),
+  (error) => {
+    assert.equal(error.code, "HASH_CONFLICT");
+    assert.equal(error.message, FILE_CHANGED_COPY);
+    assert.match(error.message, /file changed/i);
+    assert.match(error.message, /start over/i);
+    return true;
+  },
+);
+assert.equal(conflictMock.state.requests.filter((entry) => entry.action === "complete_upload").length, 1);
+assert.equal(conflictMock.state.requests.filter((entry) => entry.action === "abort_upload").length, 1);
+assert.equal(conflictMock.state.sessions.values().next().value.status, "aborted");
+
+const staleMock = createMockUploadServer({ chunkBytes: 32, singleObjectThreshold: 1, staleTicketOnce: true });
+const staleFile = fileFrom(concat([wav, new Uint8Array(4)]), "master.wav");
+const staleResult = await uploaderFor(staleMock).uploader.upload(blobSource(staleFile));
+assert.equal(staleResult.status, "verified");
+assert.equal(staleMock.state.requests.filter((entry) => entry.action === "chunk_done").length, 2);
+assert.ok(staleMock.state.puts.length >= 2);
+assert.equal(staleMock.state.requests.some((entry) => entry.body?.code === "TICKET_TOO_OLD"), false);
+
+const ttlMock = createMockUploadServer({ chunkBytes: 32, singleObjectThreshold: 1, ticketTtl: 10, signedTtl: 7200 });
+const ttlFile = fileFrom(concat([wav, new Uint8Array(4)]), "master.wav");
+await uploaderFor(ttlMock).uploader.upload(blobSource(ttlFile));
+assert.equal(ttlMock.limits.ticket_ttl_seconds, 10);
+assert.ok(ttlMock.state.requests.filter((entry) => entry.action === "chunk_ticket").length >= 2);
+assert.equal(ttlMock.state.putHeaders.every((headers) => headers["content-type"] === "audio/wav"), true);
 
 console.log("Large-file uploader checks passed.");

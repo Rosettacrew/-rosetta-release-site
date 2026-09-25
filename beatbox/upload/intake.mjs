@@ -1,5 +1,6 @@
 import { LIMITS, magicAllowlist, parseSidecar, uploadFilename, validateZipEntries } from "../package-rules.mjs";
 import { HEAD_BYTES, classify, choosePath, normalizeLimits } from "./analyze.mjs";
+import { declaredContentType } from "./protocol.mjs";
 import { loadZipJs } from "./zip-loader.mjs";
 import { preflightZip } from "./zip-preflight.mjs";
 import { entrySource } from "./zip-stream-entry.mjs";
@@ -158,8 +159,12 @@ export async function inspectLoosePackage(files, { protocol }) {
     }
     const uploadName = uploadFilename("full", result.full.ext);
     if (fullPath.path === "single") {
+      const type = declaredContentType(uploadName, { kind: "full", allowed: limits.allowed });
+      if (!type) {
+        return { ok: false, code: "EXT_NOT_ALLOWED", errors: ["This file has no allowed content type. Nothing was published."] };
+      }
       full = {
-        file: new File([fullFile], uploadName, { type: fullFile.type || "application/octet-stream", lastModified: fullFile.lastModified }),
+        file: new File([fullFile], uploadName, { type, lastModified: fullFile.lastModified }),
         path: result.full.path,
       };
     } else {

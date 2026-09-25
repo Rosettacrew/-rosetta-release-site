@@ -102,3 +102,4 @@ export function statusMessage(state = {}) {
 }
 
 export const FAIL_CLOSED_COPY = "This file failed a safety check and was not saved. Nothing was published.";
+export const FILE_CHANGED_COPY = "This file changed. Start over.";

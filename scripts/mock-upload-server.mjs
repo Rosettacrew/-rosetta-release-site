@@ -33,6 +33,7 @@ export function createMockUploadServer(options = {}) {
     max_attempts: options.maxAttempts ?? 5,
     ticket_batch_cap: options.ticketBatchCap ?? options.ticketBatchMax ?? 16,
     ticket_batch_max: options.ticketBatchMax ?? options.ticketBatchCap ?? 16,
+    ticket_ttl_seconds: options.ticketTtl ?? 120,
     min_chunk_bytes: options.minChunkBytes ?? 1024 * 1024,
     max_total_upload_bytes: options.storageQuotaBytes === undefined ? 960 * 1024 * 1024 : options.storageQuotaBytes,
   };
@@ -54,6 +55,9 @@ export function createMockUploadServer(options = {}) {
     incompleteOnce: !!options.incompleteOnce,
     expireAfterPuts: options.expireAfterPuts ?? null,
     ticketTtl: options.ticketTtl ?? 120,
+    signedTtl: options.signedTtl ?? null,
+    staleTicketOnce: !!options.staleTicketOnce,
+    conflictOnComplete: !!options.conflictOnComplete,
     shortTicketOnce: !!options.shortTicketOnce,
     putDelayMs: options.putDelayMs ?? 0,
     activePuts: 0,
@@ -70,7 +74,7 @@ export function createMockUploadServer(options = {}) {
     if (ext === "mp3") return "audio/mpeg";
     if (ext === "zip") return "application/zip";
     if (ext === "mp4") return "video/mp4";
-    return "application/octet-stream";
+    return "";
   }
 
   function sessionOrFail(id) {
@@ -247,7 +251,7 @@ export function createMockUploadServer(options = {}) {
         skipped.push({ idx, reason: "verified" });
         continue;
       }
-      let ttl = state.ticketTtl;
+      let ttl = state.signedTtl ?? state.ticketTtl;
       if (state.shortTicketOnce) {
         ttl = 10;
         state.shortTicketOnce = false;
@@ -256,13 +260,16 @@ export function createMockUploadServer(options = {}) {
       if (state.hashMode === "deferred" && !sha) return fail("HASHES_REQUIRED", 400, { message: "sha256 is required" });
       session.tickets.set(idx, { sha256: sha, expiresAt: Date.now() + ttl * 1000 });
       const bytes = idx === session.chunkCount - 1 ? session.total - idx * session.chunkBytes : session.chunkBytes;
+      const mime = mimeFor(session.filename);
+      const headers = { "x-upsert": "false" };
+      if (mime) headers["content-type"] = mime;
       tickets.push({
         idx,
         method: "PUT",
         bucket: "release-private",
         path: `uploads/${session.id}/${idx}.part`,
         signed_url: `https://upload.mock.local/object/${session.id}/${idx}`,
-        headers: { "content-type": mimeFor(session.filename), "x-upsert": "false" },
+        headers,
         bytes,
         sha256: sha || null,
         expires_in: ttl,
@@ -279,6 +286,17 @@ export function createMockUploadServer(options = {}) {
     if (!Number.isInteger(idx) || idx < 0 || idx >= session.chunkCount) return fail("CHUNK_OUT_OF_RANGE", 400);
     const row = session.chunks[idx];
     if (row.status === "verified") return ok({ session_id: session.id, idx, status: "verified", duplicate: true, noop: true });
+    const mime = mimeFor(session.filename);
+    if (message.content_type === "application/octet-stream") {
+      return fail("UNSUPPORTED_MEDIA", 415, { message: "content-type application/octet-stream is not allowed" });
+    }
+    if (message.content_type && mime && message.content_type !== mime) {
+      return fail("BAD_REQUEST", 400, { message: "content-type mismatch", field: "content_type" });
+    }
+    if (state.staleTicketOnce) {
+      state.staleTicketOnce = false;
+      return fail("TICKET_TOO_OLD", 409, { retryable: true, message: "ticket older than ticket_ttl_seconds" });
+    }
     const stored = state.objects.get(`${session.id}:${idx}`);
     if (!stored) return fail("CHUNK_MISSING", 409, { message: "Chunk object is missing." });
     const expected = session.tickets.get(idx)?.sha256 || session.chunkSha256[idx] || "";
@@ -331,6 +349,10 @@ export function createMockUploadServer(options = {}) {
     }
     if (lists.missing.length || lists.bad.length) {
       return fail("INCOMPLETE", 409, { missing: lists.missing, bad: lists.bad });
+    }
+    if (state.conflictOnComplete) {
+      state.conflictOnComplete = false;
+      return fail("HASH_CONFLICT", 409, { message: "file_sha256 differs from the one sent at start." });
     }
     if (message.file_sha256) session.fileSha256 = message.file_sha256;
     session.status = "verified";
