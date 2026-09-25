@@ -280,7 +280,7 @@ assert.throws(() => uploadFilename("preview", "exe"));
 const html = readFileSync("beatbox.html", "utf8");
 assert.match(html, /<meta name="robots" content="noindex,nofollow"\s*\/?>/);
 assert.match(html, /from "\.\/beatbox\/package-rules\.mjs"/);
-assert.match(html, /https:\/\/esm\.sh\/jszip@3\.10\.1/);
+assert.match(html, /from "\.\/vendor\/jszip-3\.10\.1\/jszip\.js"/);
 assert.match(html, /shouldCreateUser:\s*false/);
 assert.match(html, /id="drop"/);
 assert.match(html, /up to 50 MB/);
