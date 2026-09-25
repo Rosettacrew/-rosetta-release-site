@@ -53,6 +53,8 @@
     .suggestions{margin-top:8px;padding:14px;border:1px solid #6a522d;border-radius:12px;background:#171109}
     .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
     .hint{color:var(--gold2);font-size:1rem;min-height:1.4rem}
+    .upload-bar{height:14px;border-radius:999px;background:#1c1c1c;border:1px solid var(--line);overflow:hidden}
+    .upload-bar div{height:100%;width:0;background:linear-gradient(135deg,var(--gold2),#ad7824)}
     @media(max-width:800px){
       .shell{grid-template-columns:1fr}
       .side{border-right:0;border-bottom:1px solid var(--line)}
@@ -186,6 +188,16 @@
           <button id="approve" class="btn" type="button">Approve &amp; publish</button>
           <button id="reset" class="ghost" type="button">Choose a different ZIP</button>
         </div>
+        <section id="largeUpload" hidden>
+          <h3 id="largeUploadHeading">Large upload</h3>
+          <div id="largeUploadProgress" data-upload-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="largeUploadStatus" class="upload-bar"><div id="largeUploadBar" data-upload-bar></div></div>
+          <p id="largeUploadStatus" data-upload-status class="message" role="status" aria-live="polite"></p>
+          <div class="actions">
+            <button id="largePause" type="button">Pause</button>
+            <button id="largeResume" type="button">Resume</button>
+            <button id="largeCancel" type="button">Cancel</button>
+          </div>
+        </section>
         <p id="status" class="message" role="status"></p>
         <p id="done" hidden>This listing is on BeatBay. Further edits belong in <a href="beatbay-admin.html">BeatBay Admin</a>.</p>
       </section>
@@ -206,6 +218,7 @@
       suggestStyle,
       uploadFilename,
       validateReview,
+      LIMITS,
       validateZipEntries,
       viewZipEntry,
       zipRejectedReason,
@@ -226,6 +239,7 @@
     let suggestions = { bpm: null, style: null, musical_key: null };
     let objectUrls = [];
     let published = false;
+    let activeUpload = null;
 
     function trackUrl(url) {
       objectUrls.push(url);
@@ -338,6 +352,13 @@
       q("analyze").disabled = busy || published;
     }
     function resetPackage() {
+      if (activeUpload) {
+        const current = activeUpload;
+        activeUpload = null;
+        current.cancel().catch(() => {});
+      }
+      const large = q("largeUpload");
+      if (large) large.hidden = true;
       revokeUrls();
       extracted = null;
       beatId = "";
@@ -415,6 +436,9 @@
       const reason = zipRejectedReason(file);
       if (reason) return showErrors([reason]);
       q("status").textContent = "";
+      return loadZipPackage(file);
+    }
+    async function loadZipPackage(file) {
       try {
         const zip = await JSZip.loadAsync(await file.arrayBuffer());
         // viewZipEntry reads unsafeOriginalName so JSZip cannot hide ../ behind a sanitized name.
@@ -491,7 +515,59 @@
       if (!Number.isFinite(duration) || duration <= 0) return 30;
       return Math.max(1, Math.min(600, Math.round(duration)));
     }
-    async function putAsset(kind, file) {
+    async function putChunkedAsset(kind, plan) {
+      const { createUploader } = await import("./beatbox/upload/large-upload.mjs");
+      const { maybeCompress } = await import("./beatbox/upload/compress.mjs");
+      const { mountProgress } = await import("./beatbox/upload/progress-ui.mjs");
+      const panel = q("largeUpload");
+      panel.hidden = false;
+      const ui = mountProgress(panel);
+      let source = plan.source;
+      let meta = { encoding: "identity", limits: plan.limits };
+      if (plan.compressible) {
+        const decision = await maybeCompress(source, plan.limits, (state) => ui.render(state));
+        source = decision.source;
+        meta = {
+          encoding: decision.encoding,
+          originalBytes: decision.originalBytes,
+          originalSha256: decision.originalSha256,
+          limits: plan.limits,
+        };
+      }
+      const uploader = createUploader({
+        endpoint: API,
+        getToken: () => sess.access_token,
+        apikey: KEY,
+        target: { surface: "beatbay", beat_id: beatId },
+        kind,
+        userId: sess?.user?.id || "",
+        onStatus: (state) => ui.render(state),
+      });
+      activeUpload = uploader;
+      q("largePause").onclick = () => uploader.pause();
+      q("largeResume").onclick = () => uploader.resume();
+      q("largeCancel").onclick = () => { uploader.cancel().catch((error) => { q("largeUploadStatus").textContent = error.message; }); };
+      try {
+        const result = await uploader.upload(source, meta);
+        ui.render({ phase: "verified", name: plan.name || source.name, size: source.size, ratio: 1 });
+        return af({
+          method: "POST",
+          body: JSON.stringify({
+            action: "attach_asset",
+            intake: "beatbox",
+            id: beatId,
+            kind,
+            session_id: result.sessionId,
+            duration_seconds: kind === "preview" ? previewDuration() : null,
+          }),
+        });
+      } finally {
+        if (plan.close) await plan.close().catch(() => {});
+        if (activeUpload === uploader) activeUpload = null;
+      }
+    }
+    async function putAsset(kind, file, plan) {
+      if (plan?.path === "chunked") return putChunkedAsset(kind, plan);
       const signed = await af({
         method: "POST",
         body: JSON.stringify({ action: "create_upload", intake: "beatbox", id: beatId, kind, filename: file.name }),
@@ -518,13 +594,83 @@
     async function uploadAssets() {
       if (!extracted?.preview) throw Error("A preview audio file is required.");
       if (!extracted.previewUploaded) {
-        await putAsset("preview", extracted.preview);
+        if (extracted.previewPlan?.path === "chunked") await putAsset("preview", extracted.preview, extracted.previewPlan);
+        else await putAsset("preview", extracted.preview);
         extracted.previewUploaded = true;
       }
       if (extracted.full && !extracted.fullUploaded) {
         await putAsset("full", extracted.full);
         extracted.fullUploaded = true;
       }
+      if (extracted.fullPlan?.path === "chunked" && !extracted.fullUploaded) {
+        await putAsset("full", extracted.fullPlan.source, extracted.fullPlan);
+        extracted.fullUploaded = true;
+      }
+    }
+    function presentPrepared(prepared) {
+      const preview = prepared.preview.file;
+      revokeUrls();
+      q("player").src = trackUrl(URL.createObjectURL(preview));
+      if (prepared.cover) {
+        q("cover").src = trackUrl(URL.createObjectURL(new Blob([prepared.cover.bytes], { type: prepared.cover.mime })));
+        q("cover").hidden = false;
+      } else {
+        q("cover").hidden = true;
+      }
+      extracted = {
+        preview,
+        full: prepared.full?.file || null,
+        originalPreviewPath: prepared.result.preview.path,
+        fullPlan: prepared.fullPlan || null,
+        previewPlan: prepared.previewPlan || null,
+      };
+      const draft = buildReviewDraft({
+        previewPath: prepared.result.preview.path,
+        sidecar: prepared.sidecar || { ok: true, fields: {}, warnings: [] },
+        existingCodes: catalogCodes,
+      });
+      showReview(draft, prepared.result);
+    }
+    async function protocolFor(kind) {
+      const { createProtocol } = await import("./beatbox/upload/protocol.mjs");
+      return createProtocol({
+        endpoint: API,
+        getToken: () => sess.access_token,
+        apikey: KEY,
+        target: { surface: "beatbay", beat_id: beatId || "pending" },
+        kind,
+      });
+    }
+    async function acceptLargeIntake(files) {
+      if (busy) return;
+      resetPackage();
+      q("status").textContent = "";
+      try {
+        const { inspectBeatboxZip, inspectLoosePackage } = await import("./beatbox/upload/intake.mjs");
+        const protocol = await protocolFor("full");
+        const prepared = files.length === 1
+          ? await inspectBeatboxZip({ file: files[0], protocol })
+          : await inspectLoosePackage(files, { protocol });
+        if (!prepared.ok) return showErrors(prepared.errors);
+        if (prepared.path === "single" && files.length === 1 && /\.zip$/i.test(files[0].name || "")) return loadZipPackage(files[0]);
+        if (prepared.path === "single") return showErrors(["This package is small enough for the regular upload, but it was not a single ZIP."]);
+        presentPrepared(prepared);
+      } catch (error) {
+        if (error?.code === "LARGE_UPLOAD_UNSUPPORTED" && files.length === 1) return acceptZip(files[0]);
+        resetPackage();
+        showErrors([error?.message || "This file is not a valid ZIP archive."]);
+      }
+    }
+    function acceptIncoming(files) {
+      const list = [...files].filter(Boolean);
+      if (!list.length) return;
+      if (list.length === 1 && /\.zip$/i.test(list[0].name || "") && list[0].size <= LIMITS.zipBytes) return acceptZip(list[0]);
+      if (list.length === 1 && !/\.zip$/i.test(list[0].name || "")) return acceptZip(list[0]);
+      if (!sess) {
+        if (list.length === 1) return acceptZip(list[0]);
+        return showErrors(["Not signed in"]);
+      }
+      return acceptLargeIntake(list);
     }
     async function saveListing(publish) {
       const form = formState();
@@ -594,7 +740,7 @@
     q("zipFile").addEventListener("change", () => {
       const file = q("zipFile").files && q("zipFile").files[0];
       q("zipFile").value = "";
-      if (file) acceptZip(file);
+      if (file) acceptIncoming([file]);
     });
     for (const type of ["dragenter", "dragover"]) {
       q("drop").addEventListener(type, (event) => {
@@ -607,8 +753,8 @@
       event.preventDefault();
       q("drop").classList.remove("hot");
       const files = [...(event.dataTransfer?.files || [])];
-      if (files.length !== 1) return showErrors(["Drop one ZIP at a time."]);
-      acceptZip(files[0]);
+      if (!files.length) return showErrors(["Drop one ZIP at a time."]);
+      acceptIncoming(files);
     });
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || q("review").hidden) return;
@@ -629,6 +775,10 @@
     });
     q("analyze").addEventListener("click", async () => {
       if (!extracted?.preview) return;
+      if (extracted.preview.size > LIMITS.audioBytes) {
+        q("analysisStatus").textContent = "Could not analyze this file. Try another MP3 or WAV.";
+        return;
+      }
       q("analysisStatus").textContent = "Listening for tempo and style clues…";
       try {
         const result = await analyzeFile(extracted.preview, extracted.originalPreviewPath);
