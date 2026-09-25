@@ -12,6 +12,12 @@ export function applyProgress(els, state = {}) {
     els.progress.setAttribute("aria-valuemin", "0");
     els.progress.setAttribute("aria-valuemax", "100");
   }
+  if (els.storage) els.storage.textContent = state.storageLine || "";
+  if (els.warning) {
+    const warning = state.storageWarning || "";
+    els.warning.textContent = warning;
+    els.warning.hidden = !warning;
+  }
 }
 
 export function mountProgress(root) {
@@ -19,6 +25,8 @@ export function mountProgress(root) {
     status: root.querySelector("[data-upload-status]"),
     bar: root.querySelector("[data-upload-bar]"),
     progress: root.querySelector("[data-upload-progress]"),
+    storage: root.querySelector("[data-upload-storage]"),
+    warning: root.querySelector("[data-upload-storage-warning]"),
   };
   return {
     render(state) {

@@ -33,6 +33,7 @@ export function createMockUploadServer(options = {}) {
     max_attempts: options.maxAttempts ?? 5,
     ticket_batch_cap: options.ticketBatchCap ?? 16,
   };
+  const storageQuotaBytes = options.storageQuotaBytes === undefined ? 1024 * 1024 * 1024 : options.storageQuotaBytes;
   const state = {
     hashMode: options.hashMode || "deferred",
     batchSupported: options.batchSupported !== false,
@@ -54,6 +55,8 @@ export function createMockUploadServer(options = {}) {
     activePuts: 0,
     peakPuts: 0,
     putCount: 0,
+    storageUsedBytes: options.storageUsedBytes ?? 0,
+    storageQuotaBytes,
   };
 
   function sessionOrFail(id) {
@@ -81,7 +84,12 @@ export function createMockUploadServer(options = {}) {
   }
 
   function limitBody(extra = {}) {
-    return { ...limits, hash_mode: state.hashMode, ...extra };
+    const storage = {};
+    if (state.storageQuotaBytes != null) {
+      storage.storage_used_bytes = state.storageUsedBytes ?? 0;
+      storage.storage_quota_bytes = state.storageQuotaBytes;
+    }
+    return { ...limits, ...storage, hash_mode: state.hashMode, ...extra };
   }
 
   async function handle(message, headers = {}) {
@@ -112,6 +120,15 @@ export function createMockUploadServer(options = {}) {
     }
     const total = Number(message.total_bytes);
     if (!Number.isFinite(total) || total <= 0) return fail("EMPTY", 400);
+    if (state.storageQuotaBytes != null && state.storageUsedBytes + total > state.storageQuotaBytes) {
+      return fail("LIMIT_EXCEEDED", 413, {
+        reason: "storage_quota",
+        message: "storage quota exceeded",
+        total_bytes: total,
+        storage_used_bytes: state.storageUsedBytes,
+        storage_quota_bytes: state.storageQuotaBytes,
+      });
+    }
     if (total > limits.max_file_bytes) return fail("LIMIT_EXCEEDED", 413);
     const chunkBytes = limits.chunk_bytes;
     const chunkCount = Math.ceil(total / chunkBytes);

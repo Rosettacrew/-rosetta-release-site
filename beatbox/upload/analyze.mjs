@@ -89,8 +89,18 @@ export function normalizeLimits(raw) {
     sessionTtlSeconds: numberOrNull(source.sessionTtlSeconds ?? source.session_ttl_seconds ?? source.ttl_seconds),
     maxAttempts: numberOrNull(source.maxAttempts ?? source.max_attempts),
     ticketBatchCap: numberOrNull(source.ticketBatchCap ?? source.ticket_batch_cap),
+    storageUsedBytes: numberOrNull(source.storageUsedBytes ?? source.storage_used_bytes),
+    storageQuotaBytes: numberOrNull(source.storageQuotaBytes ?? source.storage_quota_bytes),
     allowedExt: source.allowedExt || source.allowed_ext || null,
   };
+}
+
+export function storageFrom(raw) {
+  const source = raw || {};
+  const used = numberOrNull(source.usedBytes ?? source.storageUsedBytes ?? source.storage_used_bytes);
+  const quota = numberOrNull(source.quotaBytes ?? source.storageQuotaBytes ?? source.storage_quota_bytes);
+  if (used == null && quota == null) return null;
+  return { usedBytes: used, quotaBytes: quota };
 }
 
 export function choosePath({ size, isBeatboxZip = false, limits }) {

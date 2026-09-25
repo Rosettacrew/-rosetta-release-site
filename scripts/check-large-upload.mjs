@@ -3,15 +3,15 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { crc32 } from "node:zlib";
 import { Worker } from "node:worker_threads";
-import { classify, choosePath, chunkPlan, compressionAllowed, detectMagic, middleSampleRange } from "../beatbox/upload/analyze.mjs";
+import { classify, choosePath, chunkPlan, compressionAllowed, detectMagic, middleSampleRange, normalizeLimits, storageFrom } from "../beatbox/upload/analyze.mjs";
 import { gzipTrial, maybeCompress } from "../beatbox/upload/compress.mjs";
 import { joinParts, chooseJoinStrategy } from "../beatbox/upload/join-download.mjs";
 import { createMemoryStorage, createUploader, backoffMs, resumeKey } from "../beatbox/upload/large-upload.mjs";
 import { inspectBeatboxZip } from "../beatbox/upload/intake.mjs";
 import { packLoose } from "../beatbox/upload/pack-loose.mjs";
-import { createProtocol } from "../beatbox/upload/protocol.mjs";
+import { createProtocol, isStorageQuotaFailure } from "../beatbox/upload/protocol.mjs";
 import { applyProgress } from "../beatbox/upload/progress-ui.mjs";
-import { statusMessage } from "../beatbox/upload/status-copy.mjs";
+import { statusMessage, storageFullMessage, storageOutlook, storageUsageLine, storageWarningMessage } from "../beatbox/upload/status-copy.mjs";
 import { STUDIO_LARGE_UPLOAD_ENABLED, uploadStudioFile } from "../beatbox/upload/studio-bridge.mjs";
 import { zipJsEntryToView, preflightZip } from "../beatbox/upload/zip-preflight.mjs";
 import { entrySource } from "../beatbox/upload/zip-stream-entry.mjs";
@@ -430,6 +430,9 @@ assert.match(html, /id="largePause"/);
 assert.match(html, /id="largeResume"/);
 assert.match(html, /id="largeCancel"/);
 assert.match(html, /aria-live="polite"/);
+assert.match(html, /id="largeUploadStorage"/);
+assert.match(html, /data-upload-storage-warning/);
+assert.match(html, /showStoragePlan/);
 assert.doesNotMatch(html, /storefront_enabled:\s*true/);
 assert.equal(STUDIO_LARGE_UPLOAD_ENABLED, false);
 assert.match(readFileSync("studio/index.html", "utf8"), /STUDIO_LARGE_UPLOAD_ENABLED = false/);
@@ -517,6 +520,7 @@ const bigMock = createMockUploadServer({
   chunkBytes: virtualChunk,
   singleObjectThreshold: 1024,
   maxFileBytes: 8 * 1024 * 1024 * 1024,
+  storageQuotaBytes: 8 * 1024 * 1024 * 1024,
   discardBodies: true,
 });
 const big = await uploaderFor(bigMock).uploader.upload(virtual);
@@ -546,5 +550,143 @@ const workerHash = await workerResult;
 await worker.terminate();
 assert.equal(workerHash, createHash("sha256").update(new Uint8Array(await workerFile.arrayBuffer())).digest("hex"));
 assert.ok(workerMessages.includes("chunk"));
+
+const MB = 1024 * 1024;
+const GB = 1024 * 1024 * 1024;
+assert.equal(storageUsageLine({ usedBytes: 612 * MB, quotaBytes: GB }), "Storage: 612 MB of 1 GB used");
+assert.equal(storageOutlook({ usedBytes: 700, quotaBytes: 1000 }, 100).level, "ok");
+assert.equal(storageOutlook({ usedBytes: 700, quotaBytes: 1000 }, 101).level, "warn");
+assert.equal(storageOutlook({ usedBytes: 900, quotaBytes: 1000 }, 200).level, "block");
+assert.match(storageWarningMessage({ usedBytes: 612 * MB, quotaBytes: GB }, 220 * MB), /past 80%/);
+assert.match(storageFullMessage({ usedBytes: 612 * MB, quotaBytes: GB }), /Storage is full/);
+assert.match(storageFullMessage({ usedBytes: 612 * MB, quotaBytes: GB }), /plan needs upgrading/);
+assert.match(statusMessage({ phase: "storage-full", storage: { usedBytes: 612 * MB, quotaBytes: GB } }), /Storage is full \(612 MB of 1 GB used\)/);
+const storageEls = {
+  status: { textContent: "" },
+  bar: { style: {} },
+  progress: { setAttribute() {} },
+  storage: { textContent: "" },
+  warning: { textContent: "", hidden: true },
+};
+applyProgress(storageEls, {
+  phase: "uploading",
+  ratio: 0.25,
+  storageLine: "Storage: 612 MB of 1 GB used",
+  storageWarning: "Storage warning: past 80%.",
+  message: "Uploading",
+});
+assert.equal(storageEls.storage.textContent, "Storage: 612 MB of 1 GB used");
+assert.match(storageEls.warning.textContent, /past 80%/);
+assert.equal(storageEls.warning.hidden, false);
+
+const quotaMock = createMockUploadServer({
+  chunkBytes: 8,
+  singleObjectThreshold: 1,
+  maxFileBytes: 5000,
+  storageUsedBytes: 612 * MB,
+  storageQuotaBytes: GB,
+});
+const quotaProtocol = createProtocol({
+  endpoint: "https://upload.mock.local/fn",
+  getToken: () => "token",
+  apikey: "key",
+  target: { surface: "beatbay", beat_id: "beat-1" },
+  kind: "full",
+  fetchImpl: quotaMock.fetchImpl,
+});
+const quotaLimits = await quotaProtocol.fetchLimits();
+assert.equal(quotaLimits.storage.usedBytes, 612 * MB);
+assert.equal(quotaLimits.storage.quotaBytes, GB);
+assert.equal(normalizeLimits(quotaLimits.body).storageUsedBytes, 612 * MB);
+assert.deepEqual(storageFrom(quotaLimits.limits), quotaLimits.storage);
+const quotaStatus = await quotaMock.handle({ action: "upload_status", dry_run: true });
+assert.equal(quotaStatus.body.storage_used_bytes, 612 * MB);
+assert.equal(quotaStatus.body.storage_quota_bytes, GB);
+const quotaRefuse = await quotaMock.handle({
+  action: "start_upload",
+  total_bytes: 500 * MB,
+  head_sha256: "ab".repeat(32),
+  filename: "master.wav",
+  kind: "full",
+});
+assert.equal(quotaRefuse.status, 413);
+assert.equal(quotaRefuse.body.code, "LIMIT_EXCEEDED");
+assert.equal(quotaRefuse.body.reason, "storage_quota");
+assert.equal(quotaRefuse.body.storage_used_bytes, 612 * MB);
+assert.equal(isStorageQuotaFailure({ code: quotaRefuse.body.code, message: quotaRefuse.body.message, body: quotaRefuse.body }), true);
+const fileCap = await quotaMock.handle({
+  action: "start_upload",
+  total_bytes: 4000,
+  head_sha256: "cd".repeat(32),
+  filename: "small.wav",
+  kind: "full",
+});
+assert.equal(fileCap.body.session_id ? "started" : fileCap.body.code, "started");
+
+const sizeCapMock = createMockUploadServer({ maxFileBytes: 1000, storageUsedBytes: 0, storageQuotaBytes: 5000, chunkBytes: 8 });
+const sizeCap = await sizeCapMock.handle({
+  action: "start_upload",
+  total_bytes: 2000,
+  head_sha256: "ef".repeat(32),
+  filename: "big.bin",
+  kind: "full",
+});
+assert.equal(sizeCap.body.code, "LIMIT_EXCEEDED");
+assert.equal(sizeCap.body.reason, undefined);
+assert.equal(isStorageQuotaFailure({ code: sizeCap.body.code, message: sizeCap.body.message, body: sizeCap.body }), false);
+
+const blockedMock = createMockUploadServer({
+  chunkBytes: 8,
+  singleObjectThreshold: 1,
+  storageUsedBytes: 90,
+  storageQuotaBytes: 100,
+});
+await assert.rejects(
+  () => uploaderFor(blockedMock).uploader.upload(blobSource(fileFrom(new Uint8Array(32), "full.wav"))),
+  (error) => {
+    assert.equal(error.code, "LIMIT_EXCEEDED");
+    assert.match(error.message, /Storage is full/);
+    assert.match(error.message, /plan needs upgrading/);
+    assert.match(error.message, /Nothing was published/);
+    return true;
+  },
+);
+assert.equal(blockedMock.state.requests.filter((entry) => entry.action === "start_upload" && !entry.body.dry_run).length, 0);
+assert.equal(blockedMock.state.sessions.size, 0);
+
+const warnMock = createMockUploadServer({
+  chunkBytes: 8,
+  singleObjectThreshold: 1,
+  storageUsedBytes: 60,
+  storageQuotaBytes: 100,
+});
+const warnPhases = [];
+const warned = await uploaderFor(warnMock, { onStatus: (state) => warnPhases.push(state) }).uploader.upload(blobSource(fileFrom(new Uint8Array(32), "full.wav")));
+assert.equal(warned.status, "verified");
+assert.ok(warnPhases.some((state) => state.phase === "storage-warning" && /past 80%/.test(state.message)));
+assert.equal(warnPhases.at(-1).storageLine, "Storage: 60 B of 100 B used");
+const liveStatus = await warnMock.handle({ action: "upload_status", session_id: warned.sessionId });
+assert.equal(liveStatus.body.storage_used_bytes, 60);
+assert.equal(liveStatus.body.storage_quota_bytes, 100);
+
+const serverFull = createMockUploadServer({
+  chunkBytes: 8,
+  singleObjectThreshold: 1,
+  storageUsedBytes: 90,
+  storageQuotaBytes: 100,
+});
+await assert.rejects(
+  () => uploaderFor(serverFull).uploader.upload(blobSource(fileFrom(new Uint8Array(32), "full.wav")), {
+    limits: { chunkBytes: 8, singleObjectThreshold: 1, maxFileBytes: 1000 },
+  }),
+  (error) => {
+    assert.equal(error.code, "LIMIT_EXCEEDED");
+    assert.match(error.message, /Storage is full/);
+    assert.match(error.message, /plan needs upgrading/);
+    return true;
+  },
+);
+assert.ok(serverFull.state.requests.some((entry) => entry.action === "start_upload" && !entry.body.dry_run));
+assert.equal(serverFull.state.sessions.size, 0);
 
 console.log("Large-file uploader checks passed.");

@@ -190,6 +190,8 @@
         </div>
         <section id="largeUpload" hidden>
           <h3 id="largeUploadHeading">Large upload</h3>
+          <p id="largeUploadStorage" data-upload-storage class="muted"></p>
+          <p id="largeUploadStorageWarning" data-upload-storage-warning class="message" role="status" aria-live="polite" hidden></p>
           <div id="largeUploadProgress" data-upload-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="largeUploadStatus" class="upload-bar"><div id="largeUploadBar" data-upload-bar></div></div>
           <p id="largeUploadStatus" data-upload-status class="message" role="status" aria-live="polite"></p>
           <div class="actions">
@@ -359,6 +361,13 @@
       }
       const large = q("largeUpload");
       if (large) large.hidden = true;
+      const storageLine = q("largeUploadStorage");
+      if (storageLine) storageLine.textContent = "";
+      const storageWarn = q("largeUploadStorageWarning");
+      if (storageWarn) {
+        storageWarn.textContent = "";
+        storageWarn.hidden = true;
+      }
       revokeUrls();
       extracted = null;
       beatId = "";
@@ -630,6 +639,32 @@
         existingCodes: catalogCodes,
       });
       showReview(draft, prepared.result);
+      const incoming = prepared.fullPlan?.source?.size || prepared.previewPlan?.source?.size || 0;
+      showStoragePlan(prepared.limits, incoming);
+    }
+    async function showStoragePlan(limits, incomingBytes) {
+      const { storageFrom } = await import("./beatbox/upload/analyze.mjs");
+      const { storageFullMessage, storageOutlook, storageUsageLine, storageWarningMessage } = await import("./beatbox/upload/status-copy.mjs");
+      const storage = storageFrom(limits);
+      const line = storageUsageLine(storage);
+      const storageEl = q("largeUploadStorage");
+      const warningEl = q("largeUploadStorageWarning");
+      if (!line || !storageEl || !warningEl) return;
+      q("largeUpload").hidden = false;
+      storageEl.textContent = line;
+      const outlook = storageOutlook(storage, incomingBytes);
+      if (outlook.level === "warn") {
+        warningEl.hidden = false;
+        warningEl.textContent = storageWarningMessage(storage, incomingBytes);
+      } else if (outlook.level === "block") {
+        const full = storageFullMessage(storage);
+        warningEl.hidden = false;
+        warningEl.textContent = full;
+        q("largeUploadStatus").textContent = full;
+      } else {
+        warningEl.hidden = true;
+        warningEl.textContent = "";
+      }
     }
     async function protocolFor(kind) {
       const { createProtocol } = await import("./beatbox/upload/protocol.mjs");

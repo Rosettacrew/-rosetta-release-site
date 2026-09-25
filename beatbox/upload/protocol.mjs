@@ -1,4 +1,6 @@
-import { normalizeLimits } from "./analyze.mjs";
+import { normalizeLimits, storageFrom } from "./analyze.mjs";
+
+export { storageFrom };
 
 export const FAIL_CLOSED = new Set([
   "LIMIT_EXCEEDED",
@@ -45,6 +47,16 @@ function batchRejected(result) {
   if (result.code === "BATCH_NOT_SUPPORTED") return true;
   const message = `${result.message || ""}`.toLowerCase();
   return result.status === 400 && (message.includes("batch") || message.includes("idx must be"));
+}
+
+export function isStorageQuotaFailure(result) {
+  if (!result || result.code !== "LIMIT_EXCEEDED") return false;
+  const reason = `${result.body?.reason || ""} ${result.body?.limit || ""}`.toLowerCase();
+  const message = `${result.message || ""}`.toLowerCase();
+  if (reason.includes("storage") || message.includes("storage")) return true;
+  const storage = storageFrom(result.body);
+  const incoming = Number(result.body?.total_bytes ?? result.body?.incoming_bytes);
+  return !!(storage && storage.usedBytes != null && storage.quotaBytes != null && Number.isFinite(incoming) && storage.usedBytes + incoming > storage.quotaBytes);
 }
 
 function unknownGzip(result) {
@@ -151,8 +163,8 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
       if (result.status === 404 || result.code === "UNKNOWN_ACTION") {
         return { ok: false, code: "LARGE_UPLOAD_UNSUPPORTED", message: "Large upload is not available.", limits: null };
       }
-      if (!result.ok) return { ...result, limits: null };
-      return { ok: true, code: "", message: "", limits: normalizeLimits(result.body), body: result.body };
+      if (!result.ok) return { ...result, limits: null, storage: storageFrom(result.body) };
+      return { ok: true, code: "", message: "", limits: normalizeLimits(result.body), storage: storageFrom(result.body), body: result.body };
     },
     async start(input) {
       if (state.hashMode === "upfront" || input.forceUpfront) {
@@ -162,7 +174,7 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
         const result = await call("start_upload", bobStart(input));
         if (!result.ok) return result;
         note("start_upload uses BoB upfront file_sha256 and chunk_sha256[]");
-        return { ...result, sessionId: result.body.session_id, limits: normalizeLimits(result.body), hashMode: "upfront" };
+        return { ...result, sessionId: result.body.session_id, limits: normalizeLimits(result.body), storage: storageFrom(result.body), hashMode: "upfront" };
       }
       let fields = clientStart(input, { gzip: !state.stripGzip });
       let result = await call("start_upload", fields);
@@ -179,7 +191,7 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
       }
       if (!result.ok) return result;
       note("start_upload uses deferred head_sha256");
-      return { ...result, sessionId: result.body.session_id, limits: normalizeLimits(result.body), hashMode: "deferred" };
+      return { ...result, sessionId: result.body.session_id, limits: normalizeLimits(result.body), storage: storageFrom(result.body), hashMode: "deferred" };
     },
     async tickets(sessionId, parts) {
       const list = parts.filter((part) => Number.isInteger(part.idx));
@@ -264,6 +276,7 @@ export function createProtocol({ endpoint, getToken, apikey, target, kind, fetch
       return {
         ...result,
         limits: normalizeLimits(body),
+        storage: storageFrom(body),
         missing: body.missing_idx || body.missing || [],
         bad: body.bad_idx || body.bad || [],
         verified: body.verified_idx || body.verified || [],

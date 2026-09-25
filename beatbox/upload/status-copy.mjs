@@ -6,6 +6,51 @@ export function formatBytes(size) {
   return `${bytes} B`;
 }
 
+const GB = 1024 * 1024 * 1024;
+const MB = 1024 * 1024;
+export const STORAGE_WARN_RATIO = 0.8;
+
+function trimFixed(value, digits) {
+  return value.toFixed(digits).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+export function formatStorageBytes(size) {
+  const bytes = Number(size) || 0;
+  if (bytes >= GB) return `${trimFixed(bytes / GB, 2)} GB`;
+  if (bytes >= MB) return `${trimFixed(bytes / MB, 1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+export function storageUsageLine(storage) {
+  if (!storage || storage.usedBytes == null || storage.quotaBytes == null) return "";
+  return `Storage: ${formatStorageBytes(storage.usedBytes)} of ${formatStorageBytes(storage.quotaBytes)} used`;
+}
+
+export function storageOutlook(storage, incomingBytes = 0) {
+  if (!storage || storage.usedBytes == null || storage.quotaBytes == null) return { level: "unknown" };
+  const incoming = Number(incomingBytes) || 0;
+  const projected = storage.usedBytes + incoming;
+  if (!(storage.quotaBytes > 0) || projected > storage.quotaBytes) return { level: "block", projected };
+  if (projected / storage.quotaBytes > STORAGE_WARN_RATIO) return { level: "warn", projected };
+  return { level: "ok", projected };
+}
+
+export function storageWarningMessage(storage, incomingBytes = 0) {
+  const outlook = storageOutlook(storage, incomingBytes);
+  const projected = formatStorageBytes(outlook.projected ?? 0);
+  const quota = formatStorageBytes(storage?.quotaBytes ?? 0);
+  return `Storage warning: this upload would use ${projected} of ${quota}, past 80%. You can continue. The plan will need upgrading when storage gets full.`;
+}
+
+export function storageFullMessage(storage) {
+  const usage = storageUsageLine(storage);
+  const where = usage ? ` (${usage.replace(/^Storage: /, "")})` : "";
+  return `Storage is full${where}. The plan needs upgrading before more files can be saved. Nothing was published.`;
+}
+
+export const STORAGE_FULL_COPY = storageFullMessage(null);
+
 function formatEta(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return "";
   if (seconds < 60) return "about 1 min left";
@@ -47,6 +92,8 @@ export function statusMessage(state = {}) {
   if (phase === "verified") return "Integrity verified ✓. Continuing to review.";
   if (phase === "restart") return "This upload expired. Start again.";
   if (phase === "cancelled") return "Upload cancelled. Nothing was published.";
+  if (phase === "storage-warning") return state.detail || state.storageWarning || "This upload would use more than 80% of storage.";
+  if (phase === "storage-full") return state.detail || storageFullMessage(state.storage);
   if (phase === "failed") return state.detail || "This file failed a safety check and was not saved. Nothing was published.";
   return state.detail || "Working…";
 }

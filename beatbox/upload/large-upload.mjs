@@ -1,8 +1,8 @@
-import { chunkPlan, normalizeLimits } from "./analyze.mjs";
+import { chunkPlan, normalizeLimits, storageFrom } from "./analyze.mjs";
 import { bytesToBase64, base64ToBytes, createIncrementalSha256, sha256Hex } from "./hash-engine.mjs";
-import { FAIL_CLOSED, TICKET_BATCH_CAP, TICKET_REFRESH_SECONDS, createProtocol } from "./protocol.mjs";
+import { FAIL_CLOSED, TICKET_BATCH_CAP, TICKET_REFRESH_SECONDS, createProtocol, isStorageQuotaFailure } from "./protocol.mjs";
 import { bytesOf } from "./source.mjs";
-import { statusMessage } from "./status-copy.mjs";
+import { statusMessage, storageFullMessage, storageOutlook, storageUsageLine, storageWarningMessage } from "./status-copy.mjs";
 
 export const PARALLEL_PUTS = 3;
 
@@ -82,7 +82,13 @@ class UploadController {
     });
   }
 
+  rememberStorage(raw) {
+    const storage = storageFrom(raw);
+    if (storage) this.storageUsage = storage;
+  }
+
   emit(partial = {}) {
+    const storage = partial.storage || this.storageUsage || null;
     const state = {
       name: this.source?.name || "",
       size: this.source?.size || 0,
@@ -91,7 +97,12 @@ class UploadController {
       ratio: 0,
       ...partial,
       phase: partial.phase || this.phase,
+      storage,
     };
+    state.storageLine = storageUsageLine(storage);
+    if (this.storageWarning && state.phase !== "storage-full") {
+      state.storageWarning = partial.storageWarning || this.storageWarning;
+    }
     state.message = statusMessage(state);
     this.onStatus(state);
     return state;
@@ -297,13 +308,16 @@ class UploadController {
     const limitsResult = meta.limits ? { ok: true, limits: normalizeLimits(meta.limits) } : await this.protocol.fetchLimits();
     if (!limitsResult.ok) throw fail(limitsResult.code || "LARGE_UPLOAD_UNSUPPORTED", limitsResult.message);
     this.limits = limitsResult.limits;
+    this.rememberStorage(limitsResult.storage || limitsResult.limits);
     if (!this.limits.chunkBytes) throw fail("BAD_CHUNK", "The server did not provide chunk_bytes.");
     this.maxAttempts = this.limits.maxAttempts || 5;
     this.plan = chunkPlan(source.size, this.limits.chunkBytes);
     if (!this.plan.ok) throw fail(this.plan.code || "EMPTY", "The file could not be split.");
     const saved = this.readSaved(source);
     if (saved?.expired) this.storage.removeItem(this.storageKey(source));
-    if (saved && !saved.expired) await this.resumeSaved(source, saved.record);
+    const resuming = !!(saved && !saved.expired);
+    if (!resuming) this.guardStorage(source.size);
+    if (resuming) await this.resumeSaved(source, saved.record);
     else await this.beginFresh(source, meta);
     if (this.stopped === "suspend") return { status: "suspended", sessionId: this.sessionId };
     await this.transfer();
@@ -367,7 +381,7 @@ class UploadController {
         forceUpfront: true,
       });
     }
-    if (!started.ok) throw fail(started.code || "REQUEST_FAILED", started.message);
+    if (!started.ok) this.raiseStartFailure(started);
     this.acceptSession(started);
     this.persist();
   }
@@ -426,6 +440,7 @@ class UploadController {
     }
     if (limits.maxAttempts) this.maxAttempts = limits.maxAttempts;
     this.limits = { ...this.limits, ...limits };
+    this.rememberStorage(started.storage || limits);
     const ttl = limits.sessionTtlSeconds;
     this.expiresAt = started.body?.expires_at || started.body?.expiresAt || (ttl ? new Date(this.now() + ttl * 1000).toISOString() : "");
   }
@@ -449,6 +464,7 @@ class UploadController {
       throw fail(status.code || "REQUEST_FAILED", status.message);
     }
     this.applyStatus(status);
+    this.rememberStorage(status.storage || status.limits);
     this.phase = "preparing";
     this.emit({ phase: "preparing", parts: this.plan.totalChunks, ratio: this.verified.size / this.plan.totalChunks });
   }
@@ -669,8 +685,35 @@ class UploadController {
     }
   }
 
+  guardStorage(incomingBytes) {
+    const outlook = storageOutlook(this.storageUsage, incomingBytes);
+    if (outlook.level === "block") {
+      const message = storageFullMessage(this.storageUsage);
+      this.phase = "storage-full";
+      this.emit({ phase: "storage-full", detail: message });
+      throw fail("LIMIT_EXCEEDED", message);
+    }
+    if (outlook.level === "warn") {
+      this.storageWarning = storageWarningMessage(this.storageUsage, incomingBytes);
+      this.phase = "storage-warning";
+      this.emit({ phase: "storage-warning", storageWarning: this.storageWarning, detail: this.storageWarning });
+    }
+  }
+
+  raiseStartFailure(result) {
+    if (isStorageQuotaFailure(result)) {
+      this.rememberStorage(result.storage || result.body);
+      const message = storageFullMessage(this.storageUsage);
+      this.phase = "storage-full";
+      this.emit({ phase: "storage-full", detail: message });
+      throw fail("LIMIT_EXCEEDED", message);
+    }
+    throw fail(result.code || "REQUEST_FAILED", result.message);
+  }
+
   raiseProtocol(result) {
     if (result.code === "SESSION_EXPIRED" || result.code === "SESSION_NOT_FOUND") this.dropSession(result.code);
+    if (isStorageQuotaFailure(result)) this.raiseStartFailure(result);
     if (FAIL_CLOSED.has(result.code)) throw fail(result.code, "This file failed a safety check and was not saved. Nothing was published.");
     throw fail(result.code || "REQUEST_FAILED", result.message || "Upload failed.");
   }
