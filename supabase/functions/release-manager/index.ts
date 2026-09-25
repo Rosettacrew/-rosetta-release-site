@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { ownerFinanceAccess, readAnalytics } from "./analytics-gate.mjs";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -51,7 +52,7 @@ async function authenticatedAdmin(req: Request, supabase: ReturnType<typeof admi
 }
 
 function hasOwnerAccess(sessionAdmin: { admin?: { role?: string } } | null, fallbackKey: boolean) {
-  return fallbackKey || ["owner", "admin"].includes(sessionAdmin?.admin?.role ?? "");
+  return ownerFinanceAccess(sessionAdmin?.admin?.role, fallbackKey);
 }
 
 async function activityReport(
@@ -338,8 +339,16 @@ Deno.serve(async (req: Request) => {
       const view = url.searchParams.get("view") ?? "releases";
       if (view === "whoami") return json({ auth_mode: sessionAdmin ? "account" : "key", role: sessionAdmin?.admin?.role ?? "owner-key" });
       if (view === "analytics") {
-        const { data, error } = await supabase.from("release_analytics_summary").select("*").order("title");
-        if (error) throw error; return json({ analytics: data });
+        const result = await readAnalytics({
+          role: sessionAdmin?.admin?.role,
+          fallbackKey,
+          query: async () => {
+            const { data, error } = await supabase.from("release_analytics_summary").select("*").order("title");
+            if (error) throw error;
+            return data;
+          },
+        });
+        return json(result.body, result.status);
       }
       if (view === "studio_uploaders") {
         if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);

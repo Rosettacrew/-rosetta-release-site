@@ -1,5 +1,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  beatbaySignedUploadTarget,
+  commitPromotion,
+  evaluateBeatbayAttach,
+  evaluateReleaseCoverAttach,
+  musicUploaderMayMutateBeat,
+  parseBeatAssetPath,
+  QUARANTINE_BUCKET,
+  rejectUpload,
+  releaseCoverSignedUploadTarget,
+} from "./asset-guard.mjs";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -137,6 +148,26 @@ async function storageObjectExists(
   path: string,
 ) {
   const { data, error } = await supabase.storage.from(bucket).exists(path);
+  if (error) throw error;
+  return data;
+}
+
+async function downloadStorageBytes(
+  supabase: ReturnType<typeof adminClient>,
+  bucket: string,
+  path: string,
+) {
+  const { data, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !data) return null;
+  return new Uint8Array(await data.arrayBuffer());
+}
+
+async function loadBeatRow(supabase: ReturnType<typeof adminClient>, beatId: string) {
+  const { data, error } = await supabase
+    .from("beatbay_beats")
+    .select("id,status,storefront_enabled")
+    .eq("id", beatId)
+    .maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -404,9 +435,14 @@ Deno.serve(async (req: Request) => {
 
       let path: string;
       let bucket = "release-private";
+      // Cover is quarantined in release-private and copied to release-public
+      // only after attach passes magic and size checks. Owner release-manager
+      // cover uploads are unchanged.
       if (kind === "cover") {
-        bucket = "release-public";
-        path = `${productId}/cover/cover-${crypto.randomUUID()}.${ext}`;
+        const target = releaseCoverSignedUploadTarget(productId, crypto.randomUUID(), ext);
+        if (!target.ok) return json({ error: "Cover path is not allowed." }, 400);
+        bucket = target.bucket;
+        path = target.path;
       } else if (kind === "preview") {
         path = `${productId}/preview/preview-${crypto.randomUUID()}.${ext}`;
       } else if (kind === "package") {
@@ -428,6 +464,7 @@ Deno.serve(async (req: Request) => {
         public_url: bucket === "release-public"
           ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${bucket}/${path}`
           : null,
+        quarantine: kind === "cover",
       });
     }
 
@@ -485,8 +522,7 @@ Deno.serve(async (req: Request) => {
       if (!(await requireAssignedProduct(supabase, session.user.id, productId))) {
         return json({ error: "Forbidden" }, 403);
       }
-      const bucket = kind === "cover" ? "release-public" : "release-private";
-      if (!(await storageObjectExists(supabase, bucket, path))) {
+      if (!(await storageObjectExists(supabase, QUARANTINE_BUCKET, path))) {
         return json({ error: "Upload the asset file before attaching it" }, 409);
       }
       const { data: current, error: currentError } = await supabase
@@ -497,9 +533,13 @@ Deno.serve(async (req: Request) => {
       if (currentError) throw currentError;
       const changes: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (kind === "cover") {
-        if (!/\.(jpe?g|png|webp)$/i.test(path)) {
-          return json({ error: "Cover art must be a JPG, PNG, or WebP object on release-public." }, 400);
+        const coverBytes = await downloadStorageBytes(supabase, QUARANTINE_BUCKET, path);
+        const decision = evaluateReleaseCoverAttach({ productId, path, bytes: coverBytes });
+        if (decision.status !== 200) {
+          await rejectUpload(supabase.storage, decision.remove);
+          return json({ error: decision.error }, decision.status);
         }
+        await commitPromotion(supabase.storage, decision.promote);
         const metadata = current.metadata && typeof current.metadata === "object" && !Array.isArray(current.metadata)
           ? current.metadata
           : {};
@@ -513,7 +553,7 @@ Deno.serve(async (req: Request) => {
           cover_art: {
             path,
             bucket: "release-public",
-            mime: String(body.mime ?? "").trim() || null,
+            mime: decision.mime,
             width: Number.isFinite(width) ? width : null,
             height: Number.isFinite(height) ? height : null,
             validated_at: new Date().toISOString(),
@@ -554,23 +594,28 @@ Deno.serve(async (req: Request) => {
       if (!beatId || !filename || !["preview", "full"].includes(kind)) {
         return json({ error: "beat_id, filename and kind (preview|full) are required" }, 400);
       }
+      // Same draft gate as attach, so a partner cannot stage a replacement for a live beat.
       if (!(await requireAssignedBeat(supabase, session.user.id, beatId))) {
         return json({ error: "Forbidden" }, 403);
       }
+      const beat = await loadBeatRow(supabase, beatId);
+      const access = musicUploaderMayMutateBeat(true, beat);
+      if (!access.ok) return json({ error: access.error }, access.status);
       const ext = safeExt(filename);
       if (!["mp3", "wav"].includes(ext)) return json({ error: "Audio must be MP3 or WAV" }, 400);
-      const bucket = kind === "preview" ? "release-public" : "release-private";
-      const path = `beatbay/${beatId}/${kind}/${crypto.randomUUID()}.${ext}`;
-      const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path, { upsert: false });
+      // Preview signs into private release-private. Attach copies it to release-public
+      // after magic and size checks, and the server sets the content type.
+      const target = beatbaySignedUploadTarget(beatId, kind, crypto.randomUUID(), ext);
+      if (!target.ok) return json({ error: "Asset path is not allowed." }, 400);
+      const { data, error } = await supabase.storage.from(target.bucket).createSignedUploadUrl(target.path, { upsert: false });
       if (error) throw error;
       return json({
-        bucket,
-        path,
+        bucket: target.bucket,
+        path: target.path,
         token: data.token,
         signed_url: data.signedUrl,
-        public_url: kind === "preview"
-          ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${bucket}/${path}`
-          : null,
+        public_url: target.public_url,
+        quarantine: target.quarantine,
       });
     }
 
@@ -581,22 +626,37 @@ Deno.serve(async (req: Request) => {
       if (!beatId || !path || !["preview", "full"].includes(kind)) {
         return json({ error: "beat_id, path and kind (preview|full) are required" }, 400);
       }
-      if (!(await requireAssignedBeat(supabase, session.user.id, beatId))) {
-        return json({ error: "Forbidden" }, 403);
-      }
-      const bucket = kind === "preview" ? "release-public" : "release-private";
-      if (!(await storageObjectExists(supabase, bucket, path))) {
+      // music_uploader is the only role that reaches studio-manager. Owner and admin
+      // attach through beatbay-manager, which is unchanged. There is no owner bypass
+      // on this action: the beat must be assigned, status draft, and storefront off.
+      const assigned = await requireAssignedBeat(supabase, session.user.id, beatId);
+      const beat = assigned ? await loadBeatRow(supabase, beatId) : null;
+      const access = musicUploaderMayMutateBeat(assigned, beat);
+      if (!access.ok) return json({ error: access.error }, access.status);
+      const parsed = parseBeatAssetPath(beatId, kind, path);
+      if (!parsed.ok) return json({ error: parsed.error }, 400);
+      if (!(await storageObjectExists(supabase, parsed.quarantineBucket, parsed.path))) {
         return json({ error: "Upload the BeatBay audio before attaching it" }, 409);
       }
-      const changes = kind === "preview"
-        ? {
-            preview_url: String(body.public_url ?? ""),
-            preview_duration_seconds: Number(body.duration_seconds || 30),
-          }
-        : {
-            full_audio_bucket: "release-private",
-            full_audio_path: path,
-          };
+      const bytes = await downloadStorageBytes(supabase, parsed.quarantineBucket, parsed.path);
+      // body.public_url is ignored. preview_url is derived from the validated path.
+      const decision = evaluateBeatbayAttach({
+        assigned: true,
+        beat,
+        beatId,
+        kind,
+        path,
+        bodyPublicUrl: body.public_url,
+        bytes,
+        supabaseUrl: supabaseUrl(),
+        durationSeconds: body.duration_seconds,
+      });
+      if (decision.status !== 200) {
+        await rejectUpload(supabase.storage, decision.remove);
+        return json({ error: decision.error }, decision.status);
+      }
+      await commitPromotion(supabase.storage, decision.promote);
+      const changes = decision.changes;
       const { data, error } = await supabase
         .from("beatbay_beats")
         .update(changes)
