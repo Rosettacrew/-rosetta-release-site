@@ -11,7 +11,7 @@
     <title>Analytics Hub · Rosetta Crew</title>
     <link
       rel="stylesheet"
-      href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"
+      href="./vendor/maplibre-gl-4.7.1/maplibre-gl.css"
     />
     <style>
       :root {
@@ -226,9 +226,9 @@
       <div id="status" class="status muted" aria-live="polite"></div>
     </div>
 
-    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="./vendor/maplibre-gl-4.7.1/maplibre-gl.js"></script>
     <script type="module">
-      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+      import { createClient } from "./vendor/supabase-js-2.117.2/supabase.js";
 
       // Same Supabase client constants as admin-dashboard.html
       const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co",

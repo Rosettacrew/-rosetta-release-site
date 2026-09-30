@@ -30,7 +30,7 @@
     });
   </script>
   <script type="module">
-    import{createClient}from"https://esm.sh/@supabase/supabase-js@2.57.4";
+    import{createClient}from"./vendor/supabase-js-2.57.4/supabase.js";
     const BASE="https://sktgkrcahsxvidzjjxxt.supabase.co",KEY="sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju",API=BASE+"/functions/v1/beatbay-manager",sb=createClient(BASE,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});let sess=null,beats=[],auctions=[];const q=id=>document.getElementById(id),esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[m]),money=c=>c==null?"Open offer":new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(c)/100),local=v=>v?new Date(v).toISOString().slice(0,16):"",dt=v=>v?new Date(v).toLocaleString():"—";
     async function af(opt={}){if(!sess)throw Error("Not signed in");const r=await fetch(API,{...opt,headers:{Authorization:"Bearer "+sess.access_token,apikey:KEY,"content-type":"application/json",...(opt.headers||{})}}),j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error||"Request failed");return j}
     function goto(tab){document.querySelectorAll(".nav button").forEach(x=>x.classList.toggle("on",x.dataset.tab===tab));document.querySelectorAll(".section").forEach(x=>x.classList.toggle("on",x.id===tab));q("heading").textContent=document.querySelector(`[data-tab="${tab}"]`)?.textContent||tab}
