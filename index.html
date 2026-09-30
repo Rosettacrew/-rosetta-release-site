@@ -947,7 +947,8 @@
           "https://sktgkrcahsxvidzjjxxt.supabase.co/functions/v1",
         API = FN_BASE + "/release-storefront",
         AN = FN_BASE + "/release-analytics",
-        SUPPORT_API = FN_BASE + "/release-support-checkout";
+        SUPPORT_API = FN_BASE + "/release-support-checkout",
+        SUPPORT_MAX_CENTS = 1_000_000;
       const money = (c, cur = "usd") =>
         new Intl.NumberFormat("en-US", {
           style: "currency",
@@ -982,7 +983,7 @@
               `<button type="button" class="support-preset${i === 0 ? " active" : ""}" data-cents="${c}">${money(c, release.currency)}</button>`,
           )
           .join("");
-        return `<div class="support" data-support-product="${esc(release.id)}" data-floor="${floor}" data-currency="${esc(release.currency || "usd")}"><div class="support-label">SUPPORT THE ARTIST</div><div class="support-presets">${buttons}</div><div class="support-custom"><label>Custom $</label><input type="number" min="${(floor / 100).toFixed(2)}" step="0.01" inputmode="decimal" placeholder="${(floor / 100).toFixed(2)}" aria-label="Custom support amount in dollars" /><button type="button" class="support-go" data-support-go>Support</button></div><div class="support-hint">Minimum ${money(floor, release.currency)}. Same digital release — pay what you can.</div><div class="support-error hidden" data-support-error></div></div>`;
+        return `<div class="support" data-support-product="${esc(release.id)}" data-floor="${floor}" data-currency="${esc(release.currency || "usd")}"><div class="support-label">SUPPORT THE ARTIST</div><div class="support-presets">${buttons}</div><div class="support-custom"><label>Custom $</label><input type="number" min="${(floor / 100).toFixed(2)}" max="${(SUPPORT_MAX_CENTS / 100).toFixed(2)}" step="0.01" inputmode="decimal" placeholder="${(floor / 100).toFixed(2)}" aria-label="Custom support amount in dollars" /><button type="button" class="support-go" data-support-go>Support</button></div><div class="support-hint">Minimum ${money(floor, release.currency)}. Maximum ${money(SUPPORT_MAX_CENTS, release.currency)}. Same digital release — pay what you can.</div><div class="support-error hidden" data-support-error></div></div>`;
       }
 
       function setMeta(attr, key, content) {
@@ -1437,6 +1438,13 @@
           if (!Number.isInteger(cents) || cents < floor) {
             if (errorEl) {
               errorEl.textContent = "Minimum is " + money(floor, box.dataset.currency);
+              errorEl.classList.remove("hidden");
+            }
+            return;
+          }
+          if (cents > SUPPORT_MAX_CENTS) {
+            if (errorEl) {
+              errorEl.textContent = "Maximum is " + money(SUPPORT_MAX_CENTS, box.dataset.currency);
               errorEl.classList.remove("hidden");
             }
             return;

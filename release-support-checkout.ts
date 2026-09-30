@@ -7,8 +7,8 @@ const cors = {
   "access-control-allow-methods": "POST,OPTIONS",
 };
 
-/** Max Support-the-Artist tip amount ($500). Product metadata has no override on main. */
-const MAX_AMOUNT_CENTS = 50_000;
+/** Max Support-the-Artist tip amount ($10,000). Keep storefront validation in sync. */
+const MAX_AMOUNT_CENTS = 1_000_000;
 
 /** Sliding-window rate limit: ~20 requests / minute / IP (Deno Edge in-memory). */
 const RATE_LIMIT_MAX = 20;
