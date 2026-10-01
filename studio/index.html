@@ -438,6 +438,18 @@
                   Upload securely
                 </button>
                 <div id="upMsg" class="msg"></div>
+                <section id="largeUpload" hidden>
+                  <h3>Large upload</h3>
+                  <p id="largeUploadStorage" data-upload-storage class="muted"></p>
+                  <p id="largeUploadStorageWarning" data-upload-storage-warning class="msg" role="status" aria-live="polite" hidden></p>
+                  <div id="largeUploadProgress" data-upload-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="largeUploadStatus" class="upload-bar"><div id="largeUploadBar" data-upload-bar></div></div>
+                  <p id="largeUploadStatus" data-upload-status class="msg" role="status" aria-live="polite"></p>
+                  <div>
+                    <button id="largePause" type="button">Pause</button>
+                    <button id="largeResume" type="button">Resume</button>
+                    <button id="largeCancel" type="button">Cancel</button>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
@@ -450,6 +462,7 @@
       const BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co",
         KEY = "sb_publishable_lfz4zfwnjuGun259BvK-3A_rR056Bju",
         API = BASE + "/functions/v1/studio-manager";
+      const STUDIO_LARGE_UPLOAD_ENABLED = true;
       const sb = createClient(BASE, KEY, {
         auth: {
           persistSession: true,
@@ -917,6 +930,37 @@
         try {
           const file = q("file").files[0];
           if (!file) throw Error("Choose a file.");
+          if (STUDIO_LARGE_UPLOAD_ENABLED) {
+            const bridge = await import("../beatbox/upload/studio-bridge.mjs");
+            const { mountProgress } = await import("../beatbox/upload/progress-ui.mjs");
+            const panel = q("largeUpload");
+            panel.hidden = false;
+            const ui = mountProgress(panel);
+            q("largePause").onclick = () => ui.uploader?.pause();
+            q("largeResume").onclick = () => ui.uploader?.resume();
+            q("largeCancel").onclick = () => ui.uploader?.cancel();
+            const outcome = await bridge.uploadStudioFile({
+              enabled: true,
+              file,
+              surface,
+              kind: q("uKind").value,
+              endpoint: API,
+              getToken: () => sess.access_token,
+              apikey: KEY,
+              userId: sess?.user?.id || "",
+              beatId: q("uBeat").value,
+              productId: q("uRelease").value,
+              onStatus: (state) => ui.render(state),
+            });
+            ui.uploader = outcome.uploader;
+            if (outcome.handled) {
+              q("upMsg").textContent = "Upload complete.";
+              q("file").value = "";
+              await loadLibrary();
+              return;
+            }
+            panel.hidden = true;
+          }
           if (surface === "release") {
             const productId = q("uRelease").value;
             const kind = q("uKind").value;
