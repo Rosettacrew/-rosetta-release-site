@@ -66,7 +66,7 @@ begin
       duration_value := 600;
     end if;
     if duration_type in ('int2', 'int4', 'int8') then
-      duration_value := least(600, greatest(0, round(duration_value)));
+      duration_value := least(600, greatest(0, pg_catalog.round(duration_value)));
     end if;
     safe_changes := safe_changes || pg_catalog.jsonb_build_object('preview_duration_seconds', duration_value);
   end if;

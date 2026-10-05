@@ -3,11 +3,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   beatbaySignedUploadTarget,
   commitPromotion,
-  discardPublicPromotion,
   evaluateBeatbayAttach,
   evaluateReleaseCoverAttach,
   musicUploaderMayMutateBeat,
   parseBeatAssetPath,
+  publishPromotedAsset,
   QUARANTINE_BUCKET,
   rejectUpload,
   releaseCoverSignedUploadTarget,
@@ -669,19 +669,17 @@ Deno.serve(async (req: Request) => {
       if (beatReadError) throw beatReadError;
       if (!preReadAllowsMusicUploaderBeat(currentBeat)) return json({ error: "Forbidden" }, 403);
       // The pre-read can pass and a publish can still land before the write.
-      // The SQL update is the boundary. Copy to the public bucket only after it
-      // matches a row, so a lost race does not leave a public object.
+      // The SQL update is the boundary. Copy only after it matches a row.
+      // A miss does not touch storage: this request has not copied anything,
+      // and deleting the public path could wipe a preview that already lived there.
       const outcome = await commitMusicUploaderBeatUpdate(supabase, {
         beatId,
         userId: session.user.id,
         changes,
       });
-      if (outcome.status !== 200) {
-        await discardPublicPromotion(supabase.storage, decision.promote);
-        return json({ error: outcome.error }, outcome.status);
-      }
-      await commitPromotion(supabase.storage, decision.promote);
-      const data = outcome.row;
+      const published = await publishPromotedAsset(supabase.storage, outcome, decision.promote);
+      if (published.status !== 200) return json({ error: published.error }, published.status);
+      const data = published.row;
       await activityReport(supabase, session, {
         surface: "beatbay",
         action: "attach_beat_asset",

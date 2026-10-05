@@ -222,14 +222,19 @@ export async function commitPromotion(storage, promote) {
   }
 }
 
+/**
+ * Copy only after the conditional update matches. A miss returns without
+ * touching storage. This request has not created a public object yet, so
+ * deleting the destination would remove a preview that was already public.
+ */
+export async function publishPromotedAsset(storage, outcome, promote) {
+  if (!outcome || outcome.status !== 200) return outcome;
+  await commitPromotion(storage, promote);
+  return outcome;
+}
+
 export async function rejectUpload(storage, removal) {
   if (!removal?.bucket || !removal?.path) return;
   const { error } = await storage.from(removal.bucket).remove([removal.path]);
   if (error) console.error("Rejected upload cleanup failed");
-}
-
-/** Drop a public object left behind when the conditional beat write loses a race. Private masters are left in place. */
-export async function discardPublicPromotion(storage, promote) {
-  if (!promote || promote.toBucket !== PUBLIC_BUCKET || promote.toBucket === promote.fromBucket) return;
-  await rejectUpload(storage, { bucket: PUBLIC_BUCKET, path: promote.path });
 }

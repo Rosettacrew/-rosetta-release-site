@@ -488,8 +488,11 @@
     }
     function previewDuration() {
       const duration = q("player").duration;
-      if (!Number.isFinite(duration) || duration <= 0) return 30;
-      return Math.max(1, Math.min(600, Math.round(duration)));
+      if (!Number.isFinite(duration)) return 30;
+      const rounded = Math.round(duration);
+      if (rounded < 0) return 0;
+      if (rounded > 600) return 600;
+      return rounded;
     }
     async function putAsset(kind, file) {
       const signed = await af({

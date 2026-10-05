@@ -7,11 +7,11 @@ import {
   beatbaySignedUploadTarget,
   clampPreviewDurationSeconds,
   commitPromotion,
-  discardPublicPromotion,
   evaluateBeatbayAttach,
   evaluateReleaseCoverAttach,
   musicUploaderMayMutateBeat,
   promotionUploadOptions,
+  publishPromotedAsset,
   rejectUpload,
   releaseCoverSignedUploadTarget,
 } from "../supabase/functions/studio-manager/asset-guard.mjs";
@@ -118,19 +118,20 @@ await commitPromotion(validStore, ignored.promote);
 assert.equal(validStore.objects.get(`${PUBLIC_BUCKET}/${previewPath}`).contentType, "audio/mpeg");
 assert.equal(validStore.objects.has(`${QUARANTINE_BUCKET}/${previewPath}`), false);
 
-const orphan = memoryStorage([[`${PUBLIC_BUCKET}/${previewPath}`, { bytes: id3, contentType: "audio/mpeg" }]]);
-await discardPublicPromotion(orphan, ignored.promote);
-assert.equal(orphan.objects.has(`${PUBLIC_BUCKET}/${previewPath}`), false);
-const privateMaster = `beatbay/${beatId}/full/${fileId}.wav`;
-const kept = memoryStorage([[`${QUARANTINE_BUCKET}/${privateMaster}`, { bytes: id3 }]]);
-await discardPublicPromotion(kept, {
-  fromBucket: QUARANTINE_BUCKET,
-  toBucket: QUARANTINE_BUCKET,
-  path: privateMaster,
-  bytes: id3,
-  contentType: "audio/wav",
-});
-assert.equal(kept.objects.has(`${QUARANTINE_BUCKET}/${privateMaster}`), true);
+const livePreview = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+const lostRace = memoryStorage([
+  [`${PUBLIC_BUCKET}/${previewPath}`, { bytes: livePreview, contentType: "audio/mpeg" }],
+  [`${QUARANTINE_BUCKET}/${previewPath}`, { bytes: id3, contentType: "audio/mpeg" }],
+]);
+const missed = await publishPromotedAsset(
+  lostRace,
+  { status: 403, error: "Forbidden", row: null },
+  ignored.promote,
+);
+assert.equal(missed.status, 403);
+assert.equal(lostRace.objects.has(`${PUBLIC_BUCKET}/${previewPath}`), true);
+assert.equal(lostRace.objects.get(`${PUBLIC_BUCKET}/${previewPath}`).bytes, livePreview);
+assert.equal(lostRace.objects.has(`${QUARANTINE_BUCKET}/${previewPath}`), true);
 
 for (const [label, bytes] of [
   ["html payload named mp3", html],

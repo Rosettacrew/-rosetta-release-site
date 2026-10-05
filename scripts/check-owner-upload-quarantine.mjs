@@ -431,9 +431,13 @@ const beatAttachHandler = studio.slice(
   studio.indexOf('return json({ error: "Unknown action" }'),
 );
 const rpcAt = beatAttachHandler.indexOf("commitMusicUploaderBeatUpdate");
-const promoteAt = beatAttachHandler.indexOf("await commitPromotion");
+const promoteAt = beatAttachHandler.indexOf("publishPromotedAsset");
 assert.ok(rpcAt > 0 && promoteAt > rpcAt, "public copy runs after the conditional update");
-assert.match(beatAttachHandler, /outcome\.status !== 200[\s\S]{0,180}discardPublicPromotion/);
+assert.doesNotMatch(beatAttachHandler, /discardPublicPromotion/);
+assert.doesNotMatch(beatAttachHandler, /\.remove\(/);
+assert.doesNotMatch(studio, /discardPublicPromotion/);
+assert.match(assetGuard, /if \(!outcome \|\| outcome\.status !== 200\) return outcome;\n {2}await commitPromotion/);
+assert.match(migration, /pg_catalog\.round\(duration_value\)/);
 assert.match(studio, /evaluateBeatbayAttach/);
 assert.match(studio, /musicUploaderMayMutateBeat/);
 assert.doesNotMatch(studio, /from\("beatbay_beats"\)[\s\S]{0,120}\.update\(/);

@@ -7,6 +7,7 @@ import {
   isPublicApiCredential,
   isQuarantinePath,
   isUuid,
+  clampPreviewDurationSeconds,
   magicAllowlist,
   redactLog,
 } from "../_shared/beatbox-guard.mjs";
@@ -364,7 +365,7 @@ Deno.serve(async (req: Request) => {
         await supabase.storage.from("release-private").remove([path]);
         if (uploadError) return json({ error: "Validated audio could not be stored." }, 500);
         const duration = Number(body.duration_seconds);
-        const previewDuration = Number.isFinite(duration) ? Math.max(1, Math.min(600, Math.round(duration))) : 30;
+        const previewDuration = clampPreviewDurationSeconds(Number.isFinite(duration) ? Math.round(duration) : null);
         const publicUrl = kind === "preview"
           ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${finalBucket}/${finalPath}`
           : null;
