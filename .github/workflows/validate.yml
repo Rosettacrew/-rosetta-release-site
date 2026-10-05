@@ -22,3 +22,9 @@ jobs:
         run: node scripts/check-static-html.mjs
       - name: Check studio attach scope, preview quarantine, and analytics owner gate
         run: node scripts/check-studio-asset-guards.mjs
+      - name: Check Beatbox intake guards
+        run: node scripts/check-beatbox.mjs
+      - name: Check publish helpers
+        run: node scripts/check-publish-helpers.mjs
+      - name: Check owner upload quarantine, beat update race, and verify_jwt pin
+        run: node scripts/check-owner-upload-quarantine.mjs

@@ -1,17 +1,20 @@
 /**
- * Studio partner upload guards (D1/D2).
- * Magic and size checks reuse Beatbox intake helpers. No network, no secrets.
+ * Owner and admin upload quarantine.
+ * Signed URLs go to private release-private. Attach promotes to release-public
+ * only after magicAllowlist and size checks. The stored content-type comes
+ * from magic bytes. Client Content-Type and public_url are ignored.
+ * No network and no secrets.
  *
- * studio-manager only admits role music_uploader. Owner and admin keep using
- * beatbay-manager / release-manager; those small-file flows are not changed here.
+ * Shared by beatbay-manager and release-manager. Do not import across
+ * function folders; dashboard and CLI deploys both bundle _shared.
  */
-import { MAX_AUDIO_BYTES, isUuid, magicAllowlist } from "../_shared/beatbox-guard.mjs";
+import { MAX_AUDIO_BYTES, isUuid, magicAllowlist } from "./beatbox-guard.mjs";
 
 export { MAX_AUDIO_BYTES };
 
 export const QUARANTINE_BUCKET = "release-private";
 export const PUBLIC_BUCKET = "release-public";
-export const MAX_COVER_BYTES = 8 * 1024 * 1024;
+export const MAX_COVER_BYTES = 20 * 1024 * 1024;
 
 const AUDIO_EXT = new Set(["mp3", "wav"]);
 const COVER_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
@@ -39,7 +42,7 @@ export function hasUnsafePath(path) {
   return false;
 }
 
-export function parseBeatAssetPath(beatId, kind, path) {
+export function parseOwnerBeatAssetPath(beatId, kind, path) {
   const id = String(beatId ?? "").trim();
   const assetKind = String(kind ?? "").trim().toLowerCase();
   const objectPath = String(path ?? "").trim();
@@ -64,13 +67,21 @@ export function parseBeatAssetPath(beatId, kind, path) {
   };
 }
 
-/** Assigned music_uploader may attach only a draft that is off the storefront. */
-export function musicUploaderMayMutateBeat(assigned, beat) {
-  if (!assigned || !beat) return { ok: false, status: 403, error: "Forbidden" };
-  if (beat.status !== "draft" || !!beat.storefront_enabled) {
-    return { ok: false, status: 403, error: "Forbidden" };
+export function parseOwnerCoverPath(productId, path) {
+  const id = String(productId ?? "").trim();
+  const objectPath = String(path ?? "").trim();
+  if (!isUuid(id) || hasUnsafePath(objectPath)) {
+    return { ok: false, error: "Cover path is not allowed." };
   }
-  return { ok: true };
+  const match = new RegExp(`^${id}/cover/cover-(${UUID_SRC})\\.(jpg|jpeg|png|webp)$`, "i").exec(objectPath);
+  if (!match) return { ok: false, error: "Cover path is not allowed." };
+  return {
+    ok: true,
+    ext: match[2].toLowerCase(),
+    path: objectPath,
+    quarantineBucket: QUARANTINE_BUCKET,
+    finalBucket: PUBLIC_BUCKET,
+  };
 }
 
 export function derivedPublicObjectUrl(supabaseUrl, bucket, path) {
@@ -90,7 +101,7 @@ export function inspectUploadBytes(ext, bytes, maxBytes) {
   return { ok: true, mime: verdict.mime, bytes: value };
 }
 
-export function beatbaySignedUploadTarget(beatId, kind, fileId, ext) {
+export function ownerBeatSignedUploadTarget(beatId, kind, fileId, ext) {
   const assetKind = String(kind ?? "").trim().toLowerCase();
   const extension = String(ext ?? "").toLowerCase();
   if (!isUuid(beatId) || !isUuid(fileId) || (assetKind !== "preview" && assetKind !== "full")) {
@@ -102,11 +113,11 @@ export function beatbaySignedUploadTarget(beatId, kind, fileId, ext) {
     bucket: QUARANTINE_BUCKET,
     path: `beatbay/${String(beatId).trim()}/${assetKind}/${String(fileId).trim()}.${extension}`,
     public_url: null,
-    quarantine: assetKind === "preview",
+    quarantine: true,
   };
 }
 
-export function releaseCoverSignedUploadTarget(productId, fileId, ext) {
+export function ownerCoverSignedUploadTarget(productId, fileId, ext) {
   const extension = String(ext ?? "").toLowerCase();
   if (!isUuid(productId) || !isUuid(fileId) || !COVER_EXT.has(extension)) return { ok: false };
   return {
@@ -119,26 +130,24 @@ export function releaseCoverSignedUploadTarget(productId, fileId, ext) {
 }
 
 /**
- * bodyPublicUrl is accepted so callers can pass the client field through and
- * tests can prove it is never copied onto the beat. preview_url is derived.
+ * clientContentType and bodyPublicUrl are accepted so tests can prove a
+ * client-chosen type and URL are never copied onto the public object.
  */
-export function evaluateBeatbayAttach({
-  assigned,
-  beat,
+export function evaluateOwnerBeatAttach({
   beatId,
   kind,
   path,
-  bodyPublicUrl,
   bytes,
   supabaseUrl,
   durationSeconds,
+  clientContentType,
+  bodyPublicUrl,
 }) {
+  void clientContentType;
   void bodyPublicUrl;
-  const access = musicUploaderMayMutateBeat(assigned, beat);
-  if (!access.ok) return { status: access.status, error: access.error };
-  const parsed = parseBeatAssetPath(beatId, kind, path);
+  const parsed = parseOwnerBeatAssetPath(beatId, kind, path);
   if (!parsed.ok) return { status: 400, error: parsed.error };
-  if (bytes == null) return { status: 409, error: "Upload the BeatBay audio before attaching it" };
+  if (bytes == null) return { status: 409, error: "Upload the audio file before attaching it." };
   const inspected = inspectUploadBytes(parsed.ext, bytes, MAX_AUDIO_BYTES);
   if (!inspected.ok) {
     return {
@@ -175,28 +184,26 @@ export function evaluateBeatbayAttach({
   };
 }
 
-export function evaluateReleaseCoverAttach({ productId, path, bytes }) {
-  const id = String(productId ?? "").trim();
-  const objectPath = String(path ?? "").trim();
-  if (!isUuid(id) || hasUnsafePath(objectPath)) return { status: 400, error: "Cover path is not allowed." };
-  const match = new RegExp(`^${id}/cover/cover-(${UUID_SRC})\\.(jpg|jpeg|png|webp)$`, "i").exec(objectPath);
-  if (!match) return { status: 400, error: "Cover path is not allowed." };
-  if (bytes == null) return { status: 409, error: "Upload the asset file before attaching it" };
-  const inspected = inspectUploadBytes(match[2].toLowerCase(), bytes, MAX_COVER_BYTES);
+export function evaluateOwnerCoverAttach({ productId, path, bytes, clientContentType }) {
+  void clientContentType;
+  const parsed = parseOwnerCoverPath(productId, path);
+  if (!parsed.ok) return { status: 400, error: parsed.error };
+  if (bytes == null) return { status: 409, error: "Upload the cover file before attaching it." };
+  const inspected = inspectUploadBytes(parsed.ext, bytes, MAX_COVER_BYTES);
   if (!inspected.ok) {
     return {
       status: inspected.status,
       error: inspected.error,
-      remove: { bucket: QUARANTINE_BUCKET, path: objectPath },
+      remove: { bucket: parsed.quarantineBucket, path: parsed.path },
     };
   }
   return {
     status: 200,
     mime: inspected.mime,
     promote: {
-      fromBucket: QUARANTINE_BUCKET,
-      toBucket: PUBLIC_BUCKET,
-      path: objectPath,
+      fromBucket: parsed.quarantineBucket,
+      toBucket: parsed.finalBucket,
+      path: parsed.path,
       bytes: inspected.bytes,
       contentType: inspected.mime,
     },

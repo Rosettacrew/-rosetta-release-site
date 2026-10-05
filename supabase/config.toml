@@ -1,0 +1,50 @@
+# Gateway JWT verification pins.
+#
+# verify_jwt = false means the Supabase gateway does not require a user JWT
+# before the function runs. Pin only functions whose handler authenticates
+# the caller, or public webhook and download endpoints that must accept a
+# caller the gateway would reject.
+#
+# release-manager: this repo cannot read the live dashboard Verify JWT flag.
+# The handler allows the request only after authenticatedAdmin (bearer
+# getUser plus an active owner, admin, or staff row) or a constant-time
+# x-admin-key check. claim_owner requires both the admin key and a bearer
+# user. Pinning false matches that in-handler design. The x-admin-key
+# fallback has no user JWT, so a gateway check would reject it. Confirm the
+# dashboard value before any deploy. If production is currently ON, this pin
+# turns that gateway check OFF and leaves the handler checks in place.
+#
+# release-email-worker is not pinned. Its source is not in this repo. It is
+# the authenticated delivery worker described in docs/RELEASE-DELIVERY-READINESS.md
+# and is deployed from outside this tree (runbooks pass --no-verify-jwt).
+# A bulk deploy of this repo must not redefine it.
+#
+# stripe-release-webhook, release-download, release-storefront, and
+# release-support-checkout are pinned false to match production deploys that
+# used --no-verify-jwt. A bulk `supabase functions deploy` must not turn
+# gateway JWT on for them. That would break Stripe webhooks and buyer
+# download links (an outage, not a new anon path).
+#
+# Functions omitted here keep gateway JWT verification (verify_jwt = true):
+# release-admin-data, release-admin-preview, release-social-manager.
+
+[functions.studio-manager]
+verify_jwt = false
+
+[functions.release-manager]
+verify_jwt = false
+
+[functions.beatbay-manager]
+verify_jwt = false
+
+[functions.stripe-release-webhook]
+verify_jwt = false
+
+[functions.release-download]
+verify_jwt = false
+
+[functions.release-storefront]
+verify_jwt = false
+
+[functions.release-support-checkout]
+verify_jwt = false

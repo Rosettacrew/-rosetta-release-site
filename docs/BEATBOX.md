@@ -157,7 +157,7 @@ Use the staging publishable key against PostgREST, not the service role.
 
 ### Secrets scan
 
-23. In this repo, search `beatbox.html`, `beatbox/package-rules.mjs`, and `supabase/functions/beatbay-manager/beatbox-guard.mjs` for `service_role`, `SUPABASE_SERVICE_ROLE_KEY=`, `sk_live_`, `sk_test_`, `whsec_`, and `RESEND_API_KEY=`. Expect no live secrets. The publishable key in the HTML is the existing client key, not the service role.
+23. In this repo, search `beatbox.html`, `beatbox/package-rules.mjs`, `supabase/functions/_shared/beatbox-guard.mjs`, and the re-export at `supabase/functions/beatbay-manager/beatbox-guard.mjs` for `service_role`, `SUPABASE_SERVICE_ROLE_KEY=`, `sk_live_`, `sk_test_`, `whsec_`, and `RESEND_API_KEY=`. Expect no live secrets. The publishable key in the HTML is the existing client key, not the service role.
 24. Confirm `stripe-release-webhook`, `release-support-checkout`, and order mutation functions are not in this diff.
 
 ## What BoB should QA

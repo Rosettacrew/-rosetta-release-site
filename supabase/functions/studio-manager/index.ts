@@ -11,6 +11,10 @@ import {
   rejectUpload,
   releaseCoverSignedUploadTarget,
 } from "./asset-guard.mjs";
+import {
+  commitMusicUploaderBeatUpdate,
+  preReadAllowsMusicUploaderBeat,
+} from "./beat-update-guard.mjs";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -657,13 +661,23 @@ Deno.serve(async (req: Request) => {
       }
       await commitPromotion(supabase.storage, decision.promote);
       const changes = decision.changes;
-      const { data, error } = await supabase
+      const { data: currentBeat, error: beatReadError } = await supabase
         .from("beatbay_beats")
-        .update(changes)
+        .select("id,status,storefront_enabled")
         .eq("id", beatId)
-        .select("id,beat_code,title,preview_url,full_audio_bucket,full_audio_path")
-        .single();
-      if (error) throw error;
+        .maybeSingle();
+      if (beatReadError) throw beatReadError;
+      if (!preReadAllowsMusicUploaderBeat(currentBeat)) return json({ error: "Forbidden" }, 403);
+      // The pre-read can pass and a publish can still land before the write.
+      // commitMusicUploaderBeatUpdate is one SQL UPDATE: draft, storefront off
+      // (NULL counts as off), and an assignee row. Zero rows return 403.
+      const outcome = await commitMusicUploaderBeatUpdate(supabase, {
+        beatId,
+        userId: session.user.id,
+        changes,
+      });
+      if (outcome.status !== 200) return json({ error: outcome.error }, outcome.status);
+      const data = outcome.row;
       await activityReport(supabase, session, {
         surface: "beatbay",
         action: "attach_beat_asset",
