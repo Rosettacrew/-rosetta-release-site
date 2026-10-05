@@ -1,0 +1,801 @@
+CSP / privacy meta tag headless test
+Date: 2026-10-05
+Browser: Google Chrome 148.0.7778.96 headless (SwiftShader WebGL)
+Server: Python ThreadingHTTPServer + TLS on https://127.0.0.1:8443 (site root /workspace)
+Reason for TLS: meta CSP includes upgrade-insecure-requests, so the local server was HTTPS rather than plain http.server.
+Listener: securitypolicyviolation installed via evaluateOnNewDocument before navigation.
+Also captured: console error/warning, pageerror, requestfailed, HTTP status >= 400, request hosts.
+
+RESULT: securitypolicyviolation count = 0 on every page below.
+
+Important-page checks
+- index.html: title 'DJ Loyalty Da Goat — Love, Pain, Loyalty (EP) | Rosetta Crew Music Group'. BUY NOW links present: BUY NOW — $7.99 and BUY NOW — $1.99. Loyalty text present.
+- live.html: BUY NOW — $1.99 href https://buy.stripe.com/4gMcN54qmerj00Q4VQ43S03
+- /studio/ and /studio/index.html: Music Studio Portal login form rendered (email + password).
+- /studio/password.html: Set Music Studio Password, password field present.
+- /music-studio.html: heading Music Studio, links /studio/ and /studio/password.html.
+- /beatbox.html: login heading Beatbox, button 'Send secure sign-in link'.
+- /vision-board/ and /vision-board/index.html: heading Rosetta Crew Vision Board.
+- /analytics-hub.html: unauthenticated boot calls location.replace('admin-dashboard.html'). The test aborted that navigation so the map page stayed loaded, then constructed the same OSM raster style the page uses (tiles https://tile.openstreetmap.org/{z}/{x}/{y}.png). webgl=ok, map event=load, .maplibregl-canvas present, 12 tile requests, 0 CSP violations.
+- /beatbay/: Google fonts loaded (Cinzel 700 and Cinzel 800 status=loaded). 0 CSP violations. Hosts included fonts.googleapis.com and fonts.gstatic.com.
+
+Non-CSP notes
+- index.html console error: Failed to load resource 404 https://127.0.0.1:8443/favicon.ico. Chrome's default favicon request. The repo has no /favicon.ico. Not a CSP violation.
+- analytics-hub requestfailed: net::ERR_ABORTED https://127.0.0.1:8443/admin-dashboard.html. This is the test abort of the signed-out redirect, not a CSP block.
+
+Per-page log
+------------------------------------------------------------------------
+page: /index.html
+finalUrl: https://127.0.0.1:8443/index.html
+title: DJ Loyalty Da Goat — Love, Pain, Loyalty (EP) | Rosetta Crew Music Group
+navError: None
+securitypolicyviolation: 0
+console error/warning: [{"type": "error", "text": "Failed to load resource: the server responded with a status of 404 (File not found)"}]
+pageerrors: []
+http>=400: ["404 https://127.0.0.1:8443/favicon.ico"]
+requestfailed: []
+checks: {"buyNow": ["BUY NOW — $7.99", "BUY NOW — $1.99"], "loyalty": true}
+hosts: 127.0.0.1:8443, sktgkrcahsxvidzjjxxt.supabase.co
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /live.html
+finalUrl: https://127.0.0.1:8443/live.html
+title: Rosetta Crew Music Group | Come Here — Big Hess
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"buyNowHref": {"text": "BUY NOW — $1.99", "href": "https://buy.stripe.com/4gMcN54qmerj00Q4VQ43S03"}}
+hosts: , 127.0.0.1:8443
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /studio/
+finalUrl: https://127.0.0.1:8443/studio/
+title: Rosetta Crew Music Studio Portal
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"login": {"form": true, "heading": "Music Studio Portal", "email": true, "password": true}}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /studio/index.html
+finalUrl: https://127.0.0.1:8443/studio/index.html
+title: Rosetta Crew Music Studio Portal
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"login": {"form": true, "heading": "Music Studio Portal", "email": true, "password": true}}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /studio/password.html
+finalUrl: https://127.0.0.1:8443/studio/password.html
+title: Set Music Studio Password | Rosetta Crew
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"password": {"heading": "Set Music Studio Password", "password": true}}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /music-studio.html
+finalUrl: https://127.0.0.1:8443/music-studio.html
+title: Music Studio | Rosetta Crew
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"portal": {"heading": "Music Studio", "links": ["/studio/", "/studio/password.html"]}}
+hosts: 127.0.0.1:8443
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /beatbox.html
+finalUrl: https://127.0.0.1:8443/beatbox.html
+title: Beatbox | Rosetta Crew
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"login": {"heading": "Beatbox", "send": "Send secure sign-in link"}}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /vision-board/
+finalUrl: https://127.0.0.1:8443/vision-board/
+title: Rosetta Crew Vision Board
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"heading": "Rosetta Crew Vision Board"}
+hosts: 127.0.0.1:8443
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /vision-board/index.html
+finalUrl: https://127.0.0.1:8443/vision-board/index.html
+title: Rosetta Crew Vision Board
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"heading": "Rosetta Crew Vision Board"}
+hosts: 127.0.0.1:8443
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /analytics-hub.html
+finalUrl: https://127.0.0.1:8443/analytics-hub.html
+title: Analytics Hub · Rosetta Crew
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: [{"url": "https://127.0.0.1:8443/admin-dashboard.html", "error": "net::ERR_ABORTED", "type": "document"}]
+checks: {"webgl": "ok", "mapMount": "load", "canvas": true}
+hosts: , 127.0.0.1:8443, esm.sh, tile.openstreetmap.org, unpkg.com
+tile.openstreetmap.org requests: 12
+  tile https://tile.openstreetmap.org/2/2/1.png
+  tile https://tile.openstreetmap.org/2/1/1.png
+  tile https://tile.openstreetmap.org/2/2/2.png
+  tile https://tile.openstreetmap.org/2/1/2.png
+  tile https://tile.openstreetmap.org/2/2/0.png
+  tile https://tile.openstreetmap.org/2/1/0.png
+  tile https://tile.openstreetmap.org/2/3/1.png
+  tile https://tile.openstreetmap.org/2/3/2.png
+------------------------------------------------------------------------
+page: /beatbay/
+finalUrl: https://127.0.0.1:8443/beatbay/
+title: BeatBay Exchange | Rosetta Crew Music Group
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"font": {"faces": ["Cinzel 600 unloaded", "Cinzel 600 unloaded", "Cinzel 700 unloaded", "Cinzel 700 loaded", "Cinzel 800 unloaded", "Cinzel 800 loaded"], "cinzel700": true, "cinzel800": true}}
+hosts: 127.0.0.1:8443, fonts.googleapis.com, fonts.gstatic.com, sktgkrcahsxvidzjjxxt.supabase.co
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /beatbay/index.html
+finalUrl: https://127.0.0.1:8443/beatbay/index.html
+title: BeatBay Exchange | Rosetta Crew Music Group
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {"font": {"faces": ["Cinzel 600 unloaded", "Cinzel 600 unloaded", "Cinzel 700 unloaded", "Cinzel 700 loaded", "Cinzel 800 unloaded", "Cinzel 800 loaded"], "cinzel700": true, "cinzel800": true}}
+hosts: 127.0.0.1:8443, fonts.googleapis.com, fonts.gstatic.com, sktgkrcahsxvidzjjxxt.supabase.co
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /admin.html
+finalUrl: https://127.0.0.1:8443/admin-dashboard.html
+title: Release Station
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /admin-v2.html
+finalUrl: https://127.0.0.1:8443/admin-dashboard.html
+title: Release Station
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /admin-dashboard.html
+finalUrl: https://127.0.0.1:8443/admin-dashboard.html
+title: Release Station
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /owner-login.html
+finalUrl: https://127.0.0.1:8443/admin-dashboard.html
+title: Release Station
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /owner-recovery.html
+finalUrl: https://127.0.0.1:8443/owner-recovery.html
+title: Release Station · Reset Password
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /password-login.html
+finalUrl: https://127.0.0.1:8443/password-login.html
+title: Release Station · Password Sign In
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /beatbay-admin.html
+finalUrl: https://127.0.0.1:8443/beatbay-admin.html
+title: BeatBay Admin | Rosetta Crew
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, esm.sh
+tile.openstreetmap.org requests: 0
+------------------------------------------------------------------------
+page: /storefront-v2.html
+finalUrl: https://127.0.0.1:8443/storefront-v2.html
+title: Rosetta Crew Music Group
+navError: None
+securitypolicyviolation: 0
+console error/warning: []
+pageerrors: []
+http>=400: []
+requestfailed: []
+checks: {}
+hosts: 127.0.0.1:8443, sktgkrcahsxvidzjjxxt.supabase.co
+tile.openstreetmap.org requests: 0
+
+Raw results JSON
+[
+  {
+    "name": "index",
+    "path": "/index.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/index.html",
+    "title": "DJ Loyalty Da Goat — Love, Pain, Loyalty (EP) | Rosetta Crew Music Group",
+    "navError": null,
+    "checks": {
+      "buyNow": [
+        "BUY NOW — $7.99",
+        "BUY NOW — $1.99"
+      ],
+      "loyalty": true
+    },
+    "violations": [],
+    "consoleMessages": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: the server responded with a status of 404 (File not found)"
+      }
+    ],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [
+      "404 https://127.0.0.1:8443/favicon.ico"
+    ],
+    "hosts": [
+      "127.0.0.1:8443",
+      "sktgkrcahsxvidzjjxxt.supabase.co"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "live",
+    "path": "/live.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/live.html",
+    "title": "Rosetta Crew Music Group | Come Here — Big Hess",
+    "navError": null,
+    "checks": {
+      "buyNowHref": {
+        "text": "BUY NOW — $1.99",
+        "href": "https://buy.stripe.com/4gMcN54qmerj00Q4VQ43S03"
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "",
+      "127.0.0.1:8443"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "studio",
+    "path": "/studio/",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/studio/",
+    "title": "Rosetta Crew Music Studio Portal",
+    "navError": null,
+    "checks": {
+      "login": {
+        "form": true,
+        "heading": "Music Studio Portal",
+        "email": true,
+        "password": true
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "studio/index",
+    "path": "/studio/index.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/studio/index.html",
+    "title": "Rosetta Crew Music Studio Portal",
+    "navError": null,
+    "checks": {
+      "login": {
+        "form": true,
+        "heading": "Music Studio Portal",
+        "email": true,
+        "password": true
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "studio/password",
+    "path": "/studio/password.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/studio/password.html",
+    "title": "Set Music Studio Password | Rosetta Crew",
+    "navError": null,
+    "checks": {
+      "password": {
+        "heading": "Set Music Studio Password",
+        "password": true
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "music-studio",
+    "path": "/music-studio.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/music-studio.html",
+    "title": "Music Studio | Rosetta Crew",
+    "navError": null,
+    "checks": {
+      "portal": {
+        "heading": "Music Studio",
+        "links": [
+          "/studio/",
+          "/studio/password.html"
+        ]
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "beatbox",
+    "path": "/beatbox.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/beatbox.html",
+    "title": "Beatbox | Rosetta Crew",
+    "navError": null,
+    "checks": {
+      "login": {
+        "heading": "Beatbox",
+        "send": "Send secure sign-in link"
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "vision-board",
+    "path": "/vision-board/",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/vision-board/",
+    "title": "Rosetta Crew Vision Board",
+    "navError": null,
+    "checks": {
+      "heading": "Rosetta Crew Vision Board"
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "vision-board/index",
+    "path": "/vision-board/index.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/vision-board/index.html",
+    "title": "Rosetta Crew Vision Board",
+    "navError": null,
+    "checks": {
+      "heading": "Rosetta Crew Vision Board"
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "analytics-hub",
+    "path": "/analytics-hub.html",
+    "important": true,
+    "finalUrl": "https://127.0.0.1:8443/analytics-hub.html",
+    "title": "Analytics Hub · Rosetta Crew",
+    "navError": null,
+    "checks": {
+      "webgl": "ok",
+      "mapMount": "load",
+      "canvas": true
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [
+      {
+        "url": "https://127.0.0.1:8443/admin-dashboard.html",
+        "error": "net::ERR_ABORTED",
+        "type": "document"
+      }
+    ],
+    "httpErrors": [],
+    "hosts": [
+      "",
+      "127.0.0.1:8443",
+      "esm.sh",
+      "tile.openstreetmap.org",
+      "unpkg.com"
+    ],
+    "tileRequests": [
+      "https://tile.openstreetmap.org/2/2/1.png",
+      "https://tile.openstreetmap.org/2/1/1.png",
+      "https://tile.openstreetmap.org/2/2/2.png",
+      "https://tile.openstreetmap.org/2/1/2.png",
+      "https://tile.openstreetmap.org/2/2/0.png",
+      "https://tile.openstreetmap.org/2/1/0.png",
+      "https://tile.openstreetmap.org/2/3/1.png",
+      "https://tile.openstreetmap.org/2/3/2.png"
+    ],
+    "tileRequestCount": 12
+  },
+  {
+    "name": "beatbay",
+    "path": "/beatbay/",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/beatbay/",
+    "title": "BeatBay Exchange | Rosetta Crew Music Group",
+    "navError": null,
+    "checks": {
+      "font": {
+        "faces": [
+          "Cinzel 600 unloaded",
+          "Cinzel 600 unloaded",
+          "Cinzel 700 unloaded",
+          "Cinzel 700 loaded",
+          "Cinzel 800 unloaded",
+          "Cinzel 800 loaded"
+        ],
+        "cinzel700": true,
+        "cinzel800": true
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "fonts.googleapis.com",
+      "fonts.gstatic.com",
+      "sktgkrcahsxvidzjjxxt.supabase.co"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "beatbay/index",
+    "path": "/beatbay/index.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/beatbay/index.html",
+    "title": "BeatBay Exchange | Rosetta Crew Music Group",
+    "navError": null,
+    "checks": {
+      "font": {
+        "faces": [
+          "Cinzel 600 unloaded",
+          "Cinzel 600 unloaded",
+          "Cinzel 700 unloaded",
+          "Cinzel 700 loaded",
+          "Cinzel 800 unloaded",
+          "Cinzel 800 loaded"
+        ],
+        "cinzel700": true,
+        "cinzel800": true
+      }
+    },
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "fonts.googleapis.com",
+      "fonts.gstatic.com",
+      "sktgkrcahsxvidzjjxxt.supabase.co"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "admin",
+    "path": "/admin.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/admin-dashboard.html",
+    "title": "Release Station",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "admin-v2",
+    "path": "/admin-v2.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/admin-dashboard.html",
+    "title": "Release Station",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "admin-dashboard",
+    "path": "/admin-dashboard.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/admin-dashboard.html",
+    "title": "Release Station",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "owner-login",
+    "path": "/owner-login.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/admin-dashboard.html",
+    "title": "Release Station",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "owner-recovery",
+    "path": "/owner-recovery.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/owner-recovery.html",
+    "title": "Release Station · Reset Password",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "password-login",
+    "path": "/password-login.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/password-login.html",
+    "title": "Release Station · Password Sign In",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "beatbay-admin",
+    "path": "/beatbay-admin.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/beatbay-admin.html",
+    "title": "BeatBay Admin | Rosetta Crew",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "esm.sh"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  },
+  {
+    "name": "storefront-v2",
+    "path": "/storefront-v2.html",
+    "important": false,
+    "finalUrl": "https://127.0.0.1:8443/storefront-v2.html",
+    "title": "Rosetta Crew Music Group",
+    "navError": null,
+    "checks": {},
+    "violations": [],
+    "consoleMessages": [],
+    "pageErrors": [],
+    "failed": [],
+    "httpErrors": [],
+    "hosts": [
+      "127.0.0.1:8443",
+      "sktgkrcahsxvidzjjxxt.supabase.co"
+    ],
+    "tileRequests": [],
+    "tileRequestCount": 0
+  }
+]
