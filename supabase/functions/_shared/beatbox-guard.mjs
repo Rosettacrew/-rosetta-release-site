@@ -116,6 +116,16 @@ export function magicAllowlist(ext, value) {
   return { ok: false, error: "Rejected: this file type is not on the allowlist." };
 }
 
+/** Client duration is untrusted. Missing or non-finite values become 30. 0 and 600 are kept. */
+export function clampPreviewDurationSeconds(value) {
+  if (value == null || value === "") return 30;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 30;
+  if (parsed < 0) return 0;
+  if (parsed > 600) return 600;
+  return parsed;
+}
+
 export function redactLog(value) {
   return String(value ?? "")
     .replace(/bearer\s+[a-z0-9\-._~+/]+=*/gi, "bearer [redacted]")

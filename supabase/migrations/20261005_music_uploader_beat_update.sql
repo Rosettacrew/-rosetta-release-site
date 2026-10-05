@@ -22,6 +22,8 @@ as $$
 declare
   updated jsonb;
   duration_type text;
+  duration_value numeric;
+  safe_changes jsonb;
 begin
   if p_beat_id is null or p_user_id is null or pg_catalog.jsonb_typeof(p_changes) is distinct from 'object' then
     return null;
@@ -43,6 +45,30 @@ begin
 
   if duration_type is null or duration_type not in ('int2', 'int4', 'int8', 'numeric', 'float4', 'float8') then
     raise exception 'preview_duration_seconds column type is not supported';
+  end if;
+
+  -- preview_duration_seconds is client-supplied. Keep it inside 0..600.
+  -- Non-numeric input becomes 30. Integer columns are rounded after the clamp
+  -- so a value such as 600.6 cannot cast to 601.
+  safe_changes := p_changes;
+  if safe_changes ? 'preview_duration_seconds' then
+    begin
+      duration_value := (safe_changes->>'preview_duration_seconds')::numeric;
+    exception
+      when invalid_text_representation or numeric_value_out_of_range then
+        duration_value := 30;
+    end;
+    if duration_value is null or duration_value = 'NaN'::numeric then
+      duration_value := 30;
+    elsif duration_value < 0 then
+      duration_value := 0;
+    elsif duration_value > 600 then
+      duration_value := 600;
+    end if;
+    if duration_type in ('int2', 'int4', 'int8') then
+      duration_value := least(600, greatest(0, round(duration_value)));
+    end if;
+    safe_changes := safe_changes || pg_catalog.jsonb_build_object('preview_duration_seconds', duration_value);
   end if;
 
   execute pg_catalog.format(
@@ -89,7 +115,7 @@ begin
     duration_type
   )
   into updated
-  using p_changes, p_beat_id, p_user_id;
+  using safe_changes, p_beat_id, p_user_id;
 
   return updated;
 end;

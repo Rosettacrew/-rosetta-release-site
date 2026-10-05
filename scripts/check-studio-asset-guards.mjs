@@ -5,7 +5,9 @@ import {
   PUBLIC_BUCKET,
   QUARANTINE_BUCKET,
   beatbaySignedUploadTarget,
+  clampPreviewDurationSeconds,
   commitPromotion,
+  discardPublicPromotion,
   evaluateBeatbayAttach,
   evaluateReleaseCoverAttach,
   musicUploaderMayMutateBeat,
@@ -96,6 +98,13 @@ assert.equal(ignored.status, 200);
 const expectedPreviewUrl = `${supabaseUrl}/storage/v1/object/public/${PUBLIC_BUCKET}/${previewPath}`;
 assert.equal(ignored.changes.preview_url, expectedPreviewUrl);
 assert.equal(JSON.stringify(ignored).includes("evil.example"), false);
+assert.equal(ignored.changes.preview_duration_seconds, 30);
+assert.equal(attach({ durationSeconds: 0 }).changes.preview_duration_seconds, 0);
+assert.equal(attach({ durationSeconds: 600 }).changes.preview_duration_seconds, 600);
+assert.equal(attach({ durationSeconds: 601 }).changes.preview_duration_seconds, 600);
+assert.equal(attach({ durationSeconds: -1 }).changes.preview_duration_seconds, 0);
+assert.equal(attach({ durationSeconds: 99999 }).changes.preview_duration_seconds, 600);
+assert.equal(clampPreviewDurationSeconds("nope"), 30);
 assert.equal(ignored.promote.contentType, "audio/mpeg");
 assert.equal(ignored.promote.toBucket, PUBLIC_BUCKET);
 assert.equal(ignored.promote.fromBucket, QUARANTINE_BUCKET);
@@ -108,6 +117,20 @@ const validStore = memoryStorage([[`${QUARANTINE_BUCKET}/${previewPath}`, { byte
 await commitPromotion(validStore, ignored.promote);
 assert.equal(validStore.objects.get(`${PUBLIC_BUCKET}/${previewPath}`).contentType, "audio/mpeg");
 assert.equal(validStore.objects.has(`${QUARANTINE_BUCKET}/${previewPath}`), false);
+
+const orphan = memoryStorage([[`${PUBLIC_BUCKET}/${previewPath}`, { bytes: id3, contentType: "audio/mpeg" }]]);
+await discardPublicPromotion(orphan, ignored.promote);
+assert.equal(orphan.objects.has(`${PUBLIC_BUCKET}/${previewPath}`), false);
+const privateMaster = `beatbay/${beatId}/full/${fileId}.wav`;
+const kept = memoryStorage([[`${QUARANTINE_BUCKET}/${privateMaster}`, { bytes: id3 }]]);
+await discardPublicPromotion(kept, {
+  fromBucket: QUARANTINE_BUCKET,
+  toBucket: QUARANTINE_BUCKET,
+  path: privateMaster,
+  bytes: id3,
+  contentType: "audio/wav",
+});
+assert.equal(kept.objects.has(`${QUARANTINE_BUCKET}/${privateMaster}`), true);
 
 for (const [label, bytes] of [
   ["html payload named mp3", html],

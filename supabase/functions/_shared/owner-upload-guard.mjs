@@ -8,7 +8,9 @@
  * Shared by beatbay-manager and release-manager. Do not import across
  * function folders; dashboard and CLI deploys both bundle _shared.
  */
-import { MAX_AUDIO_BYTES, isUuid, magicAllowlist } from "./beatbox-guard.mjs";
+import { MAX_AUDIO_BYTES, clampPreviewDurationSeconds, isUuid, magicAllowlist } from "./beatbox-guard.mjs";
+
+export { clampPreviewDurationSeconds };
 
 export { MAX_AUDIO_BYTES };
 
@@ -164,7 +166,7 @@ export function evaluateOwnerBeatAttach({
     contentType: inspected.mime,
   };
   if (String(kind).toLowerCase() === "preview") {
-    const duration = Number(durationSeconds || 30);
+    const duration = clampPreviewDurationSeconds(durationSeconds);
     return {
       status: 200,
       changes: {

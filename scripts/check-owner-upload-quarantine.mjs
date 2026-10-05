@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   PUBLIC_BUCKET,
   QUARANTINE_BUCKET,
+  clampPreviewDurationSeconds,
   commitPromotion,
   evaluateOwnerBeatAttach,
   evaluateOwnerCoverAttach,
@@ -188,6 +189,21 @@ function storefrontOff(value) {
   return value == null || value === false;
 }
 
+const BEAT_UPDATE_COLUMNS = new Set([
+  "preview_url",
+  "preview_duration_seconds",
+  "full_audio_bucket",
+  "full_audio_path",
+]);
+
+function applyAllowedBeatChanges(row, changes) {
+  const next = { ...row };
+  for (const [key, value] of Object.entries(changes ?? {})) {
+    if (BEAT_UPDATE_COLUMNS.has(key)) next[key] = value;
+  }
+  return next;
+}
+
 function createBeatTable({ row, assignees }) {
   const state = {
     row: { ...row },
@@ -229,7 +245,7 @@ function createBeatTable({ row, assignees }) {
         && state.assignees.includes(args.p_user_id);
       if (!matched) return Promise.resolve({ data: null, error: null });
       state.writes += 1;
-      state.row = { ...state.row, ...args.p_changes };
+      state.row = applyAllowedBeatChanges(state.row, args.p_changes);
       return Promise.resolve({
         data: {
           id: state.row.id,
@@ -334,6 +350,41 @@ assert.equal(happy.state.writes, 1);
 assert.equal(happyUpdate.row.beat_code, "BEAT 0001");
 assert.match(happyUpdate.row.preview_url, /release-public/);
 
+const guarded = createBeatTable({ row: draftRow, assignees: [userId] });
+const guardedUpdate = await commitMusicUploaderBeatUpdate(guarded, {
+  beatId,
+  userId,
+  changes: {
+    preview_url: `${supabaseUrl}/storage/v1/object/public/release-public/${previewPath}`,
+    preview_duration_seconds: 30,
+    status: "published",
+    storefront_enabled: true,
+    beat_code: "BEAT 9999",
+    title: "Hijacked",
+  },
+});
+assert.equal(guardedUpdate.status, 200);
+assert.equal(guarded.state.writes, 1);
+assert.equal(guarded.state.row.status, "draft");
+assert.equal(guarded.state.row.storefront_enabled, false);
+assert.equal(guarded.state.row.beat_code, "BEAT 0001");
+assert.equal(guarded.state.row.title, "Night");
+assert.equal(guardedUpdate.row.status, "draft");
+assert.equal(guardedUpdate.row.storefront_enabled, false);
+assert.match(guarded.state.row.preview_url, /release-public/);
+
+assert.equal(clampPreviewDurationSeconds(0), 0);
+assert.equal(clampPreviewDurationSeconds(600), 600);
+assert.equal(clampPreviewDurationSeconds(601), 600);
+assert.equal(clampPreviewDurationSeconds(-4), 0);
+assert.equal(clampPreviewDurationSeconds(99999), 600);
+assert.equal(clampPreviewDurationSeconds("nope"), 30);
+assert.equal(clampPreviewDurationSeconds(null), 30);
+const clampedOwner = beatAttach({ durationSeconds: 9000 });
+assert.equal(clampedOwner.changes.preview_duration_seconds, 600);
+const zeroOwner = beatAttach({ durationSeconds: 0 });
+assert.equal(zeroOwner.changes.preview_duration_seconds, 0);
+
 const manager = readFileSync("supabase/functions/beatbay-manager/index.ts", "utf8");
 const release = readFileSync("supabase/functions/release-manager/index.ts", "utf8");
 const studio = readFileSync("supabase/functions/studio-manager/index.ts", "utf8");
@@ -375,6 +426,14 @@ assert.match(readFileSync("supabase/functions/release-manager/analytics-gate.mjs
 
 assert.match(studio, /preReadAllowsMusicUploaderBeat/);
 assert.match(studio, /commitMusicUploaderBeatUpdate/);
+const beatAttachHandler = studio.slice(
+  studio.indexOf('action === "beatbay_attach_asset"'),
+  studio.indexOf('return json({ error: "Unknown action" }'),
+);
+const rpcAt = beatAttachHandler.indexOf("commitMusicUploaderBeatUpdate");
+const promoteAt = beatAttachHandler.indexOf("await commitPromotion");
+assert.ok(rpcAt > 0 && promoteAt > rpcAt, "public copy runs after the conditional update");
+assert.match(beatAttachHandler, /outcome\.status !== 200[\s\S]{0,180}discardPublicPromotion/);
 assert.match(studio, /evaluateBeatbayAttach/);
 assert.match(studio, /musicUploaderMayMutateBeat/);
 assert.doesNotMatch(studio, /from\("beatbay_beats"\)[\s\S]{0,120}\.update\(/);
@@ -399,7 +458,13 @@ assert.match(migration, /coalesce\(b\.storefront_enabled, false\) = false/);
 assert.match(migration, /from public\.beatbay_beat_assignees a/);
 assert.match(migration, /a\.beat_id = \$2/);
 assert.match(migration, /a\.user_id = \$3/);
-assert.match(migration, /using p_changes, p_beat_id, p_user_id/);
+assert.match(migration, /using safe_changes, p_beat_id, p_user_id/);
+assert.match(migration, /duration_value < 0/);
+assert.match(migration, /duration_value := 0/);
+assert.match(migration, /duration_value > 600/);
+assert.match(migration, /duration_value := 600/);
+assert.doesNotMatch(migration, /set[\s\S]*status = case/i);
+assert.doesNotMatch(migration, /storefront_enabled = case/);
 assert.match(migration, /revoke all on function public\.commit_music_uploader_beat_update\(uuid, uuid, jsonb\) from public, anon, authenticated/i);
 assert.match(migration, /grant execute on function public\.commit_music_uploader_beat_update\(uuid, uuid, jsonb\) to service_role/i);
 assert.doesNotMatch(migration, /grant execute on function public\.commit_music_uploader_beat_update[\s\S]*to (anon|authenticated|public)/i);

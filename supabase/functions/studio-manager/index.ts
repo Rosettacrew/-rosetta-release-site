@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   beatbaySignedUploadTarget,
   commitPromotion,
+  discardPublicPromotion,
   evaluateBeatbayAttach,
   evaluateReleaseCoverAttach,
   musicUploaderMayMutateBeat,
@@ -659,7 +660,6 @@ Deno.serve(async (req: Request) => {
         await rejectUpload(supabase.storage, decision.remove);
         return json({ error: decision.error }, decision.status);
       }
-      await commitPromotion(supabase.storage, decision.promote);
       const changes = decision.changes;
       const { data: currentBeat, error: beatReadError } = await supabase
         .from("beatbay_beats")
@@ -669,14 +669,18 @@ Deno.serve(async (req: Request) => {
       if (beatReadError) throw beatReadError;
       if (!preReadAllowsMusicUploaderBeat(currentBeat)) return json({ error: "Forbidden" }, 403);
       // The pre-read can pass and a publish can still land before the write.
-      // commitMusicUploaderBeatUpdate is one SQL UPDATE: draft, storefront off
-      // (NULL counts as off), and an assignee row. Zero rows return 403.
+      // The SQL update is the boundary. Copy to the public bucket only after it
+      // matches a row, so a lost race does not leave a public object.
       const outcome = await commitMusicUploaderBeatUpdate(supabase, {
         beatId,
         userId: session.user.id,
         changes,
       });
-      if (outcome.status !== 200) return json({ error: outcome.error }, outcome.status);
+      if (outcome.status !== 200) {
+        await discardPublicPromotion(supabase.storage, decision.promote);
+        return json({ error: outcome.error }, outcome.status);
+      }
+      await commitPromotion(supabase.storage, decision.promote);
       const data = outcome.row;
       await activityReport(supabase, session, {
         surface: "beatbay",

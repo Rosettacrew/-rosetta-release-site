@@ -5,7 +5,9 @@
  * studio-manager only admits role music_uploader. Owner and admin keep using
  * beatbay-manager / release-manager; those small-file flows are not changed here.
  */
-import { MAX_AUDIO_BYTES, isUuid, magicAllowlist } from "../_shared/beatbox-guard.mjs";
+import { MAX_AUDIO_BYTES, clampPreviewDurationSeconds, isUuid, magicAllowlist } from "../_shared/beatbox-guard.mjs";
+
+export { clampPreviewDurationSeconds };
 
 export { MAX_AUDIO_BYTES };
 
@@ -155,7 +157,7 @@ export function evaluateBeatbayAttach({
     contentType: inspected.mime,
   };
   if (String(kind).toLowerCase() === "preview") {
-    const duration = Number(durationSeconds || 30);
+    const duration = clampPreviewDurationSeconds(durationSeconds);
     return {
       status: 200,
       changes: {
@@ -224,4 +226,10 @@ export async function rejectUpload(storage, removal) {
   if (!removal?.bucket || !removal?.path) return;
   const { error } = await storage.from(removal.bucket).remove([removal.path]);
   if (error) console.error("Rejected upload cleanup failed");
+}
+
+/** Drop a public object left behind when the conditional beat write loses a race. Private masters are left in place. */
+export async function discardPublicPromotion(storage, promote) {
+  if (!promote || promote.toBucket !== PUBLIC_BUCKET || promote.toBucket === promote.fromBucket) return;
+  await rejectUpload(storage, { bucket: PUBLIC_BUCKET, path: promote.path });
 }
