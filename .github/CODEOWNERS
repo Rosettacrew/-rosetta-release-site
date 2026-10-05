@@ -1,0 +1,7 @@
+# Security-sensitive ownership gate.
+# CODEOWNERS becomes an enforced review gate when branch protection/rulesets require code-owner review.
+* @Rosettacrew
+
+/.github/ @Rosettacrew
+/supabase/functions/ @Rosettacrew
+/supabase/migrations/ @Rosettacrew

@@ -1,0 +1,36 @@
+name: Security Guardrails
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject committed secrets and unsafe payment controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE '(sk_live_[A-Za-z0-9]+|rk_live_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[^$])' -- . ':!*.md'; then
+            echo "Potential live secret committed to source."
+            exit 1
+          fi
+          if git grep -nE 'payouts?|transfers?|treasury|external_accounts?|bank_accounts?' -- 'supabase/functions/**' | grep -E 'create|update|POST|DELETE|destination|schedule'; then
+            echo "Financial-perimeter-sensitive code requires manual security review."
+            exit 1
+          fi
+      - name: Checkout safety assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=supabase/functions/release-support-checkout/index.ts
+          test -f "$f"
+          grep -Eq 'MAX_AMOUNT_CENTS[[:space:]]*=[[:space:]]*50_000' "$f"
+          grep -q 'amountCents > MAX_AMOUNT_CENTS' "$f"
+          grep -q 'rateLimit' "$f"
