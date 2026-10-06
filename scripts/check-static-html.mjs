@@ -312,7 +312,14 @@ assert.match(musicStudio, /href="\/studio\/"/);
 assert.match(musicStudio, /href="\/studio\/password\.html"/);
 assert.doesNotMatch(musicStudio, /http-equiv="refresh"|location\.replace/);
 assert.doesNotMatch(musicStudio, /release-manager|beatbay-manager|release-admin-data/i);
-assert.doesNotMatch(musicStudio, /data-tab="analytics"|data-tab="orders"|STRIPE|checkout/i);
+const musicStudioWithoutCsp = musicStudio.replace(
+  /<meta\s+http-equiv="Content-Security-Policy"[^>]*>/i,
+  "",
+);
+assert.doesNotMatch(
+  musicStudioWithoutCsp,
+  /data-tab="analytics"|data-tab="orders"|STRIPE|checkout/i,
+);
 assert.match(studio, /signInWithPassword/);
 assert.match(studio, /Send password setup \/ reset link/);
 assert.match(studio, /shouldCreateUser:\s*false/);

@@ -609,14 +609,22 @@
       el.style.top = (p.y || 10) + '%';
       if (p.color) el.style.borderColor = p.color;
       el.innerHTML =
-        (p.imageUrl
-          ? `<img class="pin-img" src="${esc(p.imageUrl)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
-          : '') +
         `<div>${esc(p.text)}</div>` +
         `<div class="pin-actions">
           <button type="button" data-paction="edit">Edit</button>
           <button type="button" data-paction="del">Del</button>
         </div>`;
+      if (p.imageUrl) {
+        const img = document.createElement('img');
+        img.className = 'pin-img';
+        img.alt = '';
+        img.loading = 'lazy';
+        img.addEventListener('error', () => {
+          img.style.display = 'none';
+        });
+        img.src = p.imageUrl;
+        el.insertBefore(img, el.firstChild);
+      }
       board.appendChild(el);
       enableDrag(el, p);
     });
