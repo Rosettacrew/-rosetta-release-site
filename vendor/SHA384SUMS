@@ -1,0 +1,15 @@
+# SHA384 (SRI) checksums for every file under vendor/ except this list.
+# supabase-js@2.117.2 — exact version esm.sh served for @supabase/supabase-js@2 on 2026-09-25 (x-esm-path).
+# Browser ESM bundle of the npm tarball, built with esbuild 0.25.9 (esm.sh's own file still imports other esm.sh URLs).
+# supabase-js@2.57.4 — version pinned by beatbox.html and beatbay-admin.html. Same esbuild browser bundle.
+# jszip@3.10.1 — npm dist/jszip.js wrapped as an ESM default export.
+# maplibre-gl@4.7.1 — npm dist/maplibre-gl.js and dist/maplibre-gl.css, unmodified.
+sha384-bOERHB2tRi0j3mVmJNOB0EGKZ6aYu1PU0qqNTsGwZrCFO3xG0TsKicrq20rlEV7w  vendor/jszip-3.10.1/LICENSE.markdown
+sha384-ZuaV+PJt2yqR5Fh71cJxZCRbXV8ClOX6zDTHCaKTVAFYH3vftbV2y8SJBx8BzL6a  vendor/jszip-3.10.1/jszip.js
+sha384-3Zf/f+K0L6bn+JFiUedpEU79XsEmWDOSzj/+j17JomfRWmlkO60ByjZbpgZkeRiL  vendor/maplibre-gl-4.7.1/LICENSE.txt
+sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V  vendor/maplibre-gl-4.7.1/maplibre-gl.css
+sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj  vendor/maplibre-gl-4.7.1/maplibre-gl.js
+sha384-1OoeMQHJk9w9LYfOTwEiTwvWY9LxP7/4eNz3eO4qdWKnTc7vouDoy6mMkhxBz4oo  vendor/supabase-js-2.117.2/LICENSE
+sha384-8UumP6Wa1NTzv9HIItLQMBHMGZh8XLCBZNpI4kqgEwkNfi74Ar6XRnMkfbECBQgJ  vendor/supabase-js-2.117.2/supabase.js
+sha384-1OoeMQHJk9w9LYfOTwEiTwvWY9LxP7/4eNz3eO4qdWKnTc7vouDoy6mMkhxBz4oo  vendor/supabase-js-2.57.4/LICENSE
+sha384-jmoDYyU7L+yOv7px7MjyHDwawuEA3wwPatToXihOJd8U2Jmd+pyqVF7C6Kwuc+sX  vendor/supabase-js-2.57.4/supabase.js
