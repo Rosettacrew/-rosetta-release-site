@@ -7,9 +7,17 @@ import {
   isPublicApiCredential,
   isQuarantinePath,
   isUuid,
+  clampPreviewDurationSeconds,
   magicAllowlist,
   redactLog,
-} from "./beatbox-guard.mjs";
+} from "../_shared/beatbox-guard.mjs";
+import {
+  commitPromotion,
+  evaluateOwnerBeatAttach,
+  ownerBeatSignedUploadTarget,
+  parseOwnerBeatAssetPath,
+  rejectUpload,
+} from "../_shared/owner-upload-guard.mjs";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -307,12 +315,21 @@ Deno.serve(async (req: Request) => {
           expires_in: signed ? QUARANTINE_UPLOAD_TTL_SECONDS : null,
         });
       }
-      const bucket = kind === "preview" ? "release-public" : "release-private";
-      const path = `beatbay/${id}/${kind}/${crypto.randomUUID()}.${ext}`;
-      const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path, { upsert: false });
+      // Owner and admin previews used to sign straight into release-public, so the
+      // client Content-Type was stored on a public object. Sign into private
+      // quarantine and promote on attach with a server-set content type.
+      const target = ownerBeatSignedUploadTarget(id, kind, crypto.randomUUID(), ext);
+      if (!target.ok) return json({ error: "Asset path is not allowed." }, 400);
+      const { data, error } = await supabase.storage.from(target.bucket).createSignedUploadUrl(target.path, { upsert: false });
       if (error) throw error;
-      const publicUrl = kind === "preview" ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${bucket}/${path}` : null;
-      return json({ bucket, path, token: data.token, signed_url: data.signedUrl, public_url: publicUrl });
+      return json({
+        bucket: target.bucket,
+        path: target.path,
+        token: data.token,
+        signed_url: data.signedUrl,
+        public_url: null,
+        quarantine: true,
+      });
     }
 
     if (action === "attach_asset") {
@@ -348,7 +365,7 @@ Deno.serve(async (req: Request) => {
         await supabase.storage.from("release-private").remove([path]);
         if (uploadError) return json({ error: "Validated audio could not be stored." }, 500);
         const duration = Number(body.duration_seconds);
-        const previewDuration = Number.isFinite(duration) ? Math.max(1, Math.min(600, Math.round(duration))) : 30;
+        const previewDuration = clampPreviewDurationSeconds(Number.isFinite(duration) ? Math.round(duration) : null);
         const publicUrl = kind === "preview"
           ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${finalBucket}/${finalPath}`
           : null;
@@ -356,9 +373,26 @@ Deno.serve(async (req: Request) => {
           ? { preview_url: publicUrl, preview_duration_seconds: previewDuration }
           : { full_audio_bucket: "release-private", full_audio_path: finalPath };
       } else {
-        changes = kind === "preview"
-          ? { preview_url: String(body.public_url ?? ""), preview_duration_seconds: Number(body.duration_seconds || 30) }
-          : { full_audio_bucket: "release-private", full_audio_path: path };
+        const parsed = parseOwnerBeatAssetPath(id, kind, path);
+        if (!parsed.ok) return json({ error: parsed.error }, 400);
+        const { data: blob, error: downloadError } = await supabase.storage.from(parsed.quarantineBucket).download(parsed.path);
+        const bytes = !downloadError && blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+        const decision = evaluateOwnerBeatAttach({
+          beatId: id,
+          kind,
+          path,
+          bytes,
+          supabaseUrl: Deno.env.get("SUPABASE_URL"),
+          durationSeconds: body.duration_seconds,
+          clientContentType: body.content_type ?? body.mime ?? null,
+          bodyPublicUrl: body.public_url,
+        });
+        if (decision.status !== 200) {
+          await rejectUpload(supabase.storage, decision.remove);
+          return json({ error: decision.error }, decision.status);
+        }
+        await commitPromotion(supabase.storage, decision.promote);
+        changes = decision.changes;
       }
       const { data, error } = await supabase.from("beatbay_beats").update(changes).eq("id", id).select("*").single();
       if (error) throw error;
