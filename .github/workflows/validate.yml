@@ -20,3 +20,7 @@ jobs:
           node-version: 22
       - name: Check embedded scripts and preview safeguards
         run: node scripts/check-static-html.mjs
+      - name: Check vendored library integrity
+        run: node scripts/check-vendor.mjs
+      - name: Check large-file uploader
+        run: node scripts/check-large-upload.mjs
