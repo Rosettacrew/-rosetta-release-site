@@ -76,9 +76,35 @@ Deno.serve(async (req: Request) => {
   const token = new URL(req.url).searchParams.get("token");
   if (!token) return json({ error: "missing_token" }, 400);
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const secretKeysJson = Deno.env.get("SUPABASE_SECRET_KEYS");
+  let serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (secretKeysJson) {
+    try {
+      serviceRoleKey = JSON.parse(secretKeysJson)?.default ?? serviceRoleKey;
+    } catch {
+      console.error("release-download: invalid SUPABASE_SECRET_KEYS JSON");
+      return json({ error: "server_misconfigured" }, 500);
+    }
+  }
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("release-download: missing SUPABASE_URL or service role");
+    return json({ error: "server_misconfigured" }, 500);
+  }
+
+  // Modern sb_secret_* keys authenticate through apikey only. Sending them as a
+  // Bearer token makes PostgREST attempt JWT verification and reject the request.
+  const modernSecret = serviceRoleKey.startsWith("sb_secret_");
+  const adminFetch: typeof fetch = async (input, init = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set("apikey", serviceRoleKey);
+    if (modernSecret) headers.delete("authorization");
+    return fetch(input, { ...init, headers });
+  };
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: adminFetch },
+  });
 
   const tokenHashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   const tokenHash = [...new Uint8Array(tokenHashBuffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
