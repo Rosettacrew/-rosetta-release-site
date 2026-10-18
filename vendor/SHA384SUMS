@@ -1,0 +1,3 @@
+sha384-Wgjx+8tLxXJSOx0qsuYHWUruquWEGSmkfn24UY1UGLJpwzCAMKZ3kbRI89jpYIVm  vendor/hash-wasm-4.12.0/sha256.umd.min.js
+sha384-F0dM9eNlSdhuIKztPHAwZZinCZDkxZs4ivSVwn7g/KIT69+8rCs/zVLYWtxh21q5  vendor/zipjs-2.18.2/zip.min.js
+sha384-N2b5Iwe+/N/0a3k+gkP3At3IgaLXhiOFfUuBoCNJnpbprct+Qb3ciMKwqmbkcB1L  vendor/client-zip-2.5.1/index.js
