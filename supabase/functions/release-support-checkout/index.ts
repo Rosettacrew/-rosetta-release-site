@@ -7,10 +7,62 @@ const cors = {
   "access-control-allow-methods": "POST,OPTIONS",
 };
 
-function json(data: unknown, status = 200) {
+/** Max Support-the-Artist tip amount ($500). Product metadata has no override on main. */
+const MAX_AMOUNT_CENTS = 50_000;
+
+/** Sliding-window rate limit: ~20 requests / minute / IP (Deno Edge in-memory). */
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+type Bucket = { timestamps: number[] };
+const rateBuckets = new Map<string, Bucket>();
+
+function clientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return (
+    req.headers.get("cf-connecting-ip")?.trim() ||
+    req.headers.get("x-real-ip")?.trim() ||
+    "unknown"
+  );
+}
+
+function rateLimit(key: string): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  let bucket = rateBuckets.get(key);
+  if (!bucket) {
+    bucket = { timestamps: [] };
+    rateBuckets.set(key, bucket);
+  }
+  bucket.timestamps = bucket.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (bucket.timestamps.length >= RATE_LIMIT_MAX) {
+    const oldest = bucket.timestamps[0]!;
+    const retryAfterSec = Math.max(1, Math.ceil((RATE_LIMIT_WINDOW_MS - (now - oldest)) / 1000));
+    return { ok: false, retryAfterSec };
+  }
+  bucket.timestamps.push(now);
+  // Bound map growth on long-lived isolates
+  if (rateBuckets.size > 5000) {
+    for (const [k, b] of rateBuckets) {
+      b.timestamps = b.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+      if (b.timestamps.length === 0) rateBuckets.delete(k);
+    }
+  }
+  return { ok: true };
+}
+
+function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...cors, "content-type": "application/json", "cache-control": "no-store" },
+    headers: {
+      ...cors,
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      ...extraHeaders,
+    },
   });
 }
 
@@ -26,17 +78,17 @@ function adminClient() {
 async function stripePost(path: string, params: URLSearchParams) {
   const secret = Deno.env.get("STRIPE_SECRET_KEY");
   if (!secret) throw new Error("Stripe is not configured");
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+  const res = await fetch("https://api.stripe.com/v1/" + path, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${secret}`,
+      Authorization: "Bearer " + secret,
       "content-type": "application/x-www-form-urlencoded",
     },
     body: params,
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = body?.error?.message ?? body?.error ?? `Stripe ${path} failed`;
+    const msg = body?.error?.message ?? body?.error ?? ("Stripe " + path + " failed");
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
   return body;
@@ -57,6 +109,15 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method Not Allowed" }, 405);
 
+  const rl = rateLimit("support-checkout:" + clientIp(req));
+  if (!rl.ok) {
+    return json(
+      { error: "Too Many Requests", retry_after: (rl as any).retryAfterSec },
+      429,
+      { "Retry-After": String((rl as any).retryAfterSec) },
+    );
+  }
+
   try {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") return json({ error: "Invalid JSON body" }, 400);
@@ -67,6 +128,12 @@ Deno.serve(async (req: Request) => {
     if (!productId) return json({ error: "product_id required" }, 400);
     if (!Number.isInteger(amountCents)) {
       return json({ error: "amount_cents must be an integer" }, 400);
+    }
+    if (amountCents > MAX_AMOUNT_CENTS) {
+      return json({
+        error: "amount_cents must be at most " + MAX_AMOUNT_CENTS,
+        max_cents: MAX_AMOUNT_CENTS,
+      }, 400);
     }
 
     const supabase = adminClient();
@@ -93,7 +160,7 @@ Deno.serve(async (req: Request) => {
     const title = String(product.title ?? "");
     const slug = String(product.slug ?? "");
     if (
-      /\/test_/i.test(link) ||
+      /\btest_/i.test(link) ||
       /buy\.stripe\.com\/test/i.test(link) ||
       /sandbox/i.test(title) ||
       /sandbox/i.test(slug)
@@ -107,14 +174,14 @@ Deno.serve(async (req: Request) => {
     }
     if (amountCents < floor) {
       return json({
-        error: `amount_cents must be at least ${floor}`,
+        error: "amount_cents must be at least " + floor,
         floor_cents: floor,
       }, 400);
     }
 
     const currency = String(product.currency ?? "usd").trim().toLowerCase() || "usd";
     const name = `${product.artist_name ?? ""} — ${product.title ?? ""}`
-      .replace(/\s+/g, " ")
+      .replace(/\\s+/g, " ")
       .trim()
       .slice(0, 250);
 
@@ -132,7 +199,7 @@ Deno.serve(async (req: Request) => {
     params.set("customer_creation", "always");
     params.set(
       "success_url",
-      `https://rosettacrew.com/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      "https://rosettacrew.com/?checkout=success&session_id={CHECKOUT_SESSION_ID}",
     );
     params.set("cancel_url", "https://rosettacrew.com/?checkout=cancel");
 
