@@ -24,7 +24,9 @@ jobs:
             echo "Potential live secret committed to source."
             exit 1
           fi
-          if git grep -nE 'payouts?|transfers?|treasury|external_accounts?|bank_accounts?' -- 'supabase/functions/**' | grep -E 'create|update|POST|DELETE|destination|schedule'; then
+          # Require a complete action word. This still flags payout/transfer code
+          # such as .create( or .update( without matching metadata like updated_at.
+          if git grep -nE 'payouts?|transfers?|treasury|external_accounts?|bank_accounts?' -- 'supabase/functions/**' | grep -E '(^|[^[:alnum:]_])(create|update|POST|DELETE|destination|schedule)([^[:alnum:]_]|$)'; then
             echo "Financial-perimeter-sensitive code requires manual security review."
             exit 1
           fi
