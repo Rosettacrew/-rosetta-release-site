@@ -17,7 +17,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git grep -nE '(sk_live_[A-Za-z0-9]+|rk_live_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[^$])' -- . ':!*.md'; then
+          # Stripe live keys and webhook secrets have long high-entropy suffixes.
+          # Requiring a realistic minimum length keeps deliberate short redaction
+          # fixtures (for example sk_live_123) from masking the remaining checks.
+          if git grep -nE '(sk_live_[A-Za-z0-9]{16,}|rk_live_[A-Za-z0-9]{16,}|whsec_[A-Za-z0-9]{16,}|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[^$])' -- . ':!*.md'; then
             echo "Potential live secret committed to source."
             exit 1
           fi
