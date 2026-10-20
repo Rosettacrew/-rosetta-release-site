@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh https://unpkg.com 'unsafe-inline'; connect-src 'self' https://sktgkrcahsxvidzjjxxt.supabase.co wss://sktgkrcahsxvidzjjxxt.supabase.co https://esm.sh; img-src 'self' data: blob: https:; media-src 'self' blob: https://sktgkrcahsxvidzjjxxt.supabase.co; style-src 'self' 'unsafe-inline' https://unpkg.com; font-src 'self' data:; worker-src 'self' blob:; form-action 'self' https://buy.stripe.com https://checkout.stripe.com; base-uri 'self'; object-src 'none'; upgrade-insecure-requests">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#070707" />
+    <title>DJ Loyalty Da Goat | Rosetta Crew Music Group</title>
+    <meta
+      name="description"
+      content="DJ Loyalty Da Goat — Love, Pain, Loyalty (EP) for $7.99 and Even Though (single) for $1.99. Official music. Buy direct through secure Stripe checkout."
+    />
+    <link rel="canonical" href="https://rosettacrew.com/loyalty/" />
+    <link rel="icon" href="/assets/rosetta-crew-logo.jpg" type="image/jpeg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Rosetta Crew Music Group" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://rosettacrew.com/loyalty/" />
+    <meta
+      property="og:title"
+      content="DJ Loyalty Da Goat | Rosetta Crew Music Group"
+    />
+    <meta
+      property="og:description"
+      content="Love, Pain, Loyalty (EP) — $7.99 and Even Though (single) — $1.99. Buy direct from DJ Loyalty Da Goat through secure Stripe checkout."
+    />
+    <meta
+      property="og:image"
+      content="https://sktgkrcahsxvidzjjxxt.supabase.co/storage/v1/object/public/release-public/b05c0b7b-22af-441e-89b9-b722e93feceb/cover/cover-c2685c3a-8760-4e7e-b398-6f6bc385db6d.jpeg"
+    />
+    <meta property="og:image:alt" content="DJ Loyalty Da Goat — Love, Pain, Loyalty (EP)" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="DJ Loyalty Da Goat | Rosetta Crew Music Group"
+    />
+    <meta
+      name="twitter:description"
+      content="Love, Pain, Loyalty (EP) — $7.99 and Even Though (single) — $1.99. Buy direct from DJ Loyalty Da Goat through secure Stripe checkout."
+    />
+    <meta
+      name="twitter:image"
+      content="https://sktgkrcahsxvidzjjxxt.supabase.co/storage/v1/object/public/release-public/b05c0b7b-22af-441e-89b9-b722e93feceb/cover/cover-c2685c3a-8760-4e7e-b398-6f6bc385db6d.jpeg"
+    />
+    <meta name="twitter:image:alt" content="DJ Loyalty Da Goat — Love, Pain, Loyalty (EP)" />
+    <style>
+      :root {
+        --g: #d7ab52;
+        --g2: #f2d18a;
+        --t: #f8f5ee;
+        --m: #aaa298;
+        --line: #3b3122;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 50% -10%, #d7ab5225, transparent 34rem),
+          linear-gradient(#050505, #0b0907 60%, #050505);
+        color: var(--t);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      }
+      .wrap {
+        width: min(1120px, 100%);
+        margin: auto;
+        padding:
+          max(20px, env(safe-area-inset-top))
+          max(16px, env(safe-area-inset-right))
+          max(48px, env(safe-area-inset-bottom))
+          max(16px, env(safe-area-inset-left));
+      }
+      .hero {
+        text-align: center;
+        padding: 8px 0 8px;
+      }
+      .brand {
+        font-size: 10px;
+        letter-spacing: 0.3em;
+        color: var(--g2);
+        font-weight: 800;
+      }
+      .hero h1 {
+        font:
+          700 clamp(36px, 10vw, 68px) / 0.98 Georgia,
+          serif;
+        margin: 12px 0 8px;
+      }
+      .lede {
+        margin: 0 auto;
+        max-width: 34rem;
+        color: #c4bcaf;
+        font-size: 15px;
+        line-height: 1.55;
+        letter-spacing: 0;
+      }
+      .jumps {
+        display: grid;
+        gap: 10px;
+        margin: 22px auto 0;
+        max-width: 520px;
+      }
+      .jump {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 52px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #11100d;
+        color: var(--t);
+        text-decoration: none;
+        text-align: left;
+        touch-action: manipulation;
+      }
+      .jump span {
+        font-weight: 800;
+        font-size: 14px;
+      }
+      .jump strong {
+        color: var(--g2);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+      }
+      a:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--g2);
+        outline-offset: 3px;
+      }
+      .release {
+        margin-top: 36px;
+        scroll-margin-top: max(12px, env(safe-area-inset-top));
+      }
+      .grid {
+        display: grid;
+        gap: 22px;
+        align-items: start;
+      }
+      .cover {
+        display: block;
+        width: min(100%, 430px);
+        aspect-ratio: 1/1;
+        object-fit: contain;
+        border-radius: 26px;
+        border: 1px solid var(--line);
+        box-shadow: 0 30px 90px #000a;
+        margin: 0 auto;
+        background: #111;
+      }
+      .meta small {
+        color: var(--g);
+        letter-spacing: 0.2em;
+        font-weight: 800;
+        font-size: 11px;
+      }
+      .title {
+        font:
+          700 clamp(34px, 9vw, 64px) / 0.95 Georgia,
+          serif;
+        margin: 10px 0 8px;
+        overflow-wrap: anywhere;
+      }
+      .artist {
+        font-size: 16px;
+        letter-spacing: 0.14em;
+        font-weight: 900;
+      }
+      .artist-type {
+        display: inline-flex;
+        width: fit-content;
+        margin-top: 9px;
+        padding: 5px 9px;
+        border: 1px solid #796443;
+        border-radius: 999px;
+        color: var(--g2);
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+      }
+      .status {
+        margin-top: 12px;
+        color: #9f978c;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+      }
+      .price {
+        font-size: 38px;
+        color: var(--g2);
+        font-weight: 900;
+        margin: 14px 0 0;
+      }
+      .buy {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 54px;
+        margin-top: 16px;
+        padding: 16px 18px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #cf9f43, #f3d894);
+        color: #17120a;
+        font-size: 18px;
+        font-weight: 900;
+        text-align: center;
+        text-decoration: none;
+        touch-action: manipulation;
+      }
+      .trust {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+        color: #8f887e;
+        font-size: 11px;
+      }
+      .desc {
+        margin: 16px 0 0;
+        color: #c4bcaf;
+        font-size: 15px;
+        line-height: 1.65;
+        max-width: 40rem;
+        white-space: pre-line;
+      }
+      .tracklist {
+        margin: 16px 0 0;
+        padding: 14px 14px;
+        border: 1px solid rgba(226, 189, 105, 0.22);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(226, 189, 105, 0.06), rgba(255, 255, 255, 0.02));
+      }
+      .tracklist-label {
+        color: #e2bd69;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+      .tracklist ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        color: #ece6da;
+        font-size: 15px;
+        line-height: 1.35;
+      }
+      .tracklist li {
+        display: grid;
+        grid-template-columns: 2rem minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 6px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .tracklist li:first-child {
+        border-top: 0;
+      }
+      .tracklist .num {
+        color: #9a9082;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .tracklist .name {
+        overflow-wrap: anywhere;
+      }
+      .tracklist .play {
+        display: inline-grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid var(--g);
+        border-radius: 999px;
+        background: var(--g);
+        color: #080705;
+        font: 700 14px/1 Arial, sans-serif;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .tracklist .play[aria-pressed="true"] {
+        border-color: var(--g2);
+        background: #080705;
+        color: var(--g2);
+      }
+      .booking-banner {
+        display: block;
+        margin-top: 16px;
+        padding: 14px 16px;
+        border: 1px solid var(--g);
+        border-radius: 14px;
+        background: linear-gradient(135deg, #d7ab521c, #11100d);
+        color: var(--t);
+        text-decoration: none;
+        line-height: 1.45;
+      }
+      .booking-banner strong {
+        display: block;
+        color: var(--g2);
+        font-size: 12px;
+        letter-spacing: 0.12em;
+      }
+      .booking-banner span {
+        color: #c4bcaf;
+        font-size: 13px;
+      }
+      .share-release {
+        display: block;
+        width: 100%;
+        min-height: 48px;
+        margin-top: 10px;
+        padding: 12px 16px;
+        border: 1px solid var(--g);
+        border-radius: 14px;
+        background: transparent;
+        color: var(--g2);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 900;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .support {
+        margin-top: 16px;
+        padding: 14px 14px 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: linear-gradient(160deg, #1a160f, #0e0c09);
+      }
+      .support-label {
+        color: var(--g2);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.18em;
+        margin-bottom: 10px;
+      }
+      .support-presets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .support-preset {
+        min-height: 44px;
+        border: 1px solid #796443;
+        background: #11100d;
+        color: var(--g2);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 800;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .support-preset.active {
+        border-color: var(--g);
+        background: #1b1710;
+      }
+      .support-custom {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .support-custom label {
+        color: #9f978c;
+        font-size: 12px;
+      }
+      .support-custom input {
+        width: 120px;
+        min-height: 44px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #0a0908;
+        color: var(--t);
+        padding: 10px 12px;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .support-go {
+        min-height: 44px;
+        border: 0;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #cf9f43, #f3d894);
+        color: #17120a;
+        font-size: 14px;
+        font-weight: 900;
+        padding: 10px 14px;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+      .support-go:disabled {
+        opacity: 0.65;
+        cursor: default;
+      }
+      .support-hint,
+      .support-error {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+      .support-hint {
+        color: #8f887e;
+      }
+      .support-error {
+        color: #e8a0a0;
+      }
+      .home-link {
+        display: block;
+        margin-top: 36px;
+        color: var(--m);
+        font-size: 13px;
+        text-align: center;
+      }
+      .checkout-toast {
+        position: fixed;
+        left: 50%;
+        bottom: max(16px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        z-index: 40;
+        width: min(520px, calc(100vw - 24px));
+        padding: 14px 18px;
+        border: 1px solid var(--g);
+        border-radius: 14px;
+        background: #14110c;
+        color: var(--t);
+        box-shadow: 0 18px 50px #000a;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .checkout-toast strong {
+        color: var(--g2);
+        display: block;
+        margin-bottom: 4px;
+        letter-spacing: 0.08em;
+        font-size: 11px;
+      }
+      .checkout-toast button {
+        margin-top: 8px;
+        min-height: 36px;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--m);
+        border-radius: 999px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      .empty,
+      .error {
+        margin-top: 22px;
+        border: 1px solid var(--line);
+        background: #11100d;
+        border-radius: 18px;
+        padding: 22px;
+        text-align: center;
+        color: #b9b1a5;
+      }
+      .hidden {
+        display: none;
+      }
+      @media (min-width: 820px) {
+        .jumps {
+          grid-template-columns: 1fr 1fr;
+          max-width: 720px;
+        }
+        .grid {
+          grid-template-columns: minmax(280px, 0.9fr) 1.1fr;
+          gap: 48px;
+          align-items: center;
+        }
+        .cover {
+          margin: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <div class="brand">ROSETTA CREW MUSIC GROUP</div>
+        <h1>DJ Loyalty Da Goat</h1>
+        <p class="lede">
+          Official music. Buy the EP and the single direct — secure Stripe checkout and digital delivery.
+        </p>
+        <nav class="jumps" aria-label="Releases on this page">
+          <a class="jump" href="#dj-loyalty-da-goat-love-pain-loyalty-ep">
+            <span>Love, Pain, Loyalty (EP)</span>
+            <strong data-jump-price="dj-loyalty-da-goat-love-pain-loyalty-ep">EP</strong>
+          </a>
+          <a class="jump" href="#dj-loyalty-da-goat-even-though">
+            <span>Even Though</span>
+            <strong data-jump-price="dj-loyalty-da-goat-even-though">Single</strong>
+          </a>
+        </nav>
+      </header>
+      <section id="loading" class="empty">Loading releases…</section>
+      <section id="error" class="error hidden">
+        Storefront is temporarily unavailable. Please try again shortly.
+      </section>
+      <div id="releases"></div>
+      <a class="home-link" href="/">Rosetta Crew Music Group</a>
+      <div id="checkout-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
+      <div id="share-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
+    </main>
+    <script>
+      const FN_BASE = "https://sktgkrcahsxvidzjjxxt.supabase.co/functions/v1";
+      const API = FN_BASE + "/release-storefront";
+      const SUPPORT_API = FN_BASE + "/release-support-checkout";
+      const SUPPORT_MAX_CENTS = 1_000_000;
+      const SAMPLE_ORIGIN = "https://sktgkrcahsxvidzjjxxt.supabase.co";
+      const SLUGS = [
+        "dj-loyalty-da-goat-love-pain-loyalty-ep",
+        "dj-loyalty-da-goat-even-though",
+      ];
+      const UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      const money = (c, cur = "usd") =>
+        new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: String(cur).toUpperCase(),
+        }).format((Number(c) || 0) / 100);
+      const esc = (s) =>
+        String(s ?? "").replace(
+          /[&<>"']/g,
+          (m) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[m],
+        );
+
+      function isStripeCheckout(value) {
+        try {
+          const url = new URL(value);
+          return (
+            url.protocol === "https:" &&
+            !url.username &&
+            !url.password &&
+            ["buy.stripe.com", "checkout.stripe.com"].includes(url.hostname) &&
+            !/^\/test(?:_|\/|$)/i.test(url.pathname)
+          );
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function publicSampleUrl(release, trackNumber) {
+        const id = String(release.id || "");
+        const n = Number(trackNumber);
+        if (!UUID_RE.test(id) || !Number.isInteger(n) || n < 1 || n > 30) return "";
+        const nn = String(n).padStart(2, "0");
+        const url = new URL(
+          `/storage/v1/object/public/release-public/${id}/samples/${nn}-sample.mp3`,
+          SAMPLE_ORIGIN,
+        );
+        return url.hostname === "sktgkrcahsxvidzjjxxt.supabase.co" ? url.toString() : "";
+      }
+
+      function supportPresets(floor) {
+        const f = Number(floor) || 0;
+        if (f === 499) return [499, 799, 999, 1499];
+        return [f, f + 300, f + 500, f + 1000].filter((n) => n > 0);
+      }
+      function supportBlock(release) {
+        const floor = Number(release.price_cents) || 0;
+        if (!(floor > 0)) return "";
+        const presets = supportPresets(floor);
+        const buttons = presets
+          .map(
+            (c, i) =>
+              `<button type="button" class="support-preset${i === 0 ? " active" : ""}" data-cents="${c}">${money(c, release.currency)}</button>`,
+          )
+          .join("");
+        return `<div class="support" data-support-product="${esc(release.id)}" data-floor="${floor}" data-currency="${esc(release.currency || "usd")}"><div class="support-label">SUPPORT THE ARTIST</div><div class="support-presets">${buttons}</div><div class="support-custom"><label>Custom $</label><input type="number" min="${(floor / 100).toFixed(2)}" max="${(SUPPORT_MAX_CENTS / 100).toFixed(2)}" step="0.01" inputmode="decimal" placeholder="${(floor / 100).toFixed(2)}" aria-label="Custom support amount in dollars" /><button type="button" class="support-go" data-support-go>Support</button></div><div class="support-hint">Minimum ${money(floor, release.currency)}. Maximum ${money(SUPPORT_MAX_CENTS, release.currency)}. Same digital release — pay what you can.</div><div class="support-error hidden" data-support-error></div></div>`;
+      }
+
+      function cleanTrackTitle(raw, trackNumber) {
+        let t = String(raw || "").trim();
+        if (!t) return `Track ${trackNumber}`;
+        t = t.replace(/^\d{1,2}\s*[-.)]\s*/g, "");
+        t = t.replace(/^Rosetta Crew Music\s*-\s*/i, "");
+        t = t.replace(/^\d{1,2}\s*[.）)]\s*/g, "");
+        t = t.replace(/\s+\d+$/g, "");
+        t = t.replace(/^\d{1,2}\s*-\s*/g, "").trim();
+        t = t.replace(/^\d{1,2}\.\s*/g, "").trim();
+        return t || `Track ${trackNumber}`;
+      }
+      function releaseStatus(release) {
+        if (release.status !== "presale") return "AVAILABLE NOW";
+        if (!release.release_at) return "PRE-ORDER";
+        const releaseDate = new Date(release.release_at);
+        return Number.isNaN(releaseDate.getTime())
+          ? "PRE-ORDER"
+          : `PRE-ORDER · RELEASES ${releaseDate.toLocaleDateString()}`;
+      }
+      function releaseCard(release) {
+        const artist = String(release.artist_name || "").trim();
+        const title = String(release.title || "Release").trim();
+        const price = money(release.price_cents, release.currency);
+        const description =
+          release.description ||
+          "Own the official digital release and support the artist directly through Rosetta Crew Music Group.";
+        const actionLabel = release.status === "presale" ? "PRE-ORDER" : "BUY NOW";
+        const action = `<a class="buy" href="${esc(release.checkout_url)}" data-product="${esc(release.id)}" rel="noopener">${actionLabel} — ${price}</a>`;
+        const artistType =
+          release.artist_type === "ai" ? "ai" : release.artist_type === "actual" ? "actual" : null;
+        const identity = artistType
+          ? `<div class="artist-type">${artistType === "ai" ? "AI ARTIST" : "ACTUAL ARTIST"}</div>`
+          : "";
+        const booking =
+          artistType === "actual"
+            ? `<a class="booking-banner" href="tel:+16562424777"><strong>BOOK THIS ARTIST</strong><span>Contact Rosetta Crew for booking inquiries · 656-242-4777</span></a>`
+            : "";
+        const tracks = Array.isArray(release.tracks) ? release.tracks : [];
+        const showTracks = release.show_tracklist !== false && tracks.length > 0;
+        const tracklist = showTracks
+          ? `<div class="tracklist"><div class="tracklist-label">${tracks.length > 1 ? `${tracks.length} songs on this release · tap to preview` : "Track on this release"}</div><ol>${tracks
+              .map((t) => {
+                const trackTitle = cleanTrackTitle(t.title, t.track_number);
+                const nn = String(t.track_number).padStart(2, "0");
+                const sampleUrl = publicSampleUrl(release, t.track_number);
+                const play = sampleUrl
+                  ? `<button class="play" type="button" data-sample-url="${esc(sampleUrl)}" aria-label="Play sample: ${esc(trackTitle)}" aria-pressed="false">▶</button>`
+                  : "";
+                return `<li><span class="num">${nn}</span><span class="name">${esc(trackTitle)}</span>${play}</li>`;
+              })
+              .join("")}</ol></div>`
+          : "";
+        return `<article class="release" id="${esc(release.slug)}" data-slug="${esc(release.slug)}"><div class="grid"><img class="cover" src="${esc(release.cover_url)}" alt="${esc(artist)} — ${esc(title)} cover art" width="800" height="800"><div class="meta"><small>ROSETTA CREW MUSIC GROUP PRESENTS</small><h2 class="title">${esc(title)}</h2><div class="artist">${esc(artist.toUpperCase())}</div>${identity}<div class="status">${esc(releaseStatus(release))}</div><div class="price">${price}</div>${action}<div class="trust"><span>✓ Secure Stripe checkout</span><span>✓ Direct-to-fan</span><span>✓ Digital delivery</span></div><p class="desc">${esc(description)}</p>${tracklist}${booking}<button class="share-release" type="button" data-release-slug="${esc(release.slug)}">Share</button>${supportBlock(release)}</div></div></article>`;
+      }
+
+      let shareToastTimer;
+      function showShareToast(message) {
+        const toast = document.getElementById("share-toast");
+        if (!toast) return;
+        clearTimeout(shareToastTimer);
+        toast.textContent = message;
+        toast.classList.remove("hidden");
+        shareToastTimer = setTimeout(() => toast.classList.add("hidden"), 2600);
+      }
+      async function copyShareUrl(url) {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+          await navigator.clipboard.writeText(url);
+          return;
+        }
+        const input = document.createElement("textarea");
+        input.value = url;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand("copy");
+        input.remove();
+        if (!copied) throw new Error("copy failed");
+      }
+      async function shareRelease(release) {
+        const slug = String(release.slug || "").trim();
+        const url = new URL(location.origin + location.pathname);
+        if (slug) url.searchParams.set("release", slug);
+        url.searchParams.set("utm_source", "share");
+        url.searchParams.set("utm_medium", "web");
+        url.searchParams.set("utm_campaign", slug || String(release.id || "loyalty"));
+        const title = String(release.title || "Release").trim();
+        const artist = String(release.artist_name || "").trim();
+        const shareData = {
+          title,
+          text: `${artist} — ${title}`,
+          url: url.toString(),
+        };
+        if (navigator.share) {
+          try {
+            await navigator.share(shareData);
+          } catch (error) {
+            if (error && error.name !== "AbortError") showShareToast("Unable to share this link");
+          }
+          return;
+        }
+        try {
+          await copyShareUrl(shareData.url);
+          showShareToast("Link copied");
+        } catch (_) {
+          showShareToast("Could not copy the link");
+        }
+      }
+
+      function wireSamples(root) {
+        const sampleAudio = new Audio();
+        sampleAudio.preload = "none";
+        let playingButton = null;
+        function resetSampleButton(button) {
+          if (!button) return;
+          button.textContent = "▶";
+          button.setAttribute("aria-pressed", "false");
+          const label = button.getAttribute("aria-label") || "Play sample";
+          button.setAttribute("aria-label", label.replace(/^Pause sample:/, "Play sample:"));
+        }
+        function stopSample(button = playingButton) {
+          sampleAudio.pause();
+          sampleAudio.removeAttribute("src");
+          sampleAudio.load();
+          resetSampleButton(button);
+          if (button === playingButton) playingButton = null;
+        }
+        sampleAudio.addEventListener("ended", () => stopSample());
+        sampleAudio.addEventListener("timeupdate", () => {
+          if (sampleAudio.currentTime >= 45) stopSample();
+        });
+        sampleAudio.addEventListener("error", () => {
+          if (playingButton) playingButton.hidden = true;
+          stopSample();
+        });
+        root.addEventListener("click", (event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          const button = target && target.closest("button.play[data-sample-url]");
+          if (!button || !root.contains(button)) return;
+          const sampleUrl = button.dataset.sampleUrl || "";
+          let allowed = false;
+          try {
+            const url = new URL(sampleUrl);
+            allowed =
+              url.origin === SAMPLE_ORIGIN &&
+              /^\/storage\/v1\/object\/public\/release-public\/[0-9a-f-]{36}\/samples\/\d{2}-sample\.mp3$/i.test(
+                url.pathname,
+              );
+          } catch (_) {
+            allowed = false;
+          }
+          if (!allowed) return;
+          if (button === playingButton && !sampleAudio.paused) {
+            sampleAudio.pause();
+            button.textContent = "▶";
+            button.setAttribute("aria-pressed", "false");
+            const label = button.getAttribute("aria-label") || "Play sample";
+            button.setAttribute("aria-label", label.replace(/^Pause sample:/, "Play sample:"));
+            return;
+          }
+          if (playingButton && playingButton !== button) resetSampleButton(playingButton);
+          sampleAudio.pause();
+          sampleAudio.src = sampleUrl;
+          sampleAudio.currentTime = 0;
+          playingButton = button;
+          button.textContent = "❚❚";
+          button.setAttribute("aria-pressed", "true");
+          const label = button.getAttribute("aria-label") || "Pause sample";
+          button.setAttribute("aria-label", label.replace(/^Play sample:/, "Pause sample:"));
+          sampleAudio.play().catch(() => {
+            if (playingButton === button) {
+              button.hidden = true;
+              stopSample(button);
+            }
+          });
+        });
+      }
+
+      async function startSupportCheckout(productId, amountCents, errorEl, goBtn) {
+        if (errorEl) {
+          errorEl.textContent = "";
+          errorEl.classList.add("hidden");
+        }
+        if (goBtn) goBtn.disabled = true;
+        try {
+          const r = await fetch(SUPPORT_API, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ product_id: productId, amount_cents: amountCents }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok || !isStripeCheckout(data.url)) {
+            throw new Error(data.error || "Checkout unavailable");
+          }
+          location.href = data.url;
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err instanceof Error ? err.message : String(err);
+            errorEl.classList.remove("hidden");
+          }
+          if (goBtn) goBtn.disabled = false;
+        }
+      }
+      function wireSupportUI(root) {
+        root.addEventListener("click", (e) => {
+          const preset = e.target.closest(".support-preset");
+          if (preset) {
+            const box = preset.closest(".support");
+            if (!box) return;
+            box.querySelectorAll(".support-preset").forEach((b) => b.classList.remove("active"));
+            preset.classList.add("active");
+            const input = box.querySelector("input");
+            if (input) input.value = (Number(preset.dataset.cents) / 100).toFixed(2);
+            return;
+          }
+          const go = e.target.closest("[data-support-go]");
+          if (!go) return;
+          const box = go.closest(".support");
+          if (!box) return;
+          const floor = Number(box.dataset.floor) || 0;
+          const productId = box.dataset.supportProduct;
+          const errorEl = box.querySelector("[data-support-error]");
+          const input = box.querySelector("input");
+          const active = box.querySelector(".support-preset.active");
+          let cents;
+          if (input && input.value.trim() !== "") {
+            const dollars = Number(input.value);
+            if (!Number.isFinite(dollars)) {
+              if (errorEl) {
+                errorEl.textContent = "Enter a valid amount";
+                errorEl.classList.remove("hidden");
+              }
+              return;
+            }
+            cents = Math.round(dollars * 100);
+          } else if (active) {
+            cents = Number(active.dataset.cents);
+          } else {
+            cents = floor;
+          }
+          if (!Number.isInteger(cents) || cents < floor) {
+            if (errorEl) {
+              errorEl.textContent = "Minimum is " + money(floor, box.dataset.currency);
+              errorEl.classList.remove("hidden");
+            }
+            return;
+          }
+          if (cents > SUPPORT_MAX_CENTS) {
+            if (errorEl) {
+              errorEl.textContent = "Maximum is " + money(SUPPORT_MAX_CENTS, box.dataset.currency);
+              errorEl.classList.remove("hidden");
+            }
+            return;
+          }
+          if (!UUID_RE.test(String(productId || ""))) return;
+          startSupportCheckout(productId, cents, errorEl, go);
+        });
+      }
+
+      function showCheckoutToast() {
+        const q = new URLSearchParams(location.search);
+        const flag = q.get("checkout");
+        if (flag !== "success" && flag !== "cancel") return;
+        const el = document.getElementById("checkout-toast");
+        if (!el) return;
+        if (flag === "success") {
+          el.innerHTML =
+            "<strong>ORDER CONFIRMED</strong>Thanks — your order is recorded. Check the email you used at checkout.";
+        } else {
+          el.innerHTML =
+            "<strong>CHECKOUT CANCELED</strong>No charge was made. You can buy from this page anytime.";
+        }
+        el.classList.remove("hidden");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Dismiss";
+        btn.addEventListener("click", () => {
+          el.classList.add("hidden");
+          const url = new URL(location.href);
+          url.searchParams.delete("checkout");
+          url.searchParams.delete("session_id");
+          history.replaceState({}, "", url.pathname + url.search + url.hash);
+        });
+        el.appendChild(btn);
+      }
+
+      function usableRelease(release) {
+        return (
+          release &&
+          SLUGS.includes(String(release.slug || "")) &&
+          isStripeCheckout(release.checkout_url) &&
+          typeof release.cover_url === "string" &&
+          release.cover_url.startsWith(SAMPLE_ORIGIN + "/storage/v1/object/public/release-public/") &&
+          Number(release.price_cents) > 0
+        );
+      }
+
+      async function load() {
+        const loading = document.getElementById("loading");
+        const error = document.getElementById("error");
+        try {
+          const r = await fetch(API, { cache: "no-store" });
+          if (!r.ok) throw new Error("storefront");
+          const j = await r.json();
+          const bySlug = new Map(
+            (j.releases || []).filter(usableRelease).map((release) => [release.slug, release]),
+          );
+          const releases = SLUGS.map((slug) => bySlug.get(slug)).filter(Boolean);
+          loading.classList.add("hidden");
+          if (!releases.length) {
+            error.textContent = "These releases are not available right now.";
+            error.classList.remove("hidden");
+            return;
+          }
+          const root = document.getElementById("releases");
+          root.innerHTML = releases.map(releaseCard).join("");
+          releases.forEach((release) => {
+            const priceEl = document.querySelector(
+              `[data-jump-price="${CSS.escape(release.slug)}"]`,
+            );
+            if (priceEl) priceEl.textContent = money(release.price_cents, release.currency);
+          });
+          const catalog = new Map(releases.map((release) => [release.slug, release]));
+          root.addEventListener("click", (event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const shareButton = target && target.closest("button.share-release[data-release-slug]");
+            if (!shareButton || !root.contains(shareButton)) return;
+            const release = catalog.get(shareButton.dataset.releaseSlug);
+            if (release) shareRelease(release);
+          });
+          wireSamples(root);
+          wireSupportUI(root);
+          const params = new URLSearchParams(location.search);
+          const focus = params.get("release") || location.hash.replace(/^#/, "");
+          if (SLUGS.includes(focus)) {
+            const card = document.getElementById(focus);
+            if (card) card.scrollIntoView({ block: "start" });
+          }
+        } catch (_) {
+          loading.classList.add("hidden");
+          error.classList.remove("hidden");
+        }
+      }
+
+      showCheckoutToast();
+      load();
+    </script>
+  </body>
+</html>

@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 const files = [
   "admin-dashboard.html",
   "index.html",
+  "loyalty/index.html",
   "beatbay-admin.html",
   "beatbox.html",
   "beatbay/index.html",
@@ -100,6 +101,41 @@ assert.doesNotMatch(
   storefront,
   /Contact (name|email|phone)/i,
   "Private artist contact fields must not appear on the storefront",
+);
+
+const loyalty = readFileSync("loyalty/index.html", "utf8");
+const cspContent = (html) => {
+  const match = html.match(
+    /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"/i,
+  );
+  assert.ok(match, "page is missing a CSP meta tag");
+  return match[1];
+};
+assert.equal(
+  cspContent(loyalty),
+  cspContent(storefront),
+  "Loyalty page CSP must match the homepage",
+);
+assert.match(loyalty, /rel="canonical"\s+href="https:\/\/rosettacrew\.com\/loyalty\/"/);
+assert.match(loyalty, /property="og:title"/);
+assert.match(loyalty, /property="og:description"/);
+assert.match(loyalty, /property="og:image"/);
+assert.match(loyalty, /property="og:url"\s+content="https:\/\/rosettacrew\.com\/loyalty\/"/);
+assert.match(loyalty, /name="twitter:card"\s+content="summary_large_image"/);
+assert.match(loyalty, /name="twitter:title"/);
+assert.match(loyalty, /name="twitter:description"/);
+assert.match(loyalty, /name="twitter:image"/);
+assert.match(loyalty, /dj-loyalty-da-goat-love-pain-loyalty-ep/);
+assert.match(loyalty, /dj-loyalty-da-goat-even-though/);
+assert.match(loyalty, /function isStripeCheckout/);
+assert.match(loyalty, /\/release-storefront/);
+assert.doesNotMatch(loyalty, /http-equiv=["']refresh["']/i);
+assert.doesNotMatch(loyalty, /noindex/);
+assert.doesNotMatch(loyalty, /beatbay/i, "Loyalty purchases must not link to BeatBay");
+assert.doesNotMatch(loyalty, /location\.(replace|assign)\(/);
+assert.match(
+  readFileSync("sitemap.xml", "utf8"),
+  /<loc>https:\/\/rosettacrew\.com\/loyalty\/<\/loc>/,
 );
 
 const beatbayAdmin = readFileSync("beatbay-admin.html", "utf8");
@@ -356,6 +392,7 @@ const publicFiles = [
   "admin.html",
   "admin-v2.html",
   "index.html",
+  "loyalty/index.html",
   "live.html",
   "storefront-v2.html",
   "admin-sw.js",
