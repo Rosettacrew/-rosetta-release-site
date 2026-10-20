@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 const files = [
   "admin-dashboard.html",
   "index.html",
+  "loyalty/index.html",
   "beatbay-admin.html",
   "beatbox.html",
   "beatbay/index.html",
@@ -100,6 +101,80 @@ assert.doesNotMatch(
   storefront,
   /Contact (name|email|phone)/i,
   "Private artist contact fields must not appear on the storefront",
+);
+
+const loyalty = readFileSync("loyalty/index.html", "utf8");
+const loyaltyJs = readFileSync("loyalty/loyalty.js", "utf8");
+const loyaltyJsCheck = spawnSync(process.execPath, ["--check", "loyalty/loyalty.js"], {
+  encoding: "utf8",
+});
+assert.equal(
+  loyaltyJsCheck.status,
+  0,
+  `loyalty/loyalty.js has invalid syntax:\n${loyaltyJsCheck.stderr}`,
+);
+const cspContent = (html) => {
+  const match = html.match(
+    /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"/i,
+  );
+  assert.ok(match, "page is missing a CSP meta tag");
+  return match[1];
+};
+const loyaltyCsp = cspContent(loyalty);
+assert.doesNotMatch(
+  loyaltyCsp,
+  /unsafe-inline|esm\.sh|unpkg/,
+  "Loyalty CSP must not allow unused inline scripts or third-party script hosts",
+);
+assert.match(loyaltyCsp, /(?:^|; )script-src 'self'(?:;|$)/);
+assert.match(loyaltyCsp, /(?:^|; )style-src 'self'(?:;|$)/);
+assert.match(
+  loyaltyCsp,
+  /connect-src 'self' https:\/\/sktgkrcahsxvidzjjxxt\.supabase\.co/,
+);
+assert.match(loyalty, /<link rel="stylesheet" href="loyalty\.css"/);
+assert.match(loyalty, /<script src="loyalty\.js"><\/script>/);
+assert.doesNotMatch(loyalty, /<style[\s>]/i);
+assert.match(loyalty, /rel="canonical"\s+href="https:\/\/rosettacrew\.com\/loyalty\/"/);
+assert.match(loyalty, /property="og:title"/);
+assert.match(loyalty, /property="og:description"/);
+assert.match(loyalty, /property="og:image"/);
+assert.match(loyalty, /property="og:url"\s+content="https:\/\/rosettacrew\.com\/loyalty\/"/);
+assert.match(loyalty, /name="twitter:card"\s+content="summary_large_image"/);
+assert.match(loyalty, /name="twitter:title"/);
+assert.match(loyalty, /name="twitter:description"/);
+assert.match(loyalty, /name="twitter:image"/);
+assert.match(loyalty, /dj-loyalty-da-goat-love-pain-loyalty-ep/);
+assert.match(loyalty, /dj-loyalty-da-goat-even-though/);
+assert.match(loyaltyJs, /function isStripeCheckout/);
+assert.match(loyaltyJs, /\/release-storefront/);
+assert.match(
+  loyaltyJs,
+  /const PINNED_CENTS = \{\s*"dj-loyalty-da-goat-love-pain-loyalty-ep": 799,\s*"dj-loyalty-da-goat-even-though": 199,\s*\}/,
+  "Loyalty prices must stay pinned at 799 and 199 cents",
+);
+assert.match(
+  loyaltyJs,
+  /function usableRelease\(release\) \{[\s\S]*?const pinnedCents = PINNED_CENTS\[slug\];[\s\S]*?Number\(release\.price_cents\) !== pinnedCents\) return false;[\s\S]*?if \(!isUsd\(release\.currency\)\) return false;/,
+  "usableRelease must hide a release whose price or currency does not match the pin",
+);
+assert.match(
+  loyaltyJs,
+  /function isUsd\(currency\) \{\s*return String\(currency \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "usd";\s*\}/,
+);
+assert.match(
+  loyaltyJs,
+  /function publicCoverUrl\(value, releaseId\) \{[\s\S]*?new URL\(value\)[\s\S]*?url\.origin !== SAMPLE_ORIGIN/,
+);
+assert.doesNotMatch(loyalty, /http-equiv=["']refresh["']/i);
+assert.doesNotMatch(loyalty, /noindex/);
+assert.doesNotMatch(loyalty, /beatbay/i, "Loyalty purchases must not link to BeatBay");
+assert.doesNotMatch(loyaltyJs, /beatbay/i, "Loyalty purchases must not link to BeatBay");
+assert.doesNotMatch(loyalty, /location\.(replace|assign)\(/);
+assert.doesNotMatch(loyaltyJs, /location\.(replace|assign)\(/);
+assert.match(
+  readFileSync("sitemap.xml", "utf8"),
+  /<loc>https:\/\/rosettacrew\.com\/loyalty\/<\/loc>/,
 );
 
 const beatbayAdmin = readFileSync("beatbay-admin.html", "utf8");
@@ -356,6 +431,8 @@ const publicFiles = [
   "admin.html",
   "admin-v2.html",
   "index.html",
+  "loyalty/index.html",
+  "loyalty/loyalty.js",
   "live.html",
   "storefront-v2.html",
   "admin-sw.js",

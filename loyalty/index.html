@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://sktgkrcahsxvidzjjxxt.supabase.co wss://sktgkrcahsxvidzjjxxt.supabase.co; img-src 'self' data: blob: https:; media-src 'self' blob: https://sktgkrcahsxvidzjjxxt.supabase.co; style-src 'self'; font-src 'self' data:; worker-src 'self' blob:; form-action 'self' https://buy.stripe.com https://checkout.stripe.com; base-uri 'self'; object-src 'none'; upgrade-insecure-requests">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#070707" />
+    <title>DJ Loyalty Da Goat | Rosetta Crew Music Group</title>
+    <meta
+      name="description"
+      content="DJ Loyalty Da Goat — Love, Pain, Loyalty (EP) for $7.99 and Even Though (single) for $1.99. Official music. Buy direct through secure Stripe checkout."
+    />
+    <link rel="canonical" href="https://rosettacrew.com/loyalty/" />
+    <link rel="icon" href="/assets/rosetta-crew-logo.jpg" type="image/jpeg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Rosetta Crew Music Group" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://rosettacrew.com/loyalty/" />
+    <meta
+      property="og:title"
+      content="DJ Loyalty Da Goat | Rosetta Crew Music Group"
+    />
+    <meta
+      property="og:description"
+      content="Love, Pain, Loyalty (EP) — $7.99 and Even Though (single) — $1.99. Buy direct from DJ Loyalty Da Goat through secure Stripe checkout."
+    />
+    <meta
+      property="og:image"
+      content="https://sktgkrcahsxvidzjjxxt.supabase.co/storage/v1/object/public/release-public/b05c0b7b-22af-441e-89b9-b722e93feceb/cover/cover-c2685c3a-8760-4e7e-b398-6f6bc385db6d.jpeg"
+    />
+    <meta property="og:image:alt" content="DJ Loyalty Da Goat — Love, Pain, Loyalty (EP)" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="DJ Loyalty Da Goat | Rosetta Crew Music Group"
+    />
+    <meta
+      name="twitter:description"
+      content="Love, Pain, Loyalty (EP) — $7.99 and Even Though (single) — $1.99. Buy direct from DJ Loyalty Da Goat through secure Stripe checkout."
+    />
+    <meta
+      name="twitter:image"
+      content="https://sktgkrcahsxvidzjjxxt.supabase.co/storage/v1/object/public/release-public/b05c0b7b-22af-441e-89b9-b722e93feceb/cover/cover-c2685c3a-8760-4e7e-b398-6f6bc385db6d.jpeg"
+    />
+    <meta name="twitter:image:alt" content="DJ Loyalty Da Goat — Love, Pain, Loyalty (EP)" />
+    <link rel="stylesheet" href="loyalty.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <div class="brand">ROSETTA CREW MUSIC GROUP</div>
+        <h1>DJ Loyalty Da Goat</h1>
+        <p class="lede">
+          Official music. Buy the EP and the single direct — secure Stripe checkout and digital delivery.
+        </p>
+        <nav class="jumps" aria-label="Releases on this page">
+          <a class="jump" href="#dj-loyalty-da-goat-love-pain-loyalty-ep">
+            <span>Love, Pain, Loyalty (EP)</span>
+            <strong data-jump-price="dj-loyalty-da-goat-love-pain-loyalty-ep">EP</strong>
+          </a>
+          <a class="jump" href="#dj-loyalty-da-goat-even-though">
+            <span>Even Though</span>
+            <strong data-jump-price="dj-loyalty-da-goat-even-though">Single</strong>
+          </a>
+        </nav>
+      </header>
+      <section id="loading" class="empty">Loading releases…</section>
+      <section id="error" class="error hidden">
+        Storefront is temporarily unavailable. Please try again shortly.
+      </section>
+      <div id="releases"></div>
+      <a class="home-link" href="/">Rosetta Crew Music Group</a>
+      <div id="checkout-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
+      <div id="share-toast" class="checkout-toast hidden" role="status" aria-live="polite"></div>
+    </main>
+    <script src="loyalty.js"></script>
+  </body>
+</html>
