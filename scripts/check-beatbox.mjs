@@ -324,7 +324,7 @@ assert.match(manager, /magicAllowlist\(ext, bytes\)/);
 assert.match(manager, /redactLog/);
 assert.match(manager, /public_url: null/);
 assert.doesNotMatch(manager, /STRIPE|stripe-release-webhook|createCheckout|RESEND_API_KEY\s*=/);
-const guard = readFileSync("supabase/functions/beatbay-manager/beatbox-guard.mjs", "utf8");
+const guard = readFileSync("supabase/functions/_shared/beatbox-guard.mjs", "utf8");
 const rules = readFileSync("beatbox/package-rules.mjs", "utf8");
 for (const source of [guard, rules, html]) {
   assert.doesNotMatch(source, /sk_live_[A-Za-z0-9]{8,}|whsec_[A-Za-z0-9]{8,}|SUPABASE_SERVICE_ROLE_KEY\s*=/);

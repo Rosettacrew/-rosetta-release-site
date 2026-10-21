@@ -1,5 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { ownerFinanceAccess, readAnalytics } from "./analytics-gate.mjs";
+import {
+  commitPromotion,
+  evaluateOwnerCoverAttach,
+  ownerCoverSignedUploadTarget,
+  parseOwnerCoverPath,
+  rejectUpload,
+} from "../_shared/owner-upload-guard.mjs";
 
 const cors = {
   "access-control-allow-origin": "*",
@@ -51,7 +59,7 @@ async function authenticatedAdmin(req: Request, supabase: ReturnType<typeof admi
 }
 
 function hasOwnerAccess(sessionAdmin: { admin?: { role?: string } } | null, fallbackKey: boolean) {
-  return fallbackKey || ["owner", "admin"].includes(sessionAdmin?.admin?.role ?? "");
+  return ownerFinanceAccess(sessionAdmin?.admin?.role, fallbackKey);
 }
 
 async function activityReport(
@@ -338,8 +346,16 @@ Deno.serve(async (req: Request) => {
       const view = url.searchParams.get("view") ?? "releases";
       if (view === "whoami") return json({ auth_mode: sessionAdmin ? "account" : "key", role: sessionAdmin?.admin?.role ?? "owner-key" });
       if (view === "analytics") {
-        const { data, error } = await supabase.from("release_analytics_summary").select("*").order("title");
-        if (error) throw error; return json({ analytics: data });
+        const result = await readAnalytics({
+          role: sessionAdmin?.admin?.role,
+          fallbackKey,
+          query: async () => {
+            const { data, error } = await supabase.from("release_analytics_summary").select("*").order("title");
+            if (error) throw error;
+            return data;
+          },
+        });
+        return json(result.body, result.status);
       }
       if (view === "studio_uploaders") {
         if (!hasOwnerAccess(sessionAdmin, fallbackKey)) return json({ error: "Forbidden" }, 403);
@@ -542,12 +558,19 @@ Deno.serve(async (req: Request) => {
       const ext = safeExt(filename); if (kind === "cover" && !["jpg","jpeg","png","webp"].includes(ext)) return json({ error: "Cover art must be JPG, PNG, or WebP" }, 400);
       if ((kind === "track" || kind === "preview") && !["mp3","wav"].includes(ext)) return json({ error: "Audio must be MP3 or WAV" }, 400); if (kind === "package" && ext !== "zip") return json({ error: "Release package must be ZIP" }, 400);
       let path: string, bucket = "release-private";
-      if (kind === "cover") { bucket = "release-public"; path = `${productId}/cover/cover-${crypto.randomUUID()}.${ext}`; }
+      let quarantine = false;
+      if (kind === "cover") {
+        const target = ownerCoverSignedUploadTarget(productId, crypto.randomUUID(), ext);
+        if (!target.ok) return json({ error: "Cover path is not allowed." }, 400);
+        bucket = target.bucket;
+        path = target.path;
+        quarantine = true;
+      }
       else if (kind === "preview") path = `${productId}/preview/preview-${crypto.randomUUID()}.${ext}`;
       else if (kind === "package") path = `${productId}/package/release-${crypto.randomUUID()}.${ext}`;
       else path = String(body.object_path ?? `${productId}/tracks/${crypto.randomUUID()}.${ext}`);
       const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path, { upsert: false }); if (error) throw error;
-      return json({ bucket, path, token: data.token, signed_url: data.signedUrl, public_url: bucket === "release-public" ? `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${bucket}/${path}` : null });
+      return json({ bucket, path, token: data.token, signed_url: data.signedUrl, public_url: null, quarantine });
     }
 
     if (action === "delete_track") {
@@ -588,6 +611,21 @@ Deno.serve(async (req: Request) => {
         if (!artworkReadyForStorefront({ cover_art_path: path, cover_art_bucket: "release-public" })) {
           return json({ error: "Cover art must be a JPG, PNG, or WebP object on release-public." }, 400);
         }
+        const parsedCover = parseOwnerCoverPath(productId, path);
+        if (!parsedCover.ok) return json({ error: parsedCover.error }, 400);
+        const { data: coverBlob, error: coverDownloadError } = await supabase.storage.from(parsedCover.quarantineBucket).download(parsedCover.path);
+        const coverBytes = !coverDownloadError && coverBlob ? new Uint8Array(await coverBlob.arrayBuffer()) : null;
+        const decision = evaluateOwnerCoverAttach({
+          productId,
+          path,
+          bytes: coverBytes,
+          clientContentType: body.mime,
+        });
+        if (decision.status !== 200) {
+          await rejectUpload(supabase.storage, decision.remove);
+          return json({ error: decision.error }, decision.status);
+        }
+        await commitPromotion(supabase.storage, decision.promote);
         const width = body.width == null ? null : Number(body.width);
         const height = body.height == null ? null : Number(body.height);
         changes.cover_art_path = path;
@@ -598,7 +636,7 @@ Deno.serve(async (req: Request) => {
           cover_art: {
             path,
             bucket: "release-public",
-            mime: readableText(body.mime) || null,
+            mime: decision.mime,
             width: Number.isFinite(width) ? width : null,
             height: Number.isFinite(height) ? height : null,
             validated_at: new Date().toISOString(),
