@@ -57,6 +57,13 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function bytePhrase(bytes) {
+  const size = Number(bytes);
+  if (size % (1024 * 1024) === 0) return `${size / (1024 * 1024)} MB`;
+  if (size % 1024 === 0) return `${size / 1024} KB`;
+  return `${size} bytes`;
+}
+
 export function canonicalZipPath(raw) {
   let norm = String(raw ?? "");
   if (!norm || /[\u0000-\u001f]/.test(norm)) return { error: "invalid path" };
@@ -140,7 +147,8 @@ function pickAudio(audio) {
   return { error: "Name the preview preview.mp3 (or include a single MP3 at the ZIP root) and the optional master full.wav." };
 }
 
-export function validateZipEntries(entries) {
+export function validateZipEntries(entries, limits = LIMITS) {
+  const cap = { ...LIMITS, ...(limits || {}) };
   if (!Array.isArray(entries) || entries.length === 0) {
     return { ok: false, errors: ["The archive is empty."], warnings: [], preview: null, full: null, cover: null, sidecar: null };
   }
@@ -179,7 +187,7 @@ export function validateZipEntries(entries) {
         errors.push(`Rejected ${label(parsed.path)}: invalid compressed size.`);
         continue;
       }
-      if (compressed > 0 && size / compressed > LIMITS.maxRatio) {
+      if (compressed > 0 && size / compressed > cap.maxRatio) {
         errors.push(`Rejected ${label(parsed.path)}: compression ratio is too high.`);
         continue;
       }
@@ -204,19 +212,19 @@ export function validateZipEntries(entries) {
     }
     if (AUDIO_EXT.has(ext)) {
       if (size === 0) errors.push(`Rejected ${label(parsed.path)}: audio file is empty.`);
-      else if (size > LIMITS.audioBytes) errors.push(`Rejected ${label(parsed.path)}: audio file is larger than 80 MB.`);
+      else if (size > cap.audioBytes) errors.push(`Rejected ${label(parsed.path)}: audio file is larger than ${cap.audioBytes === LIMITS.audioBytes ? "80 MB" : bytePhrase(cap.audioBytes)}.`);
       else audio.push(file);
       continue;
     }
     if (IMAGE_EXT.has(ext)) {
       if (size === 0) errors.push(`Rejected ${label(parsed.path)}: cover image is empty.`);
-      else if (size > LIMITS.coverBytes) errors.push(`Rejected ${label(parsed.path)}: cover image is larger than 8 MB.`);
+      else if (size > cap.coverBytes) errors.push(`Rejected ${label(parsed.path)}: cover image is larger than ${cap.coverBytes === LIMITS.coverBytes ? "8 MB" : bytePhrase(cap.coverBytes)}.`);
       else images.push(file);
       continue;
     }
     if (ext === "json" && /^(beat|metadata)\.json$/i.test(parsed.path.split("/").pop() || "")) {
       if (size === 0) errors.push(`Rejected ${label(parsed.path)}: sidecar is empty.`);
-      else if (size > LIMITS.sidecarBytes) errors.push(`Rejected ${label(parsed.path)}: sidecar is larger than 64 KB.`);
+      else if (size > cap.sidecarBytes) errors.push(`Rejected ${label(parsed.path)}: sidecar is larger than ${cap.sidecarBytes === LIMITS.sidecarBytes ? "64 KB" : bytePhrase(cap.sidecarBytes)}.`);
       else sidecars.push(file);
       continue;
     }
@@ -224,8 +232,8 @@ export function validateZipEntries(entries) {
   }
 
   if (kept === 0 && errors.length === 0) errors.push("The archive is empty.");
-  if (kept > LIMITS.maxEntries) errors.push(`This archive has too many files (maximum ${LIMITS.maxEntries}).`);
-  if (uncompressed > LIMITS.uncompressedBytes) errors.push("Uncompressed contents exceed 250 MB.");
+  if (kept > cap.maxEntries) errors.push(`This archive has too many files (maximum ${cap.maxEntries}).`);
+  if (uncompressed > cap.uncompressedBytes) errors.push(cap.uncompressedBytes === LIMITS.uncompressedBytes ? "Uncompressed contents exceed 250 MB." : `Uncompressed contents exceed ${bytePhrase(cap.uncompressedBytes)}.`);
   if (audio.length === 0 && !errors.some((error) => error.includes("at least one"))) {
     errors.push("Add at least one MP3 or WAV audio file.");
   }
