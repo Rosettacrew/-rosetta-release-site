@@ -11,7 +11,7 @@ const ep = 'b05c0b7b-22af-441e-89b9-b722e93feceb';
 const single = '23bdcdd9-cd64-4782-8699-cf4321a38df1';
 const origin = 'https://sktgkrcahsxvidzjjxxt.supabase.co';
 const context = {URL, SAMPLE_ORIGIN: origin,
-  UUID_RE: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i};
+  UUID_RE: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i};
 vm.createContext(context);
 const start = source.indexOf('function publicCoverUrl(');
 const end = source.indexOf('\nfunction supportPresets', start);
