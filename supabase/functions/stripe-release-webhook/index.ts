@@ -218,11 +218,11 @@ async function mintDownloadTokenAndEmail(opts: {
     if (!response.ok) {
       const body = (await response.text()).slice(0, 300);
       console.error("download_token: email send rejected", { token_id: tokenId, status: response.status, body });
-      await failDelivery("download_email_send_rejected");
+      throw new Error("download_email_send_rejected");
     } else {
       console.log("download_token: email sent", { token_id: tokenId });
     }
-  } catch (emailErr) {
+  } catch (_emailErr) {
     console.error("download_token: email delivery failure", { token_id: tokenId });
     await failDelivery("download_email_delivery_failed");
   }
