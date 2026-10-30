@@ -176,9 +176,18 @@ async function mintDownloadTokenAndEmail(opts: {
     Deno.env.get("ACTIVITY_EMAIL_FROM")?.trim() ||
     "";
 
+  // Never acknowledge a paid checkout as fully delivered when email cannot be sent.
+  // Revoke the newly minted token so a retried webhook can mint a fresh link.
+  async function failDelivery(reason: string): Promise<never> {
+    const { error: revokeError } = await supabase.from("release_download_tokens")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", tokenId);
+    if (revokeError) throw new Error("download_email_failed_and_revoke_failed");
+    throw new Error(reason);
+  }
+
   if (!apiKey || !from) {
-    console.log("download_token: email soft-fail not_configured", { token_id: tokenId });
-    return { tokenId, minted: true };
+    await failDelivery("download_email_not_configured");
   }
 
   try {
@@ -208,16 +217,14 @@ async function mintDownloadTokenAndEmail(opts: {
     });
     if (!response.ok) {
       const body = (await response.text()).slice(0, 300);
-      console.error("download_token: email soft-fail", { token_id: tokenId, status: response.status, body });
+      console.error("download_token: email send rejected", { token_id: tokenId, status: response.status, body });
+      await failDelivery("download_email_send_rejected");
     } else {
       console.log("download_token: email sent", { token_id: tokenId });
     }
   } catch (emailErr) {
-    console.error(
-      "download_token: email soft-fail",
-      { token_id: tokenId },
-      emailErr instanceof Error ? emailErr.message : String(emailErr),
-    );
+    console.error("download_token: email delivery failure", { token_id: tokenId });
+    await failDelivery("download_email_delivery_failed");
   }
 
   return { tokenId, minted: true };
