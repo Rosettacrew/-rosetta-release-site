@@ -34,3 +34,9 @@ Status: **HOLD — not authorized to publish based on database linkage alone.**
 | Slow | 1 downloadable track | PENDING | PENDING | PENDING | PENDING |
 
 Do not mark a test PASS unless there is observed evidence. No public activation from this checklist alone.
+
+## Static review finding — HOLD (October 30)
+
+**Email delivery retry gap:** Deployed `stripe-release-webhook` v22 inserts the download token before attempting Resend. Email failure is soft-fail. On duplicate webhook delivery, processed events are acknowledged without replaying delivery; `mintDownloadTokenAndEmail` also skips an existing active token without resending the original raw token (which is deliberately not stored). Therefore a customer can pay and receive an entitlement but no usable email, with no automatic resend path established by this review. **Do not launch seven singles until a secure recovery/reissue mechanism is designed, tested and Craig-approved.** Never log or store raw tokens to solve this.
+
+**Payment-link branch requires a separate check:** The webhook looks up a product by `stripe_payment_link_id`, but the live/published/storefront checks visible for the support-the-artist branch are not repeated in the Payment Link branch. Confirm Stripe link activation only follows publication and test that unpublished products cannot be purchased or granted entitlements through an accidentally active link. Do not alter existing live releases without a reviewed rollback.
