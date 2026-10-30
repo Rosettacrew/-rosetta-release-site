@@ -349,6 +349,15 @@ Deno.serve(async (req: Request) => {
           headers: { "content-type": "application/json" },
         });
       }
+      // Fail closed: payment links must not activate unpublished drafts.
+      if (!product.storefront_enabled || !product.published_at ||
+          !["live", "presale"].includes(product.status)) {
+        await markEvent("ignored");
+        return new Response(JSON.stringify({ received: true, ignored: "unpublished_payment_link" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
     } else {
       if (session.metadata?.checkout_source !== "support_the_artist") {
         await markEvent("ignored");
