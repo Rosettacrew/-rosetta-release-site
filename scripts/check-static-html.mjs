@@ -148,10 +148,20 @@ assert.match(loyalty, /dj-loyalty-da-goat-love-pain-loyalty-ep/);
 assert.match(loyalty, /dj-loyalty-da-goat-even-though/);
 assert.match(loyaltyJs, /function isStripeCheckout/);
 assert.match(loyaltyJs, /\/release-storefront/);
-const pinnedBlock = loyaltyJs.match(/const PINNED_CENTS = \\{([\\s\\S]*?)\\};/);
-assert.ok(pinnedBlock, "Loyalty must declare PINNED_CENTS");
-const pinnedEntries = [...pinnedBlock[1].matchAll(/"([^"]+)"\\s*:\\s*(\\d+)\\s*,?/g)];
-const pinnedPrices = new Map(pinnedEntries.map(([, slug, cents]) => [slug, Number(cents)]));
+const pinnedStart = loyaltyJs.indexOf("const PINNED_CENTS = {");
+assert.ok(pinnedStart >= 0, "Loyalty must declare PINNED_CENTS");
+const pinnedEnd = loyaltyJs.indexOf("};", pinnedStart);
+assert.ok(pinnedEnd > pinnedStart, "PINNED_CENTS object must close");
+const pinnedBody = loyaltyJs.slice(pinnedStart + "const PINNED_CENTS = {".length, pinnedEnd);
+const pinnedEntries = pinnedBody.split(",").map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+  const separator = entry.lastIndexOf(":");
+  assert.ok(separator > 0, "Malformed pinned price entry");
+  const slug = entry.slice(0, separator).trim().replace(/^"|"$/g, "");
+  const cents = Number(entry.slice(separator + 1).trim());
+  assert.ok(Number.isInteger(cents), "Pinned price must be integer cents");
+  return [slug, cents];
+});
+const pinnedPrices = new Map(pinnedEntries);
 assert.equal(pinnedPrices.size, pinnedEntries.length, "Duplicate pinned release slug");
 const expectedPinnedPrices = {
   "dj-loyalty-da-goat-love-pain-loyalty-ep": 799,
