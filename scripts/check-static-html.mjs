@@ -148,11 +148,24 @@ assert.match(loyalty, /dj-loyalty-da-goat-love-pain-loyalty-ep/);
 assert.match(loyalty, /dj-loyalty-da-goat-even-though/);
 assert.match(loyaltyJs, /function isStripeCheckout/);
 assert.match(loyaltyJs, /\/release-storefront/);
-assert.match(
-  loyaltyJs,
-  /const PINNED_CENTS = \{\s*"dj-loyalty-da-goat-love-pain-loyalty-ep": 799,\s*"dj-loyalty-da-goat-even-though": 199,\s*\}/,
-  "Loyalty prices must stay pinned at 799 and 199 cents",
-);
+const pinnedBlock = loyaltyJs.match(/const PINNED_CENTS = \\{([\\s\\S]*?)\\};/);
+assert.ok(pinnedBlock, "Loyalty must declare PINNED_CENTS");
+const pinnedEntries = [...pinnedBlock[1].matchAll(/"([^"]+)"\\s*:\\s*(\\d+)\\s*,?/g)];
+const pinnedPrices = new Map(pinnedEntries.map(([, slug, cents]) => [slug, Number(cents)]));
+assert.equal(pinnedPrices.size, pinnedEntries.length, "Duplicate pinned release slug");
+const expectedPinnedPrices = {
+  "dj-loyalty-da-goat-love-pain-loyalty-ep": 799,
+  "dj-loyalty-da-goat-even-though": 199,
+  "dj-loyalty-da-goat-loyal-to-a-fault": 199,
+  "dj-loyalty-da-goat-not-enough": 199,
+  "dj-loyalty-da-goat-i-m-him": 199,
+  "dj-loyalty-da-goat-you-broke-me": 199,
+  "dj-loyalty-da-goat-bad-for-you": 199,
+  "dj-loyalty-da-goat-nasty-remix": 199,
+  "dj-loyalty-da-goat-slow": 199,
+};
+assert.deepEqual(Object.fromEntries(pinnedPrices), expectedPinnedPrices,
+  "Existing prices and seven draft single prices must stay pinned");
 assert.match(
   loyaltyJs,
   /function usableRelease\(release\) \{[\s\S]*?const pinnedCents = PINNED_CENTS\[slug\];[\s\S]*?Number\(release\.price_cents\) !== pinnedCents\) return false;[\s\S]*?if \(!isUsd\(release\.currency\)\) return false;/,
