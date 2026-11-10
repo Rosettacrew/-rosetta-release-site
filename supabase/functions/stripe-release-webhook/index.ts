@@ -176,9 +176,18 @@ async function mintDownloadTokenAndEmail(opts: {
     Deno.env.get("ACTIVITY_EMAIL_FROM")?.trim() ||
     "";
 
+  // Never acknowledge a paid checkout as fully delivered when email cannot be sent.
+  // Revoke the newly minted token so a retried webhook can mint a fresh link.
+  async function failDelivery(reason: string): Promise<never> {
+    const { error: revokeError } = await supabase.from("release_download_tokens")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", tokenId);
+    if (revokeError) throw new Error("download_email_failed_and_revoke_failed");
+    throw new Error(reason);
+  }
+
   if (!apiKey || !from) {
-    console.log("download_token: email soft-fail not_configured", { token_id: tokenId });
-    return { tokenId, minted: true };
+    await failDelivery("download_email_not_configured");
   }
 
   try {
@@ -208,16 +217,14 @@ async function mintDownloadTokenAndEmail(opts: {
     });
     if (!response.ok) {
       const body = (await response.text()).slice(0, 300);
-      console.error("download_token: email soft-fail", { token_id: tokenId, status: response.status, body });
+      console.error("download_token: email send rejected", { token_id: tokenId, status: response.status, body });
+      throw new Error("download_email_send_rejected");
     } else {
       console.log("download_token: email sent", { token_id: tokenId });
     }
-  } catch (emailErr) {
-    console.error(
-      "download_token: email soft-fail",
-      { token_id: tokenId },
-      emailErr instanceof Error ? emailErr.message : String(emailErr),
-    );
+  } catch (_emailErr) {
+    console.error("download_token: email delivery failure", { token_id: tokenId });
+    await failDelivery("download_email_delivery_failed");
   }
 
   return { tokenId, minted: true };
@@ -345,6 +352,15 @@ Deno.serve(async (req: Request) => {
       if (!product) {
         await markEvent("ignored");
         return new Response(JSON.stringify({ received: true, ignored: "unknown_payment_link" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      // Fail closed: payment links must not activate unpublished drafts.
+      if (!product.storefront_enabled || !product.published_at ||
+          !["live", "presale"].includes(product.status)) {
+        await markEvent("ignored");
+        return new Response(JSON.stringify({ received: true, ignored: "unpublished_payment_link" }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });

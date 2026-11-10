@@ -6,10 +6,24 @@ const SAMPLE_ORIGIN = "https://sktgkrcahsxvidzjjxxt.supabase.co";
 const SLUGS = [
   "dj-loyalty-da-goat-love-pain-loyalty-ep",
   "dj-loyalty-da-goat-even-though",
+  "dj-loyalty-da-goat-loyal-to-a-fault",
+  "dj-loyalty-da-goat-not-enough",
+  "dj-loyalty-da-goat-i-m-him",
+  "dj-loyalty-da-goat-you-broke-me",
+  "dj-loyalty-da-goat-bad-for-you",
+  "dj-loyalty-da-goat-nasty-remix",
+  "dj-loyalty-da-goat-slow",
 ];
 const PINNED_CENTS = {
   "dj-loyalty-da-goat-love-pain-loyalty-ep": 799,
   "dj-loyalty-da-goat-even-though": 199,
+  "dj-loyalty-da-goat-loyal-to-a-fault": 199,
+  "dj-loyalty-da-goat-not-enough": 199,
+  "dj-loyalty-da-goat-i-m-him": 199,
+  "dj-loyalty-da-goat-you-broke-me": 199,
+  "dj-loyalty-da-goat-bad-for-you": 199,
+  "dj-loyalty-da-goat-nasty-remix": 199,
+  "dj-loyalty-da-goat-slow": 199,
 };
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -72,8 +86,9 @@ function publicCoverUrl(value, releaseId) {
     if (url.protocol !== "https:" || url.origin !== SAMPLE_ORIGIN) return "";
     if (url.username || url.password || url.search || url.hash) return "";
     const prefix = `/storage/v1/object/public/release-public/${id}/cover/`;
-    if (!url.pathname.startsWith(prefix)) return "";
-    const name = url.pathname.slice(prefix.length);
+    const epPrefix = "/storage/v1/object/public/release-public/b05c0b7b-22af-441e-89b9-b722e93feceb/cover/";
+    if (!url.pathname.startsWith(prefix) && !url.pathname.startsWith(epPrefix)) return "";
+    const name = url.pathname.slice(url.pathname.startsWith(prefix) ? prefix.length : epPrefix.length);
     if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) return "";
     if (!/^[A-Za-z0-9._-]+\.(jpe?g|png|webp)$/i.test(name)) return "";
     return url.toString();

@@ -148,11 +148,34 @@ assert.match(loyalty, /dj-loyalty-da-goat-love-pain-loyalty-ep/);
 assert.match(loyalty, /dj-loyalty-da-goat-even-though/);
 assert.match(loyaltyJs, /function isStripeCheckout/);
 assert.match(loyaltyJs, /\/release-storefront/);
-assert.match(
-  loyaltyJs,
-  /const PINNED_CENTS = \{\s*"dj-loyalty-da-goat-love-pain-loyalty-ep": 799,\s*"dj-loyalty-da-goat-even-though": 199,\s*\}/,
-  "Loyalty prices must stay pinned at 799 and 199 cents",
-);
+const pinnedStart = loyaltyJs.indexOf("const PINNED_CENTS = {");
+assert.ok(pinnedStart >= 0, "Loyalty must declare PINNED_CENTS");
+const pinnedEnd = loyaltyJs.indexOf("};", pinnedStart);
+assert.ok(pinnedEnd > pinnedStart, "PINNED_CENTS object must close");
+const pinnedBody = loyaltyJs.slice(pinnedStart + "const PINNED_CENTS = {".length, pinnedEnd);
+const pinnedEntries = pinnedBody.split(",").map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+  const separator = entry.lastIndexOf(":");
+  assert.ok(separator > 0, "Malformed pinned price entry");
+  const slug = entry.slice(0, separator).trim().replace(/^"|"$/g, "");
+  const cents = Number(entry.slice(separator + 1).trim());
+  assert.ok(Number.isInteger(cents), "Pinned price must be integer cents");
+  return [slug, cents];
+});
+const pinnedPrices = new Map(pinnedEntries);
+assert.equal(pinnedPrices.size, pinnedEntries.length, "Duplicate pinned release slug");
+const expectedPinnedPrices = {
+  "dj-loyalty-da-goat-love-pain-loyalty-ep": 799,
+  "dj-loyalty-da-goat-even-though": 199,
+  "dj-loyalty-da-goat-loyal-to-a-fault": 199,
+  "dj-loyalty-da-goat-not-enough": 199,
+  "dj-loyalty-da-goat-i-m-him": 199,
+  "dj-loyalty-da-goat-you-broke-me": 199,
+  "dj-loyalty-da-goat-bad-for-you": 199,
+  "dj-loyalty-da-goat-nasty-remix": 199,
+  "dj-loyalty-da-goat-slow": 199,
+};
+assert.deepEqual(Object.fromEntries(pinnedPrices), expectedPinnedPrices,
+  "Existing prices and seven draft single prices must stay pinned");
 assert.match(
   loyaltyJs,
   /function usableRelease\(release\) \{[\s\S]*?const pinnedCents = PINNED_CENTS\[slug\];[\s\S]*?Number\(release\.price_cents\) !== pinnedCents\) return false;[\s\S]*?if \(!isUsd\(release\.currency\)\) return false;/,
